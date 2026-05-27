@@ -23,6 +23,12 @@ import {
 import { generateWorkspaceOutputs } from "../../features/workspaces/generators";
 import { isWorkspaceSectionStarted } from "../../features/workspaces/state/progress";
 
+const SectionInputLabel = ({ children }: { children: string }) => (
+  <span className="block text-[9px] font-medium uppercase tracking-[0.06em] text-slate/70">
+    {children}
+  </span>
+);
+
 type FeatureWorkspacePageProps = {
   workspace: FeatureWorkspace;
   onBack: () => void;
@@ -355,54 +361,63 @@ const WorkspaceSectionForm = ({
           <div className="space-y-4">
             {workspace.discovery.candidateComponents.map((candidate, index) => (
               <div key={candidate.id} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
-                <TextInput
-                  value={candidate.name}
-                  onChange={(value) =>
-                    onChange((current) => {
-                      const nextCandidates = [...current.discovery.candidateComponents];
-                      const updated = { ...nextCandidates[index], name: value };
-                      nextCandidates[index] = updated;
-                      return {
-                        ...current,
-                        discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                        components: syncComponentFromCandidate(updated, current.components),
-                      };
-                    })
-                  }
-                  placeholder="Component name"
-                />
-                <TextArea
-                  value={candidate.responsibility}
-                  onChange={(value) =>
-                    onChange((current) => {
-                      const nextCandidates = [...current.discovery.candidateComponents];
-                      const updated = { ...nextCandidates[index], responsibility: value };
-                      nextCandidates[index] = updated;
-                      return {
-                        ...current,
-                        discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                        components: syncComponentFromCandidate(updated, current.components),
-                      };
-                    })
-                  }
-                  placeholder="What is this component responsible for?"
-                  rows={3}
-                />
-                <TextArea
-                  value={candidate.rationale ?? ""}
-                  onChange={(value) =>
-                    onChange((current) => {
-                      const nextCandidates = [...current.discovery.candidateComponents];
-                      nextCandidates[index] = { ...nextCandidates[index], rationale: value };
-                      return {
-                        ...current,
-                        discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                      };
-                    })
-                  }
-                  placeholder="Why does this component exist?"
-                  rows={2}
-                />
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Component Name</SectionInputLabel>
+                  <TextInput
+                    value={candidate.name}
+                    onChange={(value) =>
+                      onChange((current) => {
+                        const nextCandidates = [...current.discovery.candidateComponents];
+                        const updated = { ...nextCandidates[index], name: value };
+                        nextCandidates[index] = updated;
+                        return {
+                          ...current,
+                          discovery: { ...current.discovery, candidateComponents: nextCandidates },
+                          components: syncComponentFromCandidate(updated, current.components),
+                        };
+                      })
+                    }
+                    placeholder="Component name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Component Responsibility</SectionInputLabel>
+                  <TextArea
+                    value={candidate.responsibility}
+                    onChange={(value) =>
+                      onChange((current) => {
+                        const nextCandidates = [...current.discovery.candidateComponents];
+                        const updated = { ...nextCandidates[index], responsibility: value };
+                        nextCandidates[index] = updated;
+                        return {
+                          ...current,
+                          discovery: { ...current.discovery, candidateComponents: nextCandidates },
+                          components: syncComponentFromCandidate(updated, current.components),
+                        };
+                      })
+                    }
+                    placeholder="What is this component responsible for?"
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Rationale</SectionInputLabel>
+                  <TextArea
+                    value={candidate.rationale ?? ""}
+                    onChange={(value) =>
+                      onChange((current) => {
+                        const nextCandidates = [...current.discovery.candidateComponents];
+                        nextCandidates[index] = { ...nextCandidates[index], rationale: value };
+                        return {
+                          ...current,
+                          discovery: { ...current.discovery, candidateComponents: nextCandidates },
+                        };
+                      })
+                    }
+                    placeholder="Why does this component exist?"
+                    rows={2}
+                  />
+                </div>
                 <div className="flex gap-2">
                   <Button
                     onClick={() => {
@@ -467,40 +482,46 @@ const WorkspaceSectionForm = ({
           <div className="space-y-4">
             {workspace.discovery.interactions.map((interaction, index) => (
               <div key={`${interaction.fromComponentId}-${interaction.toComponentId}-${index}`} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
-                <select
-                  className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-                  value={interaction.fromComponentId}
-                  onChange={(event) =>
-                    onChange((current) => {
-                      const next = [...current.discovery.interactions];
-                      next[index] = { ...next[index], fromComponentId: event.target.value };
-                      return { ...current, discovery: { ...current.discovery, interactions: next } };
-                    })
-                  }
-                >
-                  {workspace.discovery.candidateComponents.map((component) => (
-                    <option key={component.id} value={component.id}>
-                      {component.name || "Unnamed component"}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-                  value={interaction.toComponentId}
-                  onChange={(event) =>
-                    onChange((current) => {
-                      const next = [...current.discovery.interactions];
-                      next[index] = { ...next[index], toComponentId: event.target.value };
-                      return { ...current, discovery: { ...current.discovery, interactions: next } };
-                    })
-                  }
-                >
-                  {workspace.discovery.candidateComponents.map((component) => (
-                    <option key={component.id} value={component.id}>
-                      {component.name || "Unnamed component"}
-                    </option>
-                  ))}
-                </select>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>From Component</SectionInputLabel>
+                  <select
+                    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                    value={interaction.fromComponentId}
+                    onChange={(event) =>
+                      onChange((current) => {
+                        const next = [...current.discovery.interactions];
+                        next[index] = { ...next[index], fromComponentId: event.target.value };
+                        return { ...current, discovery: { ...current.discovery, interactions: next } };
+                      })
+                    }
+                  >
+                    {workspace.discovery.candidateComponents.map((component) => (
+                      <option key={component.id} value={component.id}>
+                        {component.name || "Unnamed component"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>To Component</SectionInputLabel>
+                  <select
+                    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                    value={interaction.toComponentId}
+                    onChange={(event) =>
+                      onChange((current) => {
+                        const next = [...current.discovery.interactions];
+                        next[index] = { ...next[index], toComponentId: event.target.value };
+                        return { ...current, discovery: { ...current.discovery, interactions: next } };
+                      })
+                    }
+                  >
+                    {workspace.discovery.candidateComponents.map((component) => (
+                      <option key={component.id} value={component.id}>
+                        {component.name || "Unnamed component"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <ObjectListEditor<ComponentInteraction>
                   label="Interaction"
                   items={[interaction]}

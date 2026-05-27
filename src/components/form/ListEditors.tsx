@@ -1,4 +1,24 @@
+import type { ReactNode } from "react";
 import { Button, Field, TextArea, TextInput, Toggle, Select } from "./FormControls";
+
+const InputLabel = ({ children }: { children: string }) => (
+  <span className="block text-[9px] font-medium uppercase tracking-[0.06em] text-slate/70">
+    {children}
+  </span>
+);
+
+const LabeledInput = ({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) => (
+  <div className="space-y-1.5">
+    <InputLabel>{label}</InputLabel>
+    {children}
+  </div>
+);
 
 type StringListEditorProps = {
   label: string;
@@ -23,7 +43,14 @@ export const StringListEditor = ({ label, hint, items, onChange, placeholder }: 
         {items.length === 0 ? <p className="text-sm text-slate">No entries yet.</p> : null}
         {items.map((item, index) => (
           <div key={`${label}-${index}`} className="flex gap-2">
-            <TextInput value={item} onChange={(value) => updateItem(index, value)} placeholder={placeholder} />
+            <div className="flex-1 space-y-1.5">
+              <InputLabel>{`${label} ${index + 1}`}</InputLabel>
+              <TextInput
+                value={item}
+                onChange={(value) => updateItem(index, value)}
+                placeholder={placeholder}
+              />
+            </div>
             <Button onClick={() => removeItem(index)} tone="ghost">
               Remove
             </Button>
@@ -58,11 +85,21 @@ export const EventListEditor = ({ items, onChange }: EventListEditorProps) => {
       <div className="space-y-4">
         {items.map((item, index) => (
           <div key={`event-${index}`} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
-            <TextInput value={item.name} onChange={(value) => updateItem(index, "name", value)} placeholder="Event name" />
-            <TextInput value={item.source} onChange={(value) => updateItem(index, "source", value)} placeholder="Source" />
-            <TextInput value={item.trigger} onChange={(value) => updateItem(index, "trigger", value)} placeholder="Trigger" />
-            <TextInput value={item.frequency ?? ""} onChange={(value) => updateItem(index, "frequency", value)} placeholder="Frequency" />
-            <Toggle checked={Boolean(item.latencySensitive)} onChange={(value) => updateItem(index, "latencySensitive", value)} label="Latency-sensitive event" />
+            <LabeledInput label="Event Name">
+              <TextInput value={item.name} onChange={(value) => updateItem(index, "name", value)} placeholder="Event name" />
+            </LabeledInput>
+            <LabeledInput label="Source">
+              <TextInput value={item.source} onChange={(value) => updateItem(index, "source", value)} placeholder="Source" />
+            </LabeledInput>
+            <LabeledInput label="Trigger">
+              <TextInput value={item.trigger} onChange={(value) => updateItem(index, "trigger", value)} placeholder="Trigger" />
+            </LabeledInput>
+            <LabeledInput label="Frequency">
+              <TextInput value={item.frequency ?? ""} onChange={(value) => updateItem(index, "frequency", value)} placeholder="Frequency" />
+            </LabeledInput>
+            <LabeledInput label="Latency Sensitivity">
+              <Toggle checked={Boolean(item.latencySensitive)} onChange={(value) => updateItem(index, "latencySensitive", value)} label="Latency-sensitive event" />
+            </LabeledInput>
             <Button onClick={() => onChange(items.filter((_, currentIndex) => currentIndex !== index))} tone="ghost">
               Remove Event
             </Button>
@@ -105,15 +142,25 @@ export const StateListEditor = ({ items, onChange }: StateListEditorProps) => {
       <div className="space-y-4">
         {items.map((item, stateIndex) => (
           <div key={`state-${stateIndex}`} className="space-y-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
-            <TextInput value={item.name} onChange={(value) => updateState(stateIndex, "name", value)} placeholder="State name" />
-            <TextArea value={item.description} onChange={(value) => updateState(stateIndex, "description", value)} placeholder="What does this state represent?" rows={3} />
+            <LabeledInput label="State Name">
+              <TextInput value={item.name} onChange={(value) => updateState(stateIndex, "name", value)} placeholder="State name" />
+            </LabeledInput>
+            <LabeledInput label="Description">
+              <TextArea value={item.description} onChange={(value) => updateState(stateIndex, "description", value)} placeholder="What does this state represent?" rows={3} />
+            </LabeledInput>
             <div className="space-y-3 rounded-2xl border border-white/70 bg-white/60 p-3">
               <p className="text-sm font-semibold text-ink">Transitions</p>
               {item.transitions.map((transition, transitionIndex) => (
                 <div key={`transition-${stateIndex}-${transitionIndex}`} className="grid gap-2 rounded-xl border border-slate/10 bg-white p-3">
-                  <TextInput value={transition.event} onChange={(value) => updateTransition(stateIndex, transitionIndex, "event", value)} placeholder="Triggering event" />
-                  <TextInput value={transition.targetState} onChange={(value) => updateTransition(stateIndex, transitionIndex, "targetState", value)} placeholder="Target state" />
-                  <TextInput value={transition.action ?? ""} onChange={(value) => updateTransition(stateIndex, transitionIndex, "action", value)} placeholder="Transition action" />
+                  <LabeledInput label="Triggering Event">
+                    <TextInput value={transition.event} onChange={(value) => updateTransition(stateIndex, transitionIndex, "event", value)} placeholder="Triggering event" />
+                  </LabeledInput>
+                  <LabeledInput label="Target State">
+                    <TextInput value={transition.targetState} onChange={(value) => updateTransition(stateIndex, transitionIndex, "targetState", value)} placeholder="Target state" />
+                  </LabeledInput>
+                  <LabeledInput label="Action">
+                    <TextInput value={transition.action ?? ""} onChange={(value) => updateTransition(stateIndex, transitionIndex, "action", value)} placeholder="Transition action" />
+                  </LabeledInput>
                   <Button
                     onClick={() => {
                       const next = [...items];
@@ -192,45 +239,49 @@ export const ObjectListEditor = <T extends SimpleRow>({
               const value = item[field.key];
               if (field.type === "textarea") {
                 return (
-                  <TextArea
-                    key={String(field.key)}
-                    value={String(value ?? "")}
-                    onChange={(nextValue) => updateItem(index, field.key, nextValue)}
-                    placeholder={field.label}
-                    rows={3}
-                  />
+                  <LabeledInput key={String(field.key)} label={field.label}>
+                    <TextArea
+                      value={String(value ?? "")}
+                      onChange={(nextValue) => updateItem(index, field.key, nextValue)}
+                      placeholder={field.label}
+                      rows={3}
+                    />
+                  </LabeledInput>
                 );
               }
 
               if (field.type === "toggle") {
                 return (
-                  <Toggle
-                    key={String(field.key)}
-                    checked={Boolean(value)}
-                    onChange={(nextValue) => updateItem(index, field.key, nextValue)}
-                    label={field.label}
-                  />
+                  <LabeledInput key={String(field.key)} label={field.label}>
+                    <Toggle
+                      checked={Boolean(value)}
+                      onChange={(nextValue) => updateItem(index, field.key, nextValue)}
+                      label={field.label}
+                    />
+                  </LabeledInput>
                 );
               }
 
               if (field.type === "select" && field.options) {
                 return (
-                  <Select
-                    key={String(field.key)}
-                    value={String(value) as string}
-                    onChange={(nextValue) => updateItem(index, field.key, nextValue)}
-                    options={field.options}
-                  />
+                  <LabeledInput key={String(field.key)} label={field.label}>
+                    <Select
+                      value={String(value) as string}
+                      onChange={(nextValue) => updateItem(index, field.key, nextValue)}
+                      options={field.options}
+                    />
+                  </LabeledInput>
                 );
               }
 
               return (
-                <TextInput
-                  key={String(field.key)}
-                  value={String(value ?? "")}
-                  onChange={(nextValue) => updateItem(index, field.key, nextValue)}
-                  placeholder={field.label}
-                />
+                <LabeledInput key={String(field.key)} label={field.label}>
+                  <TextInput
+                    value={String(value ?? "")}
+                    onChange={(nextValue) => updateItem(index, field.key, nextValue)}
+                    placeholder={field.label}
+                  />
+                </LabeledInput>
               );
             })}
             <Button onClick={() => onChange(items.filter((_, currentIndex) => currentIndex !== index))} tone="ghost">
