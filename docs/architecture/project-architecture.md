@@ -206,18 +206,21 @@ type FeatureComponent = {
 
 The editor should no longer be a single flat checklist.
 
-Recommended left-navigation order:
+Recommended left-navigation grouping:
 
-1. Feature Summary
-2. Scope, Constraints, Assumptions
-3. Responsibilities
-4. Candidate Components
-5. Component Interactions
-6. Candidate RTOS Tasks
-7. System Risks
+1. Feature Definition
+2. Feature Summary
+3. Scope, Constraints, Assumptions
+4. Responsibilities
+5. Feature Design
+6. Candidate Components
+7. Component Interactions
 8. Component Detail
-9. Implementation Plan
-10. Generated Outputs
+9. System Risks
+10. Implementation
+11. Candidate RTOS Tasks
+12. Implementation Plan
+13. Generated Outputs
 
 Within `Component Detail`, the user then chooses one component and fills:
 

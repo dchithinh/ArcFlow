@@ -129,17 +129,17 @@ export type WorkspaceSectionDefinition = {
   id: WorkspaceSectionId;
   label: string;
   description: string;
-  stage: "discovery" | "component" | "delivery";
+  stage: "definition" | "design" | "implementation";
 };
 
 export const WORKSPACE_SECTIONS: WorkspaceSectionDefinition[] = [
-  { id: "featureSummary", label: "Feature Summary", description: "Capture the feature intent and user problem.", stage: "discovery" },
-  { id: "scope", label: "Scope / Constraints", description: "Track goals, constraints, assumptions, and open questions.", stage: "discovery" },
-  { id: "responsibilities", label: "Responsibilities", description: "Break the feature into responsibilities before components.", stage: "discovery" },
-  { id: "candidateComponents", label: "Candidate Components", description: "Propose the components or subsystems this feature likely needs.", stage: "discovery" },
-  { id: "interactions", label: "Component Interactions", description: "Describe how candidate components exchange control and data.", stage: "discovery" },
-  { id: "candidateTasks", label: "Candidate RTOS Tasks", description: "Propose concurrency boundaries and task responsibilities.", stage: "discovery" },
-  { id: "systemRisks", label: "System Risks", description: "Capture cross-component risks before detailed design.", stage: "discovery" },
-  { id: "componentDetail", label: "Component Detail", description: "Refine one selected component at a time.", stage: "component" },
-  { id: "implementationPlan", label: "Implementation Plan", description: "Plan milestones, APIs, and tests after the design stabilizes.", stage: "delivery" },
+  { id: "featureSummary", label: "Feature Summary", description: "Capture the feature intent and user problem.", stage: "definition" },
+  { id: "scope", label: "Scope / Constraints", description: "Track goals, constraints, assumptions, and open questions.", stage: "definition" },
+  { id: "responsibilities", label: "Responsibilities", description: "Break the feature into responsibilities before components.", stage: "definition" },
+  { id: "candidateComponents", label: "Candidate Components", description: "Propose the components or subsystems this feature likely needs.", stage: "design" },
+  { id: "interactions", label: "Component Interactions", description: "Describe how candidate components exchange control and data.", stage: "design" },
+  { id: "componentDetail", label: "Component Detail", description: "Refine one selected component at a time.", stage: "design" },
+  { id: "systemRisks", label: "System Risks", description: "Capture cross-component risks before detailed design.", stage: "design" },
+  { id: "candidateTasks", label: "Candidate RTOS Tasks", description: "Propose concurrency boundaries and task responsibilities.", stage: "implementation" },
+  { id: "implementationPlan", label: "Implementation Plan", description: "Plan milestones, APIs, and tests after the design stabilizes.", stage: "implementation" },
 ];

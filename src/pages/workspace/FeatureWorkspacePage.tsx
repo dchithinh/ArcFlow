@@ -29,6 +29,21 @@ const SectionInputLabel = ({ children }: { children: string }) => (
   </span>
 );
 
+const StaticContextBlock = ({
+  label,
+  value,
+  emptyText,
+}: {
+  label: string;
+  value: string;
+  emptyText: string;
+}) => (
+  <div className="space-y-1.5">
+    <SectionInputLabel>{label}</SectionInputLabel>
+    <div className="text-sm text-ink">{value.trim() || <span className="text-slate">{emptyText}</span>}</div>
+  </div>
+);
+
 type FeatureWorkspacePageProps = {
   workspace: FeatureWorkspace;
   onBack: () => void;
@@ -129,34 +144,51 @@ export const FeatureWorkspacePage = ({
         </div>
 
         <div className="mt-6 space-y-4">
-          <Field label="Workspace Title">
-            <TextInput
-              value={workspace.title}
-              onChange={(value) =>
-                onChange((current) =>
-                  updateTimestamp({
-                    ...current,
-                    title: value,
-                  }),
-                )
-              }
-            />
-          </Field>
+          {activeSection === "featureSummary" ? (
+            <>
+              <Field label="Feature Name">
+                <TextInput
+                  value={workspace.title}
+                  onChange={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        title: value,
+                      }),
+                    )
+                  }
+                />
+              </Field>
 
-          <Field label="Feature Requirement" hint="Paste the rough feature request before deciding the architecture.">
-            <TextArea
-              value={workspace.requirement}
-              onChange={(value) =>
-                onChange((current) =>
-                  updateTimestamp({
-                    ...current,
-                    requirement: value,
-                  }),
-                )
-              }
-              rows={5}
-            />
-          </Field>
+              <Field label="Feature Requirement" hint="Paste the rough feature request before deciding the architecture.">
+                <TextArea
+                  value={workspace.requirement}
+                  onChange={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        requirement: value,
+                      }),
+                    )
+                  }
+                  rows={5}
+                />
+              </Field>
+            </>
+          ) : (
+            <div className="space-y-3 rounded-2xl border border-slate/10 bg-mist/40 px-4 py-3">
+              <StaticContextBlock
+                label="Feature Name"
+                value={workspace.title}
+                emptyText="No feature name yet."
+              />
+              <StaticContextBlock
+                label="Feature Requirement"
+                value={workspace.requirement}
+                emptyText="No feature requirement written yet."
+              />
+            </div>
+          )}
 
           <WorkspaceSectionForm
             activeSection={activeSection}
@@ -183,12 +215,24 @@ export const FeatureWorkspacePage = ({
               {outputs.markdown}
             </pre>
           </PreviewCard>
-          <PreviewCard title="Feature Architecture Flowchart">
-            <MermaidPreview title="Architecture Flowchart" chart={outputs.architectureFlowchart} />
-          </PreviewCard>
-          <PreviewCard title="Selected Component State Diagram">
-            <MermaidPreview title="Component State Diagram" chart={outputs.componentStateDiagram} />
-          </PreviewCard>
+          <DiagramPreviewCard
+            title="Feature Architecture Flowchart"
+            chart={outputs.architectureFlowchart}
+            previewTitle="Architecture Flowchart"
+            expandedTitle="Feature Architecture Flowchart"
+            previewMinHeight="min-h-[420px]"
+            previewMinWidth="min-w-[980px]"
+            expandedMinWidth="min-w-[1400px]"
+          />
+          <DiagramPreviewCard
+            title="Selected Component State Diagram"
+            chart={outputs.componentStateDiagram}
+            previewTitle="Component State Diagram"
+            expandedTitle="Selected Component State Diagram"
+            previewMinHeight="min-h-[360px]"
+            previewMinWidth="min-w-[820px]"
+            expandedMinWidth="min-w-[1200px]"
+          />
           <PreviewCard title="Candidate RTOS Task Table">
             <pre className="overflow-auto rounded-2xl bg-mist p-4 text-xs text-ink">{outputs.taskTable}</pre>
           </PreviewCard>
@@ -203,6 +247,7 @@ export const FeatureWorkspacePage = ({
           </PreviewCard>
         </div>
       </section>
+
     </div>
   );
 };
@@ -213,6 +258,109 @@ const PreviewCard = ({ title, children }: { title: string; children: ReactNode }
     {children}
   </article>
 );
+
+const DiagramPreviewCard = ({
+  title,
+  chart,
+  previewTitle,
+  expandedTitle,
+  previewMinHeight,
+  previewMinWidth,
+  expandedMinWidth,
+}: {
+  title: string;
+  chart: string;
+  previewTitle: string;
+  expandedTitle: string;
+  previewMinHeight: string;
+  previewMinWidth: string;
+  expandedMinWidth: string;
+}) => {
+  const [viewMode, setViewMode] = useState<"fit" | "scroll">("fit");
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <PreviewCard title={title}>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => setViewMode("fit")}
+            tone={viewMode === "fit" ? "primary" : "secondary"}
+          >
+            Fit View
+          </Button>
+          <Button
+            onClick={() => setViewMode("scroll")}
+            tone={viewMode === "scroll" ? "primary" : "secondary"}
+          >
+            Scroll View
+          </Button>
+          <Button onClick={() => setExpanded(true)} tone="secondary">
+            Open Large View
+          </Button>
+        </div>
+        <div
+          className={`rounded-2xl bg-white ${
+            viewMode === "fit" ? "overflow-hidden" : "overflow-x-auto"
+          }`}
+        >
+          <MermaidPreview
+            title={previewTitle}
+            chart={chart}
+            svgMode={viewMode === "fit" ? "fit" : "natural"}
+            className={
+              viewMode === "fit"
+                ? previewMinHeight
+                : `${previewMinHeight} ${previewMinWidth}`
+            }
+          />
+        </div>
+      </PreviewCard>
+
+      {expanded ? (
+        <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[1500px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Expanded Diagram</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">{expandedTitle}</h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={() => setViewMode("fit")}
+                  tone={viewMode === "fit" ? "primary" : "secondary"}
+                >
+                  Fit View
+                </Button>
+                <Button
+                  onClick={() => setViewMode("scroll")}
+                  tone={viewMode === "scroll" ? "primary" : "secondary"}
+                >
+                  Scroll View
+                </Button>
+                <Button onClick={() => setExpanded(false)} tone="ghost">
+                  Close
+                </Button>
+              </div>
+            </div>
+            <div
+              className={`mt-4 flex-1 rounded-2xl bg-mist/60 p-3 ${
+                viewMode === "fit" ? "overflow-auto" : "overflow-x-auto overflow-y-auto"
+              }`}
+            >
+              <MermaidPreview
+                title={`${expandedTitle} Expanded`}
+                chart={chart}
+                svgMode={viewMode === "fit" ? "fit" : "natural"}
+                className={viewMode === "fit" ? "min-h-full" : `min-h-full ${expandedMinWidth}`}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+};
 
 const syncComponentFromCandidate = (
   candidate: ComponentCandidate,
