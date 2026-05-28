@@ -16,7 +16,9 @@ export const createEmptyComponent = (candidate?: Partial<ComponentCandidate>): F
   summary: candidate?.responsibility ?? "",
   inputs: [],
   outputs: [],
-  events: [],
+  incomingEvents: [],
+  internalSignals: [],
+  outgoingSignals: [],
   states: [],
   ownership: [],
   failureModes: [],
@@ -195,20 +197,26 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
         summary: "Owns UART RX framing and packet handoff into the feature pipeline.",
         inputs: ["UART RX bytes", "Framing timeout"],
         outputs: ["Framed command packets", "Ingress health counters"],
-        events: [
+        incomingEvents: [
           { name: "uart_packet_received", source: "UART ISR", trigger: "Valid frame detected", frequency: "Burst", latencySensitive: true },
           { name: "command_timeout", source: "Timer", trigger: "Frame not completed before deadline", frequency: "Occasional", latencySensitive: false },
+        ],
+        internalSignals: [
+          { name: "frame_complete", source: "Command Ingress", trigger: "Frame validator accepted packet", frequency: "Burst", latencySensitive: true },
+        ],
+        outgoingSignals: [
+          { name: "packet_ready", source: "Command Ingress", trigger: "Packet queued for parser", frequency: "Burst", latencySensitive: true },
         ],
         states: [
           {
             name: "IDLE",
             description: "Waiting for a new frame.",
-            transitions: [{ event: "uart_packet_received", targetState: "DISPATCHING", action: "Queue packet" }],
+            transitions: [{ event: "uart_packet_received", triggerKind: "incoming", targetState: "DISPATCHING", action: "Queue packet" }],
           },
           {
             name: "DISPATCHING",
             description: "Handing a validated frame to downstream processing.",
-            transitions: [{ event: "dispatch_complete", targetState: "IDLE", action: "Reset ingress buffer state" }],
+            transitions: [{ event: "frame_complete", triggerKind: "internal", targetState: "IDLE", action: "Reset ingress buffer state" }],
           },
         ],
         ownership: [{ resource: "UART RX ring buffer", owner: "Command Ingress", accessRules: "ISR writes, task drains through framed packet API" }],
@@ -224,20 +232,27 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
         summary: "Validates packet integrity and decodes operator commands.",
         inputs: ["Framed command packet"],
         outputs: ["Validated command object", "NACK reason"],
-        events: [{ name: "packet_ready", source: "Command Ingress", trigger: "Packet queued for parse", frequency: "Burst", latencySensitive: true }],
+        incomingEvents: [{ name: "packet_ready", source: "Command Ingress", trigger: "Packet queued for parse", frequency: "Burst", latencySensitive: true }],
+        internalSignals: [
+          { name: "packet_valid", source: "Command Parser", trigger: "Frame and schema validation passed", frequency: "Burst", latencySensitive: true },
+          { name: "packet_invalid", source: "Command Parser", trigger: "Checksum or schema validation failed", frequency: "Burst", latencySensitive: true },
+        ],
+        outgoingSignals: [
+          { name: "apply_request", source: "Command Parser", trigger: "Validated command ready for config coordinator", frequency: "Burst", latencySensitive: true },
+        ],
         states: [
           {
             name: "VALIDATING",
             description: "Checking frame integrity and command schema.",
             transitions: [
-              { event: "packet_valid", targetState: "DONE", action: "Return decoded command" },
-              { event: "packet_invalid", targetState: "ERROR", action: "Generate rejection details" },
+              { event: "packet_valid", triggerKind: "internal", targetState: "DONE", action: "Return decoded command" },
+              { event: "packet_invalid", triggerKind: "internal", targetState: "ERROR", action: "Generate rejection details" },
             ],
           },
           {
             name: "ERROR",
             description: "Parser rejected the packet.",
-            transitions: [{ event: "error_handled", targetState: "VALIDATING", action: "Reset parser scratch state" }],
+            transitions: [{ event: "packet_ready", triggerKind: "incoming", targetState: "VALIDATING", action: "Reset parser scratch state" }],
           },
         ],
         ownership: [{ resource: "Parser scratch buffer", owner: "Command Parser", accessRules: "Only parser logic mutates validation workspace" }],
@@ -253,19 +268,26 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
         summary: "Owns validated configuration writes and system consistency checks.",
         inputs: ["Validated command object"],
         outputs: ["Updated runtime config", "Apply result"],
-        events: [{ name: "apply_request", source: "Command Parser", trigger: "Validated command ready", frequency: "Burst", latencySensitive: true }],
+        incomingEvents: [{ name: "apply_request", source: "Command Parser", trigger: "Validated command ready", frequency: "Burst", latencySensitive: true }],
+        internalSignals: [
+          { name: "apply_complete", source: "Config Coordinator", trigger: "Configuration update committed successfully", frequency: "Burst", latencySensitive: true },
+          { name: "apply_failed", source: "Config Coordinator", trigger: "Configuration update rejected or rolled back", frequency: "Burst", latencySensitive: true },
+        ],
+        outgoingSignals: [
+          { name: "response_needed", source: "Config Coordinator", trigger: "Apply result ready for response path", frequency: "Burst", latencySensitive: false },
+        ],
         states: [
           {
             name: "READY",
             description: "Waiting for configuration apply request.",
-            transitions: [{ event: "apply_request", targetState: "APPLYING", action: "Lock config ownership and validate semantics" }],
+            transitions: [{ event: "apply_request", triggerKind: "incoming", targetState: "APPLYING", action: "Lock config ownership and validate semantics" }],
           },
           {
             name: "APPLYING",
             description: "Writing runtime configuration.",
             transitions: [
-              { event: "apply_complete", targetState: "READY", action: "Release ownership and notify reporter" },
-              { event: "apply_failed", targetState: "READY", action: "Report failure and rollback if needed" },
+              { event: "apply_complete", triggerKind: "internal", targetState: "READY", action: "Release ownership and notify reporter" },
+              { event: "apply_failed", triggerKind: "internal", targetState: "READY", action: "Report failure and rollback if needed" },
             ],
           },
         ],
@@ -282,17 +304,23 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
         summary: "Formats ACK/NACK responses and noncritical health output.",
         inputs: ["Apply result", "Parser rejection details", "Health events"],
         outputs: ["UART response packet", "Diagnostic log message"],
-        events: [{ name: "response_needed", source: "Config Coordinator", trigger: "Command result ready", frequency: "Burst", latencySensitive: false }],
+        incomingEvents: [{ name: "response_needed", source: "Config Coordinator", trigger: "Command result ready", frequency: "Burst", latencySensitive: false }],
+        internalSignals: [
+          { name: "send_complete", source: "Response Reporter", trigger: "Response flushed to TX path", frequency: "Burst", latencySensitive: false },
+        ],
+        outgoingSignals: [
+          { name: "ack_emitted", source: "Response Reporter", trigger: "ACK or NACK emitted to operator", frequency: "Burst", latencySensitive: false },
+        ],
         states: [
           {
             name: "WAITING",
             description: "Idle until a response needs to be emitted.",
-            transitions: [{ event: "response_needed", targetState: "SENDING", action: "Build response packet" }],
+            transitions: [{ event: "response_needed", triggerKind: "incoming", targetState: "SENDING", action: "Build response packet" }],
           },
           {
             name: "SENDING",
             description: "Sending response or health output.",
-            transitions: [{ event: "send_complete", targetState: "WAITING", action: "Flush output buffers" }],
+            transitions: [{ event: "send_complete", triggerKind: "internal", targetState: "WAITING", action: "Flush output buffers" }],
           },
         ],
         ownership: [{ resource: "UART TX response buffer", owner: "Response Reporter", accessRules: "Only response path formats operator-facing packets" }],

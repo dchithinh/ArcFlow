@@ -39,7 +39,9 @@ export const isWorkspaceSectionStarted = (
           hasText(component.summary) ||
           hasList(component.inputs) ||
           hasList(component.outputs) ||
-          component.events.length > 0 ||
+          component.incomingEvents.length > 0 ||
+          component.internalSignals.length > 0 ||
+          component.outgoingSignals.length > 0 ||
           component.states.length > 0 ||
           component.ownership.length > 0 ||
           component.failureModes.length > 0,

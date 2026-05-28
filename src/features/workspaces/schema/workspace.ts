@@ -30,6 +30,7 @@ export type EventDefinition = {
 
 export type StateTransition = {
   event: string;
+  triggerKind?: "incoming" | "internal";
   targetState: string;
   action?: string;
 };
@@ -84,7 +85,9 @@ export type FeatureComponent = {
   summary: string;
   inputs: string[];
   outputs: string[];
-  events: EventDefinition[];
+  incomingEvents: EventDefinition[];
+  internalSignals: EventDefinition[];
+  outgoingSignals: EventDefinition[];
   states: StateDefinition[];
   ownership: OwnershipDefinition[];
   failureModes: FailureModeDefinition[];

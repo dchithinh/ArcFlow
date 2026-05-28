@@ -63,6 +63,8 @@ export const StringListEditor = ({ label, hint, items, onChange, placeholder }: 
 };
 
 type EventListEditorProps = {
+  title?: string;
+  hint?: string;
   items: Array<{
     name: string;
     source: string;
@@ -73,7 +75,12 @@ type EventListEditorProps = {
   onChange: (items: EventListEditorProps["items"]) => void;
 };
 
-export const EventListEditor = ({ items, onChange }: EventListEditorProps) => {
+export const EventListEditor = ({
+  title = "Events",
+  hint = "Capture each meaningful trigger and its characteristics.",
+  items,
+  onChange,
+}: EventListEditorProps) => {
   const updateItem = (index: number, key: string, value: string | boolean) => {
     const next = [...items];
     next[index] = { ...next[index], [key]: value };
@@ -81,7 +88,7 @@ export const EventListEditor = ({ items, onChange }: EventListEditorProps) => {
   };
 
   return (
-    <Field label="Events" hint="Capture each meaningful trigger and its characteristics.">
+    <Field label={title} hint={hint}>
       <div className="space-y-4">
         {items.map((item, index) => (
           <div key={`event-${index}`} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">

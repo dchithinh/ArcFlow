@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 type MermaidPreviewProps = {
   chart: string;
@@ -29,12 +29,31 @@ export const MermaidPreview = ({
 }: MermaidPreviewProps) => {
   const [svg, setSvg] = useState<string>("");
   const [failed, setFailed] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+
+  const clampZoom = (value: number): number => Math.min(3, Math.max(0.5, value));
+
+  const resetView = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
 
   useEffect(() => {
     let cancelled = false;
 
     setFailed(false);
     setSvg("");
+    resetView();
 
     const renderChart = async () => {
       try {
@@ -77,6 +96,63 @@ export const MermaidPreview = ({
     };
   }, [chart, svgMode, title]);
 
+  useEffect(() => {
+    if (!viewportRef.current) {
+      return;
+    }
+
+    const viewport = viewportRef.current;
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault();
+
+      const direction = event.deltaY > 0 ? -1 : 1;
+      const step = event.ctrlKey ? 0.2 : 0.1;
+      setZoom((current) => clampZoom(Number((current + direction * step).toFixed(2))));
+    };
+
+    viewport.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      viewport.removeEventListener("wheel", handleWheel);
+    };
+  }, []);
+
+  const beginDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (zoom <= 1) {
+      return;
+    }
+
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: pan.x,
+      originY: pan.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsDragging(true);
+  };
+
+  const updateDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragStateRef.current || dragStateRef.current.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - dragStateRef.current.startX;
+    const deltaY = event.clientY - dragStateRef.current.startY;
+    setPan({
+      x: dragStateRef.current.originX + deltaX,
+      y: dragStateRef.current.originY + deltaY,
+    });
+  };
+
+  const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragStateRef.current?.pointerId === event.pointerId) {
+      dragStateRef.current = null;
+      setIsDragging(false);
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
   if (failed) {
     return (
       <div className={`space-y-3 ${className}`.trim()}>
@@ -87,9 +163,54 @@ export const MermaidPreview = ({
   }
 
   return (
-    <div
-      className={`overflow-auto rounded-2xl bg-white p-3 ${className}`.trim()}
-      dangerouslySetInnerHTML={{ __html: svg }}
-    />
+    <div className={`space-y-3 rounded-2xl bg-white p-3 ${className}`.trim()}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-slate">
+          Wheel to zoom. Drag to pan when zoomed in.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setZoom((current) => clampZoom(Number((current - 0.15).toFixed(2))))}
+            className="rounded-xl border border-slate/20 px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-mist"
+          >
+            Zoom Out
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom((current) => clampZoom(Number((current + 0.15).toFixed(2))))}
+            className="rounded-xl border border-slate/20 px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-mist"
+          >
+            Zoom In
+          </button>
+          <button
+            type="button"
+            onClick={resetView}
+            className="rounded-xl border border-slate/20 px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-mist"
+          >
+            Reset
+          </button>
+        </div>
+      </div>
+      <div
+        ref={viewportRef}
+        className={`overflow-auto rounded-2xl bg-white ${
+          isDragging ? "cursor-grabbing" : zoom > 1 ? "cursor-grab" : "cursor-default"
+        }`}
+        onPointerDown={beginDrag}
+        onPointerMove={updateDrag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onPointerLeave={endDrag}
+      >
+        <div
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: "top left",
+          }}
+          dangerouslySetInnerHTML={{ __html: svg }}
+        />
+      </div>
+    </div>
   );
 };
