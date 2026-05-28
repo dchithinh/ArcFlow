@@ -26,9 +26,17 @@ type StringListEditorProps = {
   items: string[];
   onChange: (items: string[]) => void;
   placeholder?: string;
+  getItemLabel?: (index: number) => string;
 };
 
-export const StringListEditor = ({ label, hint, items, onChange, placeholder }: StringListEditorProps) => {
+export const StringListEditor = ({
+  label,
+  hint,
+  items,
+  onChange,
+  placeholder,
+  getItemLabel,
+}: StringListEditorProps) => {
   const updateItem = (index: number, value: string) => {
     const next = [...items];
     next[index] = value;
@@ -44,11 +52,12 @@ export const StringListEditor = ({ label, hint, items, onChange, placeholder }: 
         {items.map((item, index) => (
           <div key={`${label}-${index}`} className="flex gap-2">
             <div className="flex-1 space-y-1.5">
-              <InputLabel>{`${label} ${index + 1}`}</InputLabel>
-              <TextInput
+              <InputLabel>{getItemLabel ? getItemLabel(index) : `${label} ${index + 1}`}</InputLabel>
+              <TextArea
                 value={item}
                 onChange={(value) => updateItem(index, value)}
                 placeholder={placeholder}
+                rows={2}
               />
             </div>
             <Button onClick={() => removeItem(index)} tone="ghost">

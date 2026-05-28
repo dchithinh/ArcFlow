@@ -187,7 +187,7 @@ ${workspace.discovery.interactions.length > 0
         .join("\n")
     : "- No interactions documented yet"}
 
-## Candidate RTOS Tasks
+## Implementation Tasks
 ${workspace.discovery.candidateTasks.length > 0
     ? workspace.discovery.candidateTasks
         .map(
@@ -195,7 +195,7 @@ ${workspace.discovery.candidateTasks.length > 0
             `- ${task.name || "Unnamed task"} | ${task.priority} | ${task.type} | trigger: ${task.trigger || "Unknown"} | may block: ${task.mayBlock ? "yes" : "no"}`,
         )
         .join("\n")
-    : "- No tasks documented yet"}
+    : "- No implementation tasks documented yet"}
 
 ## System Risks
 ${listBlock(workspace.discovery.systemRisks)}
@@ -661,7 +661,7 @@ const generateRiskReview = (workspace: FeatureWorkspace): string[] => {
       active: workspace.discovery.interactions.length === 0,
     },
     {
-      label: "Missing task proposal",
+      label: "Missing implementation task proposal",
       active: workspace.discovery.candidateTasks.length === 0,
     },
     {

@@ -8,32 +8,17 @@ export const isWorkspaceSectionStarted = (
   sectionId: WorkspaceSectionId,
 ): boolean => {
   switch (sectionId) {
-    case "featureSummary":
-      return hasText(workspace.featureSummary.summary) || hasText(workspace.featureSummary.problem);
-    case "scope":
+    case "featureDefinition":
       return (
+        hasText(workspace.featureSummary.summary) ||
+        hasText(workspace.featureSummary.problem) ||
         hasList(workspace.featureSummary.goals) ||
         hasList(workspace.featureSummary.constraints) ||
         hasList(workspace.featureSummary.assumptions) ||
-        hasList(workspace.featureSummary.openQuestions)
+        hasList(workspace.featureSummary.openQuestions) ||
+        hasList(workspace.discovery.responsibilities)
       );
-    case "responsibilities":
-      return hasList(workspace.discovery.responsibilities);
-    case "candidateComponents":
-      return workspace.discovery.candidateComponents.some(
-        (component) => hasText(component.name) || hasText(component.responsibility),
-      );
-    case "interactions":
-      return workspace.discovery.interactions.some(
-        (interaction) => hasText(interaction.data) || hasText(interaction.notes),
-      );
-    case "candidateTasks":
-      return workspace.discovery.candidateTasks.some(
-        (task) => hasText(task.name) || hasText(task.responsibility),
-      );
-    case "systemRisks":
-      return hasList(workspace.discovery.systemRisks);
-    case "componentDetail":
+    case "featureDesign":
       return workspace.components.some(
         (component) =>
           hasText(component.summary) ||
@@ -45,9 +30,18 @@ export const isWorkspaceSectionStarted = (
           component.states.length > 0 ||
           component.ownership.length > 0 ||
           component.failureModes.length > 0,
+      ) ||
+      workspace.discovery.candidateComponents.some(
+        (component) => hasText(component.name) || hasText(component.responsibility),
+      ) ||
+      workspace.discovery.interactions.some(
+        (interaction) => hasText(interaction.data) || hasText(interaction.notes),
       );
     case "implementationPlan":
       return (
+        workspace.discovery.candidateTasks.some(
+          (task) => hasText(task.name) || hasText(task.responsibility),
+        ) ||
         hasList(workspace.implementationPlan.milestones) ||
         hasList(workspace.implementationPlan.apis) ||
         hasList(workspace.implementationPlan.tests)

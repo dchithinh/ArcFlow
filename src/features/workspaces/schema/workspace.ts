@@ -10,14 +10,8 @@ export type InteractionMechanism =
   | "other";
 
 export type WorkspaceSectionId =
-  | "featureSummary"
-  | "scope"
-  | "responsibilities"
-  | "candidateComponents"
-  | "interactions"
-  | "candidateTasks"
-  | "systemRisks"
-  | "componentDetail"
+  | "featureDefinition"
+  | "featureDesign"
   | "implementationPlan";
 
 export type EventDefinition = {
@@ -136,13 +130,7 @@ export type WorkspaceSectionDefinition = {
 };
 
 export const WORKSPACE_SECTIONS: WorkspaceSectionDefinition[] = [
-  { id: "featureSummary", label: "Feature Summary", description: "Capture the feature intent and user problem.", stage: "definition" },
-  { id: "scope", label: "Scope / Constraints", description: "Track goals, constraints, assumptions, and open questions.", stage: "definition" },
-  { id: "responsibilities", label: "Responsibilities", description: "Break the feature into responsibilities before components.", stage: "definition" },
-  { id: "candidateComponents", label: "Candidate Components", description: "Propose the components or subsystems this feature likely needs.", stage: "design" },
-  { id: "interactions", label: "Component Interactions", description: "Describe how candidate components exchange control and data.", stage: "design" },
-  { id: "componentDetail", label: "Component Detail", description: "Refine one selected component at a time.", stage: "design" },
-  { id: "systemRisks", label: "System Risks", description: "Capture cross-component risks before detailed design.", stage: "design" },
-  { id: "candidateTasks", label: "Candidate RTOS Tasks", description: "Propose concurrency boundaries and task responsibilities.", stage: "implementation" },
-  { id: "implementationPlan", label: "Implementation Plan", description: "Plan milestones, APIs, and tests after the design stabilizes.", stage: "implementation" },
+  { id: "featureDefinition", label: "Feature Definition", description: "Define the feature intent, scope, goals, constraints, and responsibilities.", stage: "definition" },
+  { id: "featureDesign", label: "Feature Design", description: "Define candidate components, their interactions, and each component detail in one place.", stage: "design" },
+  { id: "implementationPlan", label: "Implementation Plan", description: "Plan tasks, milestones, APIs, and tests after the design stabilizes.", stage: "implementation" },
 ];

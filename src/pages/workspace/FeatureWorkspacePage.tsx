@@ -55,6 +55,12 @@ const StaticContextBlock = ({
   </div>
 );
 
+const requirementsToText = (requirements: string[]): string =>
+  requirements
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join("\n");
+
 const headingAliases = {
   requirement: new Set(["requirement", "feature requirement", "overview", "description"]),
   constraints: new Set(["constraints", "constraint"]),
@@ -168,7 +174,7 @@ export const FeatureWorkspacePage = ({
   onChange,
   onExport,
 }: FeatureWorkspacePageProps) => {
-  const [activeSection, setActiveSection] = useState<WorkspaceSectionId>("featureSummary");
+  const [activeSection, setActiveSection] = useState<WorkspaceSectionId>("featureDefinition");
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(
     workspace.components[0]?.id ?? null,
   );
@@ -333,7 +339,7 @@ export const FeatureWorkspacePage = ({
         }),
       );
 
-      setActiveSection("featureSummary");
+      setActiveSection("featureDefinition");
       setImportStatus("success");
       setImportMessage(
         `Imported ${file.name}. Review the parsed title, requirement, constraints, and responsibilities before generating the AI draft.`,
@@ -382,7 +388,7 @@ export const FeatureWorkspacePage = ({
         `Discovery draft generated with ${data.provider}/${data.model} in ${Math.max(1, Math.round(data.durationMs / 1000))}s. Review the proposed architecture, then refine components individually.`,
       );
       if (merged.components.length > 0) {
-        setActiveSection("candidateComponents");
+        setActiveSection("featureDesign");
       }
     } catch (error) {
       setAiStatus("error");
@@ -543,64 +549,23 @@ export const FeatureWorkspacePage = ({
               Start by discovering what components the feature needs, then refine one component at a time.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <input
-              ref={importInputRef}
-              type="file"
-              accept=".md,.markdown,.txt,text/markdown,text/plain"
-              className="hidden"
-              onChange={importRequirementFile}
-            />
-            <Button onClick={() => importInputRef.current?.click()} tone="secondary">
-              Import Requirement File
-            </Button>
-            <Button
-              onClick={generateAiDraft}
-              tone="primary"
-              disabled={!canGenerateAiDraft || aiStatus === "loading"}
-            >
-              {aiStatus === "loading" && aiStage === "discovery"
-                ? "Generating Discovery Draft..."
-                : "Generate Discovery Draft"}
-            </Button>
-            <Button onClick={() => onExport(outputs.markdown, workspace.title)}>Export Markdown</Button>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-2xl border border-slate/10 bg-mist/50 px-4 py-3 text-sm text-slate">
-          <p className="font-medium text-ink">AI draft input contract</p>
-          <p className="mt-1">
-            Fill feature name, requirement, at least one constraint, and at least one responsibility. Import a markdown requirement file if you want, then generate the discovery draft first. After that, refine each component and the implementation plan in separate AI steps.
-          </p>
-          {importMessage ? (
-            <p
-              className={`mt-2 text-xs ${
-                importStatus === "error" ? "text-red-700" : "text-pine"
-              }`}
-            >
-              {importMessage}
-            </p>
-          ) : null}
-          <p
-            className={`mt-2 text-xs ${
-              aiStatus === "error"
-                ? "text-red-700"
-                : aiStatus === "success"
-                  ? "text-pine"
-                  : "text-slate"
-            }`}
-          >
-            {aiMessage ||
-              (canGenerateAiDraft
-                ? "Ready to generate the discovery draft from the current inputs."
-                : "Add the required inputs to enable AI drafting.")}
-            {aiStatus === "loading" ? ` ${aiElapsedSeconds}s elapsed.` : ""}
-          </p>
         </div>
 
         <div className="mt-6 space-y-4">
-          {activeSection === "featureSummary" ? (
+          {activeSection === "featureDefinition" ? (
             <>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".md,.markdown,.txt,text/markdown,text/plain"
+                className="hidden"
+                onChange={importRequirementFile}
+              />
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => importInputRef.current?.click()} tone="secondary">
+                  Import Requirement File
+                </Button>
+              </div>
               <Field label="Feature Name">
                 <TextInput
                   value={workspace.title}
@@ -615,18 +580,15 @@ export const FeatureWorkspacePage = ({
                 />
               </Field>
 
-              <Field label="Feature Requirement" hint="Paste the rough feature request before deciding the architecture.">
+              <Field label="Feature Summary">
                 <TextArea
-                  value={workspace.requirement}
+                  value={workspace.featureSummary.summary}
                   onChange={(value) =>
-                    onChange((current) =>
-                      updateTimestamp({
-                        ...current,
-                        requirement: value,
-                      }),
-                    )
+                    onChange((current) => ({
+                      ...current,
+                      featureSummary: { ...current.featureSummary, summary: value },
+                    }))
                   }
-                  rows={5}
                 />
               </Field>
             </>
@@ -637,11 +599,6 @@ export const FeatureWorkspacePage = ({
                 value={workspace.title}
                 emptyText="No feature name yet."
               />
-              <StaticContextBlock
-                label="Feature Requirement"
-                value={workspace.requirement}
-                emptyText="No feature requirement written yet."
-              />
             </div>
           )}
 
@@ -651,8 +608,16 @@ export const FeatureWorkspacePage = ({
             selectedComponent={selectedComponent}
             selectedComponentId={selectedComponentId}
             setSelectedComponentId={setSelectedComponentId}
+            canGenerateAiDraft={canGenerateAiDraft}
             aiStatus={aiStatus}
             aiStage={aiStage}
+            aiMessage={aiMessage}
+            aiElapsedSeconds={aiElapsedSeconds}
+            importStatus={importStatus}
+            importMessage={importMessage}
+            importInputRef={importInputRef}
+            onGenerateAiDraft={generateAiDraft}
+            onImportRequirementFile={importRequirementFile}
             onRefineSelectedComponentWithAi={refineSelectedComponentWithAi}
             onGenerateImplementationPlanWithAi={generateImplementationPlanWithAi}
             onChange={(updater) => onChange((current) => updateTimestamp(updater(current)))}
@@ -669,7 +634,14 @@ export const FeatureWorkspacePage = ({
             : "No component selected yet. Add candidate components to refine the design."}
         </div>
         <div className="mt-5 space-y-5">
-          <PreviewCard title="Feature Workspace Markdown">
+          <PreviewCard
+            title="Feature Workspace Markdown"
+            action={
+              <Button onClick={() => onExport(outputs.markdown, workspace.title)}>
+                Export Markdown
+              </Button>
+            }
+          >
             <pre className="max-h-[420px] overflow-auto rounded-2xl bg-ink p-4 text-xs text-white">
               {outputs.markdown}
             </pre>
@@ -720,9 +692,20 @@ export const FeatureWorkspacePage = ({
   );
 };
 
-const PreviewCard = ({ title, children }: { title: string; children: ReactNode }) => (
+const PreviewCard = ({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) => (
   <article className="space-y-3 rounded-2xl border border-slate/10 bg-white/75 p-4">
-    <h3 className="text-sm font-semibold uppercase tracking-[0.15em] text-slate">{title}</h3>
+    <div className="flex items-start justify-between gap-3">
+      <h3 className="text-sm font-semibold uppercase tracking-[0.15em] text-slate">{title}</h3>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
     {children}
   </article>
 );
@@ -856,8 +839,16 @@ const WorkspaceSectionForm = ({
   selectedComponent,
   selectedComponentId,
   setSelectedComponentId,
+  canGenerateAiDraft,
   aiStatus,
   aiStage,
+  aiMessage,
+  aiElapsedSeconds,
+  importStatus,
+  importMessage,
+  importInputRef,
+  onGenerateAiDraft,
+  onImportRequirementFile,
   onRefineSelectedComponentWithAi,
   onGenerateImplementationPlanWithAi,
   onChange,
@@ -867,53 +858,61 @@ const WorkspaceSectionForm = ({
   selectedComponent: FeatureComponent | null;
   selectedComponentId: string | null;
   setSelectedComponentId: (componentId: string | null) => void;
+  canGenerateAiDraft: boolean;
   aiStatus: "idle" | "loading" | "success" | "error";
   aiStage: AiStage;
+  aiMessage: string;
+  aiElapsedSeconds: number;
+  importStatus: "idle" | "success" | "error";
+  importMessage: string;
+  importInputRef: React.RefObject<HTMLInputElement>;
+  onGenerateAiDraft: () => void;
+  onImportRequirementFile: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   onRefineSelectedComponentWithAi: () => void;
   onGenerateImplementationPlanWithAi: () => void;
   onChange: (updater: (current: FeatureWorkspace) => FeatureWorkspace) => void;
 }) => {
   switch (activeSection) {
-    case "featureSummary":
+    case "featureDefinition":
       return (
         <div className="grid gap-4">
-          <Field label="Feature Summary">
-            <TextArea
-              value={workspace.featureSummary.summary}
-              onChange={(value) =>
-                onChange((current) => ({
-                  ...current,
-                  featureSummary: { ...current.featureSummary, summary: value },
-                }))
-              }
-            />
-          </Field>
-          <Field label="What Problem Does This Feature Solve?">
-            <TextArea
-              value={workspace.featureSummary.problem}
-              onChange={(value) =>
-                onChange((current) => ({
-                  ...current,
-                  featureSummary: { ...current.featureSummary, problem: value },
-                }))
-              }
-            />
-          </Field>
-        </div>
-      );
-    case "scope":
-      return (
-        <div className="grid gap-4">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".md,.markdown,.txt,text/markdown,text/plain"
+            className="hidden"
+            onChange={onImportRequirementFile}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => importInputRef.current?.click()} tone="secondary">
+              Import Requirement File
+            </Button>
+          </div>
           <StringListEditor
-            label="Goals"
+            label="Feature Requirements"
+            hint="List the individual feature requirements as numbered requirement statements, for example REQ-1, REQ-2, and REQ-3."
             items={workspace.featureSummary.goals}
             onChange={(items) =>
               onChange((current) => ({
                 ...current,
+                requirement: requirementsToText(items),
                 featureSummary: { ...current.featureSummary, goals: items },
               }))
             }
-            placeholder="Feature goal"
+            placeholder="REQ-1: Requirement statement"
+            getItemLabel={(index) => `REQ-${index + 1}`}
+          />
+          <StringListEditor
+            label="Feature Responsibilities"
+            hint="Responsibilities are the jobs the system must do to achieve each REQ-x. They help you discover component boundaries."
+            items={workspace.discovery.responsibilities}
+            onChange={(items) =>
+              onChange((current) => ({
+                ...current,
+                discovery: { ...current.discovery, responsibilities: items },
+              }))
+            }
+            placeholder="Responsibility"
           />
           <StringListEditor
             label="Constraints"
@@ -948,412 +947,355 @@ const WorkspaceSectionForm = ({
             }
             placeholder="Question"
           />
-          <StringListEditor
-            label="External Actors / Interfaces"
-            items={workspace.discovery.externalActors}
-            onChange={(items) =>
-              onChange((current) => ({
-                ...current,
-                discovery: { ...current.discovery, externalActors: items },
-              }))
-            }
-            placeholder="Actor or interface"
-          />
+          <div className="space-y-3 rounded-2xl border border-slate/10 bg-mist/50 px-4 py-4 text-sm text-slate">
+            <p className="font-medium text-ink">Generate Discovery Draft</p>
+            <p>
+              This creates a first-pass architecture draft from the current feature definition. It will propose candidate components, component interactions, and implementation task ideas for you to review and edit.
+            </p>
+            {importMessage ? (
+              <p
+                className={`text-xs ${
+                  importStatus === "error" ? "text-red-700" : "text-pine"
+                }`}
+              >
+                {importMessage}
+              </p>
+            ) : null}
+            <p
+              className={`text-xs ${
+                aiStatus === "error"
+                  ? "text-red-700"
+                  : aiStatus === "success"
+                    ? "text-pine"
+                    : "text-slate"
+              }`}
+            >
+              {aiMessage ||
+                (canGenerateAiDraft
+                  ? "Ready to generate the discovery draft from the current inputs."
+                  : "Add the required inputs to enable AI drafting.")}
+              {aiStatus === "loading" ? ` ${aiElapsedSeconds}s elapsed.` : ""}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={onGenerateAiDraft}
+                tone="primary"
+                disabled={!canGenerateAiDraft || aiStatus === "loading"}
+              >
+                {aiStatus === "loading" && aiStage === "discovery"
+                  ? "Generating Discovery Draft..."
+                  : "Generate Discovery Draft"}
+              </Button>
+            </div>
+          </div>
         </div>
       );
-    case "responsibilities":
+    case "featureDesign":
       return (
-        <StringListEditor
-          label="Feature Responsibilities"
-          hint="List the responsibilities before deciding the actual component boundaries."
-          items={workspace.discovery.responsibilities}
-          onChange={(items) =>
-            onChange((current) => ({
-              ...current,
-              discovery: { ...current.discovery, responsibilities: items },
-            }))
-          }
-          placeholder="Responsibility"
-        />
-      );
-    case "candidateComponents":
-      return (
-        <Field
-          label="Candidate Components"
-          hint="These are the subsystems you believe this feature needs before detailed design."
-        >
-          <div className="space-y-4">
-            {workspace.discovery.candidateComponents.map((candidate, index) => (
-              <div key={candidate.id} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
-                <div className="space-y-1.5">
-                  <SectionInputLabel>Component Name</SectionInputLabel>
-                  <TextInput
-                    value={candidate.name}
-                    onChange={(value) =>
-                      onChange((current) => {
-                        const nextCandidates = [...current.discovery.candidateComponents];
-                        const updated = { ...nextCandidates[index], name: value };
-                        nextCandidates[index] = updated;
-                        return {
+        <div className="space-y-5">
+          <Field
+            label="Candidate Components"
+            hint="These are the subsystems you believe this feature needs before detailed design."
+          >
+            <div className="space-y-4">
+              {workspace.discovery.candidateComponents.map((candidate, index) => (
+                <div key={candidate.id} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
+                  <div className="space-y-1.5">
+                    <SectionInputLabel>Component Name</SectionInputLabel>
+                    <TextInput
+                      value={candidate.name}
+                      onChange={(value) =>
+                        onChange((current) => {
+                          const nextCandidates = [...current.discovery.candidateComponents];
+                          const updated = { ...nextCandidates[index], name: value };
+                          nextCandidates[index] = updated;
+                          return {
+                            ...current,
+                            discovery: { ...current.discovery, candidateComponents: nextCandidates },
+                            components: syncComponentFromCandidate(updated, current.components),
+                          };
+                        })
+                      }
+                      placeholder="Component name"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <SectionInputLabel>Component Responsibility</SectionInputLabel>
+                    <TextArea
+                      value={candidate.responsibility}
+                      onChange={(value) =>
+                        onChange((current) => {
+                          const nextCandidates = [...current.discovery.candidateComponents];
+                          const updated = { ...nextCandidates[index], responsibility: value };
+                          nextCandidates[index] = updated;
+                          return {
+                            ...current,
+                            discovery: { ...current.discovery, candidateComponents: nextCandidates },
+                            components: syncComponentFromCandidate(updated, current.components),
+                          };
+                        })
+                      }
+                      placeholder="What is this component responsible for?"
+                      rows={3}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <SectionInputLabel>Rationale</SectionInputLabel>
+                    <TextArea
+                      value={candidate.rationale ?? ""}
+                      onChange={(value) =>
+                        onChange((current) => {
+                          const nextCandidates = [...current.discovery.candidateComponents];
+                          nextCandidates[index] = { ...nextCandidates[index], rationale: value };
+                          return {
+                            ...current,
+                            discovery: { ...current.discovery, candidateComponents: nextCandidates },
+                          };
+                        })
+                      }
+                      placeholder="Why does this component exist?"
+                      rows={2}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => {
+                        const fallbackId =
+                          workspace.discovery.candidateComponents[index + 1]?.id ??
+                          workspace.discovery.candidateComponents[index - 1]?.id ??
+                          null;
+                        setSelectedComponentId(
+                          selectedComponentId === candidate.id ? fallbackId : selectedComponentId,
+                        );
+                        onChange((current) => ({
                           ...current,
-                          discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                          components: syncComponentFromCandidate(updated, current.components),
-                        };
+                          discovery: {
+                            ...current.discovery,
+                            candidateComponents: current.discovery.candidateComponents.filter(
+                              (item) => item.id !== candidate.id,
+                            ),
+                            interactions: current.discovery.interactions.filter(
+                              (interaction) =>
+                                interaction.fromComponentId !== candidate.id &&
+                                interaction.toComponentId !== candidate.id,
+                            ),
+                          },
+                          components: current.components.filter((component) => component.id !== candidate.id),
+                        }));
+                      }}
+                      tone="ghost"
+                    >
+                      Remove Component
+                    </Button>
+                    <Button onClick={() => setSelectedComponentId(candidate.id)} tone="secondary">
+                      Focus Detail Editor
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button
+                onClick={() => {
+                  const candidate = createEmptyCandidateComponent();
+                  setSelectedComponentId(candidate.id);
+                  onChange((current) => ({
+                    ...current,
+                    discovery: {
+                      ...current.discovery,
+                      candidateComponents: [...current.discovery.candidateComponents, candidate],
+                    },
+                    components: [...current.components, createEmptyComponent(candidate)],
+                  }));
+                }}
+              >
+                Add Candidate Component
+              </Button>
+            </div>
+          </Field>
+          <Field
+            label="Component Interactions"
+            hint="Describe how the candidate components interact before refining their internal state."
+          >
+            <div className="space-y-4">
+              {workspace.discovery.interactions.map((interaction, index) => (
+                <div
+                  key={`${interaction.fromComponentId}-${interaction.toComponentId}-${index}`}
+                  className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
+                >
+                  <div className="space-y-1.5">
+                    <SectionInputLabel>From Component</SectionInputLabel>
+                    <select
+                      className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                      value={interaction.fromComponentId}
+                      onChange={(event) =>
+                        onChange((current) => {
+                          const next = [...current.discovery.interactions];
+                          next[index] = { ...next[index], fromComponentId: event.target.value };
+                          return { ...current, discovery: { ...current.discovery, interactions: next } };
+                        })
+                      }
+                    >
+                      {workspace.discovery.candidateComponents.map((component) => (
+                        <option key={component.id} value={component.id}>
+                          {component.name || "Unnamed component"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <SectionInputLabel>To Component</SectionInputLabel>
+                    <select
+                      className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                      value={interaction.toComponentId}
+                      onChange={(event) =>
+                        onChange((current) => {
+                          const next = [...current.discovery.interactions];
+                          next[index] = { ...next[index], toComponentId: event.target.value };
+                          return { ...current, discovery: { ...current.discovery, interactions: next } };
+                        })
+                      }
+                    >
+                      {workspace.discovery.candidateComponents.map((component) => (
+                        <option key={component.id} value={component.id}>
+                          {component.name || "Unnamed component"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <ObjectListEditor<ComponentInteraction>
+                    label="Interaction"
+                    items={[interaction]}
+                    onChange={(items) =>
+                      onChange((current) => {
+                        const next = [...current.discovery.interactions];
+                        next[index] = items[0];
+                        return { ...current, discovery: { ...current.discovery, interactions: next } };
                       })
                     }
-                    placeholder="Component name"
+                    template={{
+                      fromComponentId: interaction.fromComponentId,
+                      toComponentId: interaction.toComponentId,
+                      mechanism: "queue",
+                      data: "",
+                      notes: "",
+                    }}
+                    fields={[
+                      {
+                        key: "mechanism",
+                        label: "Mechanism",
+                        type: "select",
+                        options: [
+                          "queue",
+                          "event",
+                          "notification",
+                          "callback",
+                          "shared_memory",
+                          "direct_call",
+                          "other",
+                        ],
+                      },
+                      { key: "data", label: "Data" },
+                      { key: "notes", label: "Notes", type: "textarea" },
+                    ]}
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <SectionInputLabel>Component Responsibility</SectionInputLabel>
-                  <TextArea
-                    value={candidate.responsibility}
-                    onChange={(value) =>
-                      onChange((current) => {
-                        const nextCandidates = [...current.discovery.candidateComponents];
-                        const updated = { ...nextCandidates[index], responsibility: value };
-                        nextCandidates[index] = updated;
-                        return {
-                          ...current,
-                          discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                          components: syncComponentFromCandidate(updated, current.components),
-                        };
-                      })
-                    }
-                    placeholder="What is this component responsible for?"
-                    rows={3}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <SectionInputLabel>Rationale</SectionInputLabel>
-                  <TextArea
-                    value={candidate.rationale ?? ""}
-                    onChange={(value) =>
-                      onChange((current) => {
-                        const nextCandidates = [...current.discovery.candidateComponents];
-                        nextCandidates[index] = { ...nextCandidates[index], rationale: value };
-                        return {
-                          ...current,
-                          discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                        };
-                      })
-                    }
-                    placeholder="Why does this component exist?"
-                    rows={2}
-                  />
-                </div>
-                <div className="flex gap-2">
                   <Button
-                    onClick={() => {
-                      const fallbackId =
-                        workspace.discovery.candidateComponents[index + 1]?.id ??
-                        workspace.discovery.candidateComponents[index - 1]?.id ??
-                        null;
-                      setSelectedComponentId(
-                        selectedComponentId === candidate.id ? fallbackId : selectedComponentId,
-                      );
+                    onClick={() =>
                       onChange((current) => ({
                         ...current,
                         discovery: {
                           ...current.discovery,
-                          candidateComponents: current.discovery.candidateComponents.filter(
-                            (item) => item.id !== candidate.id,
-                          ),
                           interactions: current.discovery.interactions.filter(
-                            (interaction) =>
-                              interaction.fromComponentId !== candidate.id &&
-                              interaction.toComponentId !== candidate.id,
+                            (_, currentIndex) => currentIndex !== index,
                           ),
                         },
-                        components: current.components.filter((component) => component.id !== candidate.id),
-                      }));
-                    }}
+                      }))
+                    }
                     tone="ghost"
                   >
-                    Remove Component
-                  </Button>
-                  <Button onClick={() => setSelectedComponentId(candidate.id)} tone="secondary">
-                    Focus Detail Editor
+                    Remove Interaction
                   </Button>
                 </div>
-              </div>
-            ))}
-            <Button
-              onClick={() => {
-                const candidate = createEmptyCandidateComponent();
-                setSelectedComponentId(candidate.id);
-                onChange((current) => ({
-                  ...current,
-                  discovery: {
-                    ...current.discovery,
-                    candidateComponents: [...current.discovery.candidateComponents, candidate],
-                  },
-                  components: [...current.components, createEmptyComponent(candidate)],
-                }));
-              }}
-            >
-              Add Candidate Component
-            </Button>
-          </div>
-        </Field>
-      );
-    case "interactions":
-      return (
-        <Field
-          label="Component Interactions"
-          hint="Describe how the candidate components interact before refining their internal state."
-        >
-          <div className="space-y-4">
-            {workspace.discovery.interactions.map((interaction, index) => (
-              <div key={`${interaction.fromComponentId}-${interaction.toComponentId}-${index}`} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
-                <div className="space-y-1.5">
-                  <SectionInputLabel>From Component</SectionInputLabel>
-                  <select
-                    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-                    value={interaction.fromComponentId}
-                    onChange={(event) =>
-                      onChange((current) => {
-                        const next = [...current.discovery.interactions];
-                        next[index] = { ...next[index], fromComponentId: event.target.value };
-                        return { ...current, discovery: { ...current.discovery, interactions: next } };
-                      })
-                    }
-                  >
-                    {workspace.discovery.candidateComponents.map((component) => (
-                      <option key={component.id} value={component.id}>
-                        {component.name || "Unnamed component"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <SectionInputLabel>To Component</SectionInputLabel>
-                  <select
-                    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-                    value={interaction.toComponentId}
-                    onChange={(event) =>
-                      onChange((current) => {
-                        const next = [...current.discovery.interactions];
-                        next[index] = { ...next[index], toComponentId: event.target.value };
-                        return { ...current, discovery: { ...current.discovery, interactions: next } };
-                      })
-                    }
-                  >
-                    {workspace.discovery.candidateComponents.map((component) => (
-                      <option key={component.id} value={component.id}>
-                        {component.name || "Unnamed component"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <ObjectListEditor<ComponentInteraction>
-                  label="Interaction"
-                  items={[interaction]}
-                  onChange={(items) =>
-                    onChange((current) => {
-                      const next = [...current.discovery.interactions];
-                      next[index] = items[0];
-                      return { ...current, discovery: { ...current.discovery, interactions: next } };
-                    })
+              ))}
+              <Button
+                onClick={() => {
+                  if (workspace.discovery.candidateComponents.length < 2) {
+                    return;
                   }
-                  template={{
-                    fromComponentId: interaction.fromComponentId,
-                    toComponentId: interaction.toComponentId,
-                    mechanism: "queue",
-                    data: "",
-                    notes: "",
-                  }}
-                  fields={[
-                    {
-                      key: "mechanism",
-                      label: "Mechanism",
-                      type: "select",
-                      options: ["queue", "event", "notification", "callback", "shared_memory", "direct_call", "other"],
+                  const first = workspace.discovery.candidateComponents[0];
+                  const second = workspace.discovery.candidateComponents[1];
+                  onChange((current) => ({
+                    ...current,
+                    discovery: {
+                      ...current.discovery,
+                      interactions: [
+                        ...current.discovery.interactions,
+                        {
+                          fromComponentId: first.id,
+                          toComponentId: second.id,
+                          mechanism: "queue",
+                          data: "",
+                          notes: "",
+                        },
+                      ],
                     },
-                    { key: "data", label: "Data" },
-                    { key: "notes", label: "Notes", type: "textarea" },
-                  ]}
-                />
-                <Button
-                  onClick={() =>
-                    onChange((current) => ({
-                      ...current,
-                      discovery: {
-                        ...current.discovery,
-                        interactions: current.discovery.interactions.filter(
-                          (_, currentIndex) => currentIndex !== index,
-                        ),
-                      },
-                    }))
-                  }
-                  tone="ghost"
-                >
-                  Remove Interaction
-                </Button>
-              </div>
-            ))}
-            <Button
-              onClick={() => {
-                if (workspace.discovery.candidateComponents.length < 2) {
-                  return;
-                }
-                const first = workspace.discovery.candidateComponents[0];
-                const second = workspace.discovery.candidateComponents[1];
-                onChange((current) => ({
-                  ...current,
-                  discovery: {
-                    ...current.discovery,
-                    interactions: [
-                      ...current.discovery.interactions,
-                      {
-                        fromComponentId: first.id,
-                        toComponentId: second.id,
-                        mechanism: "queue",
-                        data: "",
-                        notes: "",
-                      },
-                    ],
-                  },
-                }));
-              }}
-            >
-              Add Interaction
-            </Button>
-          </div>
-        </Field>
-      );
-    case "candidateTasks":
-      return (
-        <Field
-          label="Candidate RTOS Tasks"
-          hint="Propose the concurrency split at feature level before locking each component’s internal design."
-        >
-          <div className="space-y-4">
-            {workspace.discovery.candidateTasks.map((task, index) => (
-              <div key={task.id} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
-                <ObjectListEditor<CandidateTask>
-                  label="Task"
-                  items={[task]}
-                  onChange={(items) =>
-                    onChange((current) => {
-                      const next = [...current.discovery.candidateTasks];
-                      next[index] = items[0];
-                      return { ...current, discovery: { ...current.discovery, candidateTasks: next } };
-                    })
-                  }
-                  template={createEmptyCandidateTask()}
-                  fields={[
-                    { key: "name", label: "Task Name" },
-                    { key: "responsibility", label: "Responsibility" },
-                    { key: "priority", label: "Priority", type: "select", options: ["high", "medium", "low"] },
-                    { key: "type", label: "Task Type", type: "select", options: ["periodic", "event-driven", "background", "worker"] },
-                    { key: "trigger", label: "Trigger" },
-                    { key: "mayBlock", label: "May Block", type: "toggle" },
-                    { key: "notes", label: "Notes", type: "textarea" },
-                  ]}
-                />
-                <Button
-                  onClick={() =>
-                    onChange((current) => ({
-                      ...current,
-                      discovery: {
-                        ...current.discovery,
-                        candidateTasks: current.discovery.candidateTasks.filter(
-                          (_, currentIndex) => currentIndex !== index,
-                        ),
-                      },
-                    }))
-                  }
-                  tone="ghost"
-                >
-                  Remove Task
-                </Button>
-              </div>
-            ))}
-            <Button
-              onClick={() =>
-                onChange((current) => ({
-                  ...current,
-                  discovery: {
-                    ...current.discovery,
-                    candidateTasks: [...current.discovery.candidateTasks, createEmptyCandidateTask()],
-                  },
-                }))
-              }
-            >
-              Add Candidate Task
-            </Button>
-          </div>
-        </Field>
-      );
-    case "systemRisks":
-      return (
-        <StringListEditor
-          label="System Risks"
-          hint="Capture cross-component risks before drilling into component internals."
-          items={workspace.discovery.systemRisks}
-          onChange={(items) =>
-            onChange((current) => ({
-              ...current,
-              discovery: { ...current.discovery, systemRisks: items },
-            }))
-          }
-          placeholder="System risk"
-        />
-      );
-    case "componentDetail":
-      return (
-        <div className="space-y-4">
-          <Field
-            label="Component Selection"
-            hint="Each feature workspace can hold multiple components. Refine one component at a time."
-          >
-            <div className="space-y-3">
-              {workspace.components.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-6 text-sm text-slate">
-                  No components yet. Add candidate components first, then come back here for detailed design.
-                </div>
-              ) : (
-                workspace.components.map((component) => {
-                  const active = component.id === selectedComponent?.id;
-                  return (
-                    <button
-                      key={component.id}
-                      type="button"
-                      onClick={() => setSelectedComponentId(component.id)}
-                      className={`w-full rounded-2xl border px-4 py-3 text-left ${
-                        active ? "border-copper bg-sand" : "border-slate/10 bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="font-semibold">{component.name || "Unnamed component"}</span>
-                        <span className="text-xs uppercase tracking-[0.2em] text-copper">refine</span>
-                      </div>
-                      <p className="mt-1 text-sm text-slate">
-                        {component.summary || "No component summary yet."}
-                      </p>
-                    </button>
-                  );
-                })
-              )}
+                  }));
+                }}
+              >
+                Add Interaction
+              </Button>
             </div>
           </Field>
-          {selectedComponent ? (
-            <ComponentDetailEditor
-              component={selectedComponent}
-              onRefineWithAi={onRefineSelectedComponentWithAi}
-              aiBusy={aiStatus === "loading" && aiStage === "component"}
-              canRefineWithAi={canRefineComponentWithAi(workspace, selectedComponentId)}
-              onChange={(nextComponent) =>
-                onChange((current) => ({
-                  ...current,
-                  components: current.components.map((component) =>
-                    component.id === nextComponent.id ? nextComponent : component,
-                  ),
-                }))
-              }
-            />
-          ) : null}
+          <div className="space-y-4">
+            <Field
+              label="Component Selection"
+              hint="Each feature workspace can hold multiple components. Refine one component at a time."
+            >
+              <div className="space-y-3">
+                {workspace.components.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-6 text-sm text-slate">
+                    No components yet. Add candidate components first, then refine one here.
+                  </div>
+                ) : (
+                  workspace.components.map((component) => {
+                    const active = component.id === selectedComponent?.id;
+                    return (
+                      <button
+                        key={component.id}
+                        type="button"
+                        onClick={() => setSelectedComponentId(component.id)}
+                        className={`w-full rounded-2xl border px-4 py-3 text-left ${
+                          active ? "border-copper bg-sand" : "border-slate/10 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-semibold">{component.name || "Unnamed component"}</span>
+                          <span className="text-xs uppercase tracking-[0.2em] text-copper">refine</span>
+                        </div>
+                        <p className="mt-1 text-sm text-slate">
+                          {component.summary || "No component summary yet."}
+                        </p>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </Field>
+            {selectedComponent ? (
+              <ComponentDetailEditor
+                component={selectedComponent}
+                onRefineWithAi={onRefineSelectedComponentWithAi}
+                aiBusy={aiStatus === "loading" && aiStage === "component"}
+                canRefineWithAi={canRefineComponentWithAi(workspace, selectedComponentId)}
+                onChange={(nextComponent) =>
+                  onChange((current) => ({
+                    ...current,
+                    components: current.components.map((component) =>
+                      component.id === nextComponent.id ? nextComponent : component,
+                    ),
+                  }))
+                }
+              />
+            ) : null}
+          </div>
         </div>
       );
     case "implementationPlan":
@@ -1373,6 +1315,67 @@ const WorkspaceSectionForm = ({
                 : "Generate Implementation Plan"}
             </Button>
           </div>
+          <Field
+            label="Implementation Tasks"
+            hint="Capture the RTOS tasks or execution units that will carry this feature in implementation."
+          >
+            <div className="space-y-4">
+              {workspace.discovery.candidateTasks.map((task, index) => (
+                <div key={task.id} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
+                  <ObjectListEditor<CandidateTask>
+                    label="Task"
+                    items={[task]}
+                    onChange={(items) =>
+                      onChange((current) => {
+                        const next = [...current.discovery.candidateTasks];
+                        next[index] = items[0];
+                        return { ...current, discovery: { ...current.discovery, candidateTasks: next } };
+                      })
+                    }
+                    template={createEmptyCandidateTask()}
+                    fields={[
+                      { key: "name", label: "Task Name" },
+                      { key: "responsibility", label: "Responsibility" },
+                      { key: "priority", label: "Priority", type: "select", options: ["high", "medium", "low"] },
+                      { key: "type", label: "Task Type", type: "select", options: ["periodic", "event-driven", "background", "worker"] },
+                      { key: "trigger", label: "Trigger" },
+                      { key: "mayBlock", label: "May Block", type: "toggle" },
+                      { key: "notes", label: "Notes", type: "textarea" },
+                    ]}
+                  />
+                  <Button
+                    onClick={() =>
+                      onChange((current) => ({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          candidateTasks: current.discovery.candidateTasks.filter(
+                            (_, currentIndex) => currentIndex !== index,
+                          ),
+                        },
+                      }))
+                    }
+                    tone="ghost"
+                  >
+                    Remove Task
+                  </Button>
+                </div>
+              ))}
+              <Button
+                onClick={() =>
+                  onChange((current) => ({
+                    ...current,
+                    discovery: {
+                      ...current.discovery,
+                      candidateTasks: [...current.discovery.candidateTasks, createEmptyCandidateTask()],
+                    },
+                  }))
+                }
+              >
+                Add Implementation Task
+              </Button>
+            </div>
+          </Field>
           <StringListEditor
             label="Milestones"
             items={workspace.implementationPlan.milestones}

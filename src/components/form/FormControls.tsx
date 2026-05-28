@@ -18,12 +18,14 @@ type TextInputProps = {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  rows?: number;
 };
 
-export const TextInput = ({ value, onChange, placeholder }: TextInputProps) => (
-  <input
+export const TextInput = ({ value, onChange, placeholder, rows = 2 }: TextInputProps) => (
+  <textarea
     className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
     value={value}
+    rows={rows}
     onChange={(event) => onChange(event.target.value)}
     placeholder={placeholder}
   />
