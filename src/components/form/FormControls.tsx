@@ -83,9 +83,15 @@ type ButtonProps = {
   children: ReactNode;
   onClick: () => void;
   tone?: "primary" | "secondary" | "ghost";
+  disabled?: boolean;
 };
 
-export const Button = ({ children, onClick, tone = "secondary" }: ButtonProps) => {
+export const Button = ({
+  children,
+  onClick,
+  tone = "secondary",
+  disabled = false,
+}: ButtonProps) => {
   const toneClass =
     tone === "primary"
       ? "bg-ink text-white hover:bg-pine"
@@ -97,7 +103,8 @@ export const Button = ({ children, onClick, tone = "secondary" }: ButtonProps) =
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl px-4 py-2 text-sm font-medium transition ${toneClass}`}
+      disabled={disabled}
+      className={`rounded-xl px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
     >
       {children}
     </button>

@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import type { ChangeEvent, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Field, TextArea, TextInput } from "../../components/form/FormControls";
 import {
   EventListEditor,
@@ -9,6 +9,17 @@ import {
 } from "../../components/form/ListEditors";
 import { MermaidPreview } from "../../components/preview/MermaidPreview";
 import { createEmptyCandidateComponent, createEmptyCandidateTask, createEmptyComponent } from "../../features/workspaces/schema/defaults";
+import {
+  canGenerateDiscoveryDraft,
+  canGenerateImplementationPlanWithAi,
+  canRefineComponentWithAi,
+  mergeAiComponentIntoWorkspace,
+  mergeAiDiscoveryIntoWorkspace,
+  mergeAiImplementationIntoWorkspace,
+  type AiComponentDraft,
+  type AiDiscoveryDraft,
+  type AiImplementationDraft,
+} from "../../features/workspaces/ai/draft";
 import {
   WORKSPACE_SECTIONS,
   type CandidateTask,
@@ -44,11 +55,111 @@ const StaticContextBlock = ({
   </div>
 );
 
+const headingAliases = {
+  requirement: new Set(["requirement", "feature requirement", "overview", "description"]),
+  constraints: new Set(["constraints", "constraint"]),
+  responsibilities: new Set(["responsibilities", "responsibility"]),
+  goals: new Set(["goals", "goal"]),
+  assumptions: new Set(["assumptions", "assumption"]),
+  openQuestions: new Set(["open questions", "questions", "question"]),
+};
+
+const normalizeHeading = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[*_`:#-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const parseMarkdownSections = (markdown: string): {
+  title: string;
+  sections: Map<string, string[]>;
+} => {
+  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const sections = new Map<string, string[]>();
+  let title = "";
+  let currentHeading = "requirement";
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^\s{0,3}(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const heading = normalizeHeading(headingMatch[2]);
+      if (level === 1 && !title && heading) {
+        title = headingMatch[2].trim();
+      }
+
+      currentHeading = heading || currentHeading;
+      if (!sections.has(currentHeading)) {
+        sections.set(currentHeading, []);
+      }
+      continue;
+    }
+
+    const bucket = sections.get(currentHeading) ?? [];
+    bucket.push(line);
+    sections.set(currentHeading, bucket);
+  }
+
+  return { title, sections };
+};
+
+const resolveSectionBlock = (
+  sections: Map<string, string[]>,
+  aliases: Set<string>,
+): string[] => {
+  for (const [heading, lines] of sections.entries()) {
+    if (aliases.has(heading)) {
+      return lines;
+    }
+  }
+
+  return [];
+};
+
+const toBulletList = (lines: string[]): string[] => {
+  const bullets = lines
+    .map((line) => line.trim())
+    .filter((line) => /^[-*+]\s+/.test(line) || /^\d+\.\s+/.test(line))
+    .map((line) => line.replace(/^([-*+]|\d+\.)\s+/, "").trim())
+    .filter(Boolean);
+
+  if (bullets.length > 0) {
+    return bullets;
+  }
+
+  return lines
+    .join("\n")
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const toParagraph = (lines: string[]): string =>
+  lines
+    .join("\n")
+    .trim()
+    .replace(/\n{3,}/g, "\n\n");
+
+const inferTitleFromFileName = (fileName: string): string =>
+  fileName.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
+
 type FeatureWorkspacePageProps = {
   workspace: FeatureWorkspace;
   onBack: () => void;
   onChange: (updater: (current: FeatureWorkspace) => FeatureWorkspace) => void;
   onExport: (markdown: string, fileName: string) => void;
+};
+
+type AiStage = "discovery" | "component" | "implementation";
+
+type AiStageSuccessResponse = {
+  draft: AiDiscoveryDraft | AiComponentDraft | AiImplementationDraft;
+  model: string;
+  provider: string;
+  stage: AiStage;
+  durationMs: number;
 };
 
 export const FeatureWorkspacePage = ({
@@ -61,6 +172,13 @@ export const FeatureWorkspacePage = ({
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(
     workspace.components[0]?.id ?? null,
   );
+  const [aiStatus, setAiStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [aiMessage, setAiMessage] = useState("");
+  const [aiStage, setAiStage] = useState<AiStage>("discovery");
+  const [aiElapsedSeconds, setAiElapsedSeconds] = useState(0);
+  const [importStatus, setImportStatus] = useState<"idle" | "success" | "error">("idle");
+  const [importMessage, setImportMessage] = useState("");
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const outputs = useMemo(
     () => generateWorkspaceOutputs(workspace, selectedComponentId ?? undefined),
     [selectedComponentId, workspace],
@@ -78,6 +196,291 @@ export const FeatureWorkspacePage = ({
     ...next,
     updatedAt: new Date().toISOString(),
   });
+
+  useEffect(() => {
+    if (
+      selectedComponentId &&
+      workspace.components.some((component) => component.id === selectedComponentId)
+    ) {
+      return;
+    }
+
+    setSelectedComponentId(workspace.components[0]?.id ?? null);
+  }, [selectedComponentId, workspace.components]);
+
+  useEffect(() => {
+    if (aiStatus !== "loading") {
+      setAiElapsedSeconds(0);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const handle = window.setInterval(() => {
+      setAiElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(handle);
+  }, [aiStatus]);
+
+  const canGenerateAiDraft = canGenerateDiscoveryDraft(workspace);
+
+  const namedInteractions = workspace.discovery.interactions.map((interaction) => ({
+    fromComponentName:
+      workspace.discovery.candidateComponents.find(
+        (candidate) => candidate.id === interaction.fromComponentId,
+      )?.name || "",
+    toComponentName:
+      workspace.discovery.candidateComponents.find(
+        (candidate) => candidate.id === interaction.toComponentId,
+      )?.name || "",
+    mechanism: interaction.mechanism,
+    data: interaction.data,
+    notes: interaction.notes ?? "",
+  }));
+
+  const requestAiStage = async (
+    stage: AiStage,
+    payload: Record<string, unknown>,
+  ): Promise<AiStageSuccessResponse> => {
+    const response = await fetch("/api/ai/workspace-draft", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = (await response.json()) as AiStageSuccessResponse | { error?: string };
+    if (!response.ok || !("draft" in data)) {
+      const errorMessage =
+        "error" in data && typeof data.error === "string"
+          ? data.error
+          : `AI ${stage} draft generation failed.`;
+      throw new Error(errorMessage);
+    }
+
+    return data;
+  };
+
+  const startAiRequest = (stage: AiStage, message: string) => {
+    setAiStage(stage);
+    setAiStatus("loading");
+    setAiMessage(message);
+  };
+
+  const completeAiRequest = (
+    message: string,
+  ) => {
+    setAiStatus("success");
+    setAiMessage(message);
+  };
+
+  const importRequirementFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const content = await file.text();
+      const { title, sections } = parseMarkdownSections(content);
+      const requirementBlock = resolveSectionBlock(sections, headingAliases.requirement);
+      const constraintsBlock = resolveSectionBlock(sections, headingAliases.constraints);
+      const responsibilitiesBlock = resolveSectionBlock(
+        sections,
+        headingAliases.responsibilities,
+      );
+      const goalsBlock = resolveSectionBlock(sections, headingAliases.goals);
+      const assumptionsBlock = resolveSectionBlock(sections, headingAliases.assumptions);
+      const openQuestionsBlock = resolveSectionBlock(
+        sections,
+        headingAliases.openQuestions,
+      );
+
+      const nextTitle = title || inferTitleFromFileName(file.name) || workspace.title;
+      const nextRequirement =
+        toParagraph(requirementBlock) ||
+        (sections.size === 1 ? content.trim() : workspace.requirement);
+      const nextConstraints = toBulletList(constraintsBlock);
+      const nextResponsibilities = toBulletList(responsibilitiesBlock);
+      const nextGoals = toBulletList(goalsBlock);
+      const nextAssumptions = toBulletList(assumptionsBlock);
+      const nextOpenQuestions = toBulletList(openQuestionsBlock);
+
+      onChange((current) =>
+        updateTimestamp({
+          ...current,
+          title: nextTitle,
+          requirement: nextRequirement,
+          featureSummary: {
+            ...current.featureSummary,
+            goals: nextGoals.length > 0 ? nextGoals : current.featureSummary.goals,
+            constraints:
+              nextConstraints.length > 0 ? nextConstraints : current.featureSummary.constraints,
+            assumptions:
+              nextAssumptions.length > 0 ? nextAssumptions : current.featureSummary.assumptions,
+            openQuestions:
+              nextOpenQuestions.length > 0
+                ? nextOpenQuestions
+                : current.featureSummary.openQuestions,
+          },
+          discovery: {
+            ...current.discovery,
+            responsibilities:
+              nextResponsibilities.length > 0
+                ? nextResponsibilities
+                : current.discovery.responsibilities,
+          },
+        }),
+      );
+
+      setActiveSection("featureSummary");
+      setImportStatus("success");
+      setImportMessage(
+        `Imported ${file.name}. Review the parsed title, requirement, constraints, and responsibilities before generating the AI draft.`,
+      );
+    } catch (error) {
+      setImportStatus("error");
+      setImportMessage(
+        error instanceof Error ? error.message : "Could not import the markdown file.",
+      );
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const generateAiDraft = async () => {
+    if (!canGenerateAiDraft || aiStatus === "loading") {
+      return;
+    }
+
+    startAiRequest(
+      "discovery",
+      "Generating discovery draft from the current feature inputs...",
+    );
+
+    try {
+      const data = await requestAiStage("discovery", {
+        stage: "discovery",
+        title: workspace.title,
+        requirement: workspace.requirement,
+        constraints: workspace.featureSummary.constraints,
+        responsibilities: workspace.discovery.responsibilities,
+      });
+
+      const previousSelectedName = selectedComponent?.name.trim().toLowerCase() || "";
+      const merged = updateTimestamp(
+        mergeAiDiscoveryIntoWorkspace(workspace, data.draft as AiDiscoveryDraft),
+      );
+      const nextSelectedComponent =
+        merged.components.find(
+          (component) => component.name.trim().toLowerCase() === previousSelectedName,
+        ) ?? merged.components[0] ?? null;
+
+      onChange(() => merged);
+      setSelectedComponentId(nextSelectedComponent?.id ?? null);
+      completeAiRequest(
+        `Discovery draft generated with ${data.provider}/${data.model} in ${Math.max(1, Math.round(data.durationMs / 1000))}s. Review the proposed architecture, then refine components individually.`,
+      );
+      if (merged.components.length > 0) {
+        setActiveSection("candidateComponents");
+      }
+    } catch (error) {
+      setAiStatus("error");
+      setAiMessage(
+        error instanceof Error ? error.message : "AI discovery draft generation failed.",
+      );
+    }
+  };
+
+  const refineSelectedComponentWithAi = async () => {
+    if (!canRefineComponentWithAi(workspace, selectedComponentId) || !selectedComponent) {
+      return;
+    }
+
+    startAiRequest(
+      "component",
+      `Refining ${selectedComponent.name || "selected component"} with AI...`,
+    );
+
+    try {
+      const selectedCandidate =
+        workspace.discovery.candidateComponents.find(
+          (candidate) => candidate.id === selectedComponent.id,
+        ) ?? null;
+      const data = await requestAiStage("component", {
+        stage: "component",
+        title: workspace.title,
+        requirement: workspace.requirement,
+        constraints: workspace.featureSummary.constraints,
+        responsibilities: workspace.discovery.responsibilities,
+        selectedComponentName: selectedComponent.name,
+        selectedComponentResponsibility:
+          selectedCandidate?.responsibility || selectedComponent.summary,
+        candidateComponents: workspace.discovery.candidateComponents,
+        interactions: namedInteractions,
+        systemRisks: workspace.discovery.systemRisks,
+      });
+
+      const merged = updateTimestamp(
+        mergeAiComponentIntoWorkspace(
+          workspace,
+          selectedComponent.id,
+          data.draft as AiComponentDraft,
+        ),
+      );
+      onChange(() => merged);
+      completeAiRequest(
+        `Component draft for ${selectedComponent.name || "selected component"} generated with ${data.provider}/${data.model} in ${Math.max(1, Math.round(data.durationMs / 1000))}s.`,
+      );
+    } catch (error) {
+      setAiStatus("error");
+      setAiMessage(
+        error instanceof Error ? error.message : "AI component refinement failed.",
+      );
+    }
+  };
+
+  const generateImplementationPlanWithAi = async () => {
+    if (!canGenerateImplementationPlanWithAi(workspace)) {
+      return;
+    }
+
+    startAiRequest("implementation", "Generating implementation milestones, APIs, and tests...");
+
+    try {
+      const data = await requestAiStage("implementation", {
+        stage: "implementation",
+        title: workspace.title,
+        requirement: workspace.requirement,
+        constraints: workspace.featureSummary.constraints,
+        responsibilities: workspace.discovery.responsibilities,
+        candidateComponents: workspace.discovery.candidateComponents,
+        interactions: namedInteractions,
+        candidateTasks: workspace.discovery.candidateTasks,
+        components: workspace.components.map((component) => ({
+          name: component.name,
+          summary: component.summary,
+        })),
+      });
+
+      const merged = updateTimestamp(
+        mergeAiImplementationIntoWorkspace(
+          workspace,
+          data.draft as AiImplementationDraft,
+        ),
+      );
+      onChange(() => merged);
+      completeAiRequest(
+        `Implementation plan generated with ${data.provider}/${data.model} in ${Math.max(1, Math.round(data.durationMs / 1000))}s.`,
+      );
+      setActiveSection("implementationPlan");
+    } catch (error) {
+      setAiStatus("error");
+      setAiMessage(
+        error instanceof Error ? error.message : "AI implementation plan generation failed.",
+      );
+    }
+  };
 
   return (
     <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1.15fr)_minmax(360px,0.85fr)]">
@@ -140,7 +543,59 @@ export const FeatureWorkspacePage = ({
               Start by discovering what components the feature needs, then refine one component at a time.
             </p>
           </div>
-          <Button onClick={() => onExport(outputs.markdown, workspace.title)}>Export Markdown</Button>
+          <div className="flex flex-wrap gap-2">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".md,.markdown,.txt,text/markdown,text/plain"
+              className="hidden"
+              onChange={importRequirementFile}
+            />
+            <Button onClick={() => importInputRef.current?.click()} tone="secondary">
+              Import Requirement File
+            </Button>
+            <Button
+              onClick={generateAiDraft}
+              tone="primary"
+              disabled={!canGenerateAiDraft || aiStatus === "loading"}
+            >
+              {aiStatus === "loading" && aiStage === "discovery"
+                ? "Generating Discovery Draft..."
+                : "Generate Discovery Draft"}
+            </Button>
+            <Button onClick={() => onExport(outputs.markdown, workspace.title)}>Export Markdown</Button>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-slate/10 bg-mist/50 px-4 py-3 text-sm text-slate">
+          <p className="font-medium text-ink">AI draft input contract</p>
+          <p className="mt-1">
+            Fill feature name, requirement, at least one constraint, and at least one responsibility. Import a markdown requirement file if you want, then generate the discovery draft first. After that, refine each component and the implementation plan in separate AI steps.
+          </p>
+          {importMessage ? (
+            <p
+              className={`mt-2 text-xs ${
+                importStatus === "error" ? "text-red-700" : "text-pine"
+              }`}
+            >
+              {importMessage}
+            </p>
+          ) : null}
+          <p
+            className={`mt-2 text-xs ${
+              aiStatus === "error"
+                ? "text-red-700"
+                : aiStatus === "success"
+                  ? "text-pine"
+                  : "text-slate"
+            }`}
+          >
+            {aiMessage ||
+              (canGenerateAiDraft
+                ? "Ready to generate the discovery draft from the current inputs."
+                : "Add the required inputs to enable AI drafting.")}
+            {aiStatus === "loading" ? ` ${aiElapsedSeconds}s elapsed.` : ""}
+          </p>
         </div>
 
         <div className="mt-6 space-y-4">
@@ -196,6 +651,10 @@ export const FeatureWorkspacePage = ({
             selectedComponent={selectedComponent}
             selectedComponentId={selectedComponentId}
             setSelectedComponentId={setSelectedComponentId}
+            aiStatus={aiStatus}
+            aiStage={aiStage}
+            onRefineSelectedComponentWithAi={refineSelectedComponentWithAi}
+            onGenerateImplementationPlanWithAi={generateImplementationPlanWithAi}
             onChange={(updater) => onChange((current) => updateTimestamp(updater(current)))}
           />
         </div>
@@ -397,6 +856,10 @@ const WorkspaceSectionForm = ({
   selectedComponent,
   selectedComponentId,
   setSelectedComponentId,
+  aiStatus,
+  aiStage,
+  onRefineSelectedComponentWithAi,
+  onGenerateImplementationPlanWithAi,
   onChange,
 }: {
   activeSection: WorkspaceSectionId;
@@ -404,6 +867,10 @@ const WorkspaceSectionForm = ({
   selectedComponent: FeatureComponent | null;
   selectedComponentId: string | null;
   setSelectedComponentId: (componentId: string | null) => void;
+  aiStatus: "idle" | "loading" | "success" | "error";
+  aiStage: AiStage;
+  onRefineSelectedComponentWithAi: () => void;
+  onGenerateImplementationPlanWithAi: () => void;
   onChange: (updater: (current: FeatureWorkspace) => FeatureWorkspace) => void;
 }) => {
   switch (activeSection) {
@@ -874,6 +1341,9 @@ const WorkspaceSectionForm = ({
           {selectedComponent ? (
             <ComponentDetailEditor
               component={selectedComponent}
+              onRefineWithAi={onRefineSelectedComponentWithAi}
+              aiBusy={aiStatus === "loading" && aiStage === "component"}
+              canRefineWithAi={canRefineComponentWithAi(workspace, selectedComponentId)}
               onChange={(nextComponent) =>
                 onChange((current) => ({
                   ...current,
@@ -889,6 +1359,20 @@ const WorkspaceSectionForm = ({
     case "implementationPlan":
       return (
         <div className="grid gap-4">
+          <div className="flex justify-start">
+            <Button
+              onClick={onGenerateImplementationPlanWithAi}
+              tone="primary"
+              disabled={
+                !canGenerateImplementationPlanWithAi(workspace) ||
+                (aiStatus === "loading" && aiStage === "implementation")
+              }
+            >
+              {aiStatus === "loading" && aiStage === "implementation"
+                ? "Generating Plan..."
+                : "Generate Implementation Plan"}
+            </Button>
+          </div>
           <StringListEditor
             label="Milestones"
             items={workspace.implementationPlan.milestones}
@@ -931,12 +1415,23 @@ const WorkspaceSectionForm = ({
 
 const ComponentDetailEditor = ({
   component,
+  onRefineWithAi,
+  aiBusy,
+  canRefineWithAi,
   onChange,
 }: {
   component: FeatureComponent;
+  onRefineWithAi: () => void;
+  aiBusy: boolean;
+  canRefineWithAi: boolean;
   onChange: (component: FeatureComponent) => void;
 }) => (
   <div className="space-y-4">
+    <div className="flex justify-start">
+      <Button onClick={onRefineWithAi} tone="primary" disabled={!canRefineWithAi || aiBusy}>
+        {aiBusy ? "Refining Component..." : "Refine Selected Component"}
+      </Button>
+    </div>
     <Field label="Component Summary">
       <TextArea
         value={component.summary}

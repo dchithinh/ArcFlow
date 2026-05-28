@@ -70,6 +70,17 @@ These are project roles and responsibility boundaries. They are architectural ow
 - Ensures the active editing context is clear at all times.
 - Must not own data persistence or markdown generation logic.
 
+### 10. AI Drafting Agent
+- Owns AI-assisted workspace drafting from user-provided feature inputs.
+- Calls external model APIs and returns structured workspace data only.
+- Must preserve user-owned inputs:
+  - feature name
+  - requirement
+  - constraints
+  - responsibilities
+- Must not generate markdown or diagrams as the source of truth.
+- Must leave all generated workspace fields editable by the user afterward.
+
 ## Architectural Rules
 
 - The canonical source of truth is the `FeatureWorkspace` object.

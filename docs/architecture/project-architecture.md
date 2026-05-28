@@ -43,11 +43,17 @@ The system should be organized around this pipeline:
 
 `rough requirement -> feature architecture skeleton -> component detail -> derived outputs`
 
+With AI assistance enabled, the assisted path becomes:
+
+`rough requirement + constraints + responsibilities -> AI discovery draft -> user review -> AI component refinement -> AI implementation plan -> derived outputs`
+
 This means:
 - the requirement is the input, not the full design
 - the app must support architecture discovery before detailed checklists
 - per-component design detail is subordinate to the feature workspace
 - generated outputs should reflect both feature-level and component-level structure
+- AI suggestions must write into the workspace model, not directly into markdown or diagrams
+- AI generation should be staged by workflow block instead of trying to draft the full workspace in one request
 
 ## Canonical Domain Model
 
@@ -145,6 +151,24 @@ type FeatureComponent = {
 - User sketches candidate RTOS tasks or concurrency boundaries.
 - User captures system-level risks.
 
+### 2a. AI-Assisted Discovery
+- User supplies feature name, requirement, constraints, and responsibilities.
+- AI may generate a first-pass discovery draft for feature-level sections.
+- The generated draft must remain fully editable in the same workspace.
+- User edits remain authoritative after generation.
+
+### 3a. AI-Assisted Component Refinement
+- User selects one component after discovery stabilizes.
+- AI generates detailed design only for that selected component.
+- This keeps request size bounded and avoids global redesign side effects.
+
+### 4a. AI-Assisted Implementation Planning
+- After discovery and component detail are reasonably stable, AI generates:
+  - milestones
+  - APIs
+  - tests
+- This stage must depend on current workspace state rather than the original raw requirement alone.
+
 ### 3. Component Refinement
 - User selects one component at a time.
 - User fills detailed component fields:
@@ -201,6 +225,18 @@ type FeatureComponent = {
 
 ### 9. Export Module
 - Exports generated markdown and later optional JSON.
+
+### 10. AI Drafting Module
+- Owns backend calls to the OpenAI Responses API.
+- Owns backend calls to local-model providers such as Ollama when configured.
+- Requests structured JSON that maps into workflow-stage outputs, then merges them into `FeatureWorkspace`.
+- Must preserve user-owned inputs:
+  - title
+  - requirement
+  - constraints
+  - responsibilities
+- Must return editable workspace data, not final locked artifacts.
+- Should prefer smaller stage-scoped requests over one large full-workspace generation request.
 
 ## Editor Information Architecture
 
