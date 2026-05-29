@@ -121,6 +121,45 @@ Selecting a workspace opens the feature workspace editor with this structure:
 - Implementation Plan
 - Generated Outputs
 
+## Architecture Views Plan
+
+ArchFlow should track the following seven system-design views explicitly:
+
+1. Context Diagram
+2. Functional / Feature Breakdown
+3. Component / Container Diagram
+4. Interaction / Data Flow Diagram
+5. State Diagram
+6. Sequence Diagram
+7. Deployment / Runtime Diagram
+
+Current implementation status:
+
+- Available now:
+  - 3. Component / Container Diagram
+  - 4. Interaction / Data Flow Diagram
+  - 5. State Diagram
+- Partial now:
+  - 2. Functional / Feature Breakdown
+- Not implemented yet:
+  - 1. Context Diagram
+  - 6. Sequence Diagram
+  - 7. Deployment / Runtime Diagram
+
+Recommended implementation order:
+
+1. Context Diagram
+2. Functional / Feature Breakdown cleanup
+3. Sequence Diagram
+4. Deployment / Runtime Diagram
+
+Rationale:
+
+- Context should come first because it clarifies system boundary and external actors before more internal modeling is added.
+- Functional / Feature Breakdown should be tightened next because it is already partially present through requirements and responsibilities.
+- Sequence Diagram should come before runtime deployment because scenario flow will expose whether the current interaction model is expressive enough.
+- Deployment / Runtime Diagram should come after that, once task/runtime ownership and execution boundaries are stable enough to visualize cleanly.
+
 ## Completion Rules
 
 - Progress is approximate and never blocking.

@@ -8,6 +8,16 @@ export type InteractionMechanism =
   | "shared_memory"
   | "direct_call"
   | "other";
+export type ContextEntityKind =
+  | "user"
+  | "device"
+  | "system"
+  | "service"
+  | "timer"
+  | "sensor"
+  | "actuator"
+  | "other";
+export type ContextFlowDirection = "inbound" | "outbound" | "bidirectional";
 
 export type WorkspaceSectionId =
   | "featureDefinition"
@@ -45,6 +55,21 @@ export type FailureModeDefinition = {
   scenario: string;
   impact: string;
   recovery: string;
+};
+
+export type ContextEntity = {
+  id: string;
+  name: string;
+  kind: ContextEntityKind;
+  description?: string;
+};
+
+export type ContextFlow = {
+  id: string;
+  entityId: string;
+  direction: ContextFlowDirection;
+  label: string;
+  description?: string;
 };
 
 export type ComponentCandidate = {
@@ -107,7 +132,8 @@ export type FeatureWorkspace = {
     openQuestions: string[];
   };
   discovery: {
-    externalActors: string[];
+    contextEntities: ContextEntity[];
+    contextFlows: ContextFlow[];
     responsibilities: string[];
     candidateComponents: ComponentCandidate[];
     interactions: ComponentInteraction[];

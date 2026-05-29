@@ -2,6 +2,7 @@ import type { FeatureComponent, FeatureWorkspace } from "../schema/workspace";
 
 export type WorkspaceOutputs = {
   markdown: string;
+  contextDiagram: string;
   architectureFlowchart: string;
   behavioralArchitectureDiagram: string;
   componentStateDiagram: string;
@@ -34,6 +35,59 @@ const tokenize = (value: string): string[] =>
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((token) => token.length > 1);
+
+type FlowchartShape =
+  | "rectangle"
+  | "rounded"
+  | "stadium"
+  | "subroutine"
+  | "database"
+  | "circle"
+  | "hexagon";
+
+const wrapFlowchartNode = (id: string, label: string, shape: FlowchartShape): string => {
+  const escaped = escapeLabel(label);
+  switch (shape) {
+    case "rounded":
+      return `${id}("${escaped}")`;
+    case "stadium":
+      return `${id}(["${escaped}"])`;
+    case "subroutine":
+      return `${id}[["${escaped}"]]`;
+    case "database":
+      return `${id}[("${escaped}")]`;
+    case "circle":
+      return `${id}(("${escaped}"))`;
+    case "hexagon":
+      return `${id}{{"${escaped}"}}`;
+    default:
+      return `${id}["${escaped}"]`;
+  }
+};
+
+const contextEntityShape = (
+  kind: FeatureWorkspace["discovery"]["contextEntities"][number]["kind"],
+): FlowchartShape => {
+  switch (kind) {
+    case "user":
+      return "stadium";
+    case "device":
+    case "sensor":
+    case "actuator":
+      return "hexagon";
+    case "service":
+      return "subroutine";
+    case "timer":
+      return "circle";
+    case "system":
+      return "rectangle";
+    default:
+      return "rectangle";
+  }
+};
+
+const interactionLabel = (mechanism: string, data: string): string =>
+  [mechanism, data].filter(Boolean).join(": ") || "interaction";
 
 const formatTransitionEventLabel = (
   event: string,
@@ -135,15 +189,14 @@ const findOutgoingStateSource = (
 
 const generateMarkdown = (workspace: FeatureWorkspace): string => `# ${workspace.title}
 
-## Requirement
-${workspace.requirement || "Requirement not written yet."}
-
 ## Feature Summary
-- Summary: ${workspace.featureSummary.summary || "Not documented yet"}
-- Problem: ${workspace.featureSummary.problem || "Not documented yet"}
+${workspace.featureSummary.summary || "Not documented yet."}
 
-## Goals
+## Feature Requirements
 ${listBlock(workspace.featureSummary.goals)}
+
+## Feature Responsibilities
+${listBlock(workspace.discovery.responsibilities)}
 
 ## Constraints
 ${listBlock(workspace.featureSummary.constraints)}
@@ -154,11 +207,27 @@ ${listBlock(workspace.featureSummary.assumptions)}
 ## Open Questions
 ${listBlock(workspace.featureSummary.openQuestions)}
 
-## External Actors
-${listBlock(workspace.discovery.externalActors)}
+## Context Entities
+${workspace.discovery.contextEntities.length > 0
+    ? workspace.discovery.contextEntities
+        .map(
+          (entity) =>
+            `- ${entity.name || "Unnamed entity"} (${entity.kind})${entity.description ? `: ${entity.description}` : ""}`,
+        )
+        .join("\n")
+    : "- No context entities documented yet"}
 
-## Responsibilities
-${listBlock(workspace.discovery.responsibilities)}
+## Boundary Flows
+${workspace.discovery.contextFlows.length > 0
+    ? workspace.discovery.contextFlows
+        .map((flow) => {
+          const entityName =
+            workspace.discovery.contextEntities.find((entity) => entity.id === flow.entityId)?.name ||
+            "Unknown entity";
+          return `- ${entityName} | ${flow.direction} | ${flow.label || "Unlabeled flow"}${flow.description ? ` (${flow.description})` : ""}`;
+        })
+        .join("\n")
+    : "- No boundary flows documented yet"}
 
 ## Candidate Components
 ${workspace.discovery.candidateComponents.length > 0
@@ -197,10 +266,7 @@ ${workspace.discovery.candidateTasks.length > 0
         .join("\n")
     : "- No implementation tasks documented yet"}
 
-## System Risks
-${listBlock(workspace.discovery.systemRisks)}
-
-## Components
+## Component Details
 ${workspace.components.length > 0
     ? workspace.components
         .map(
@@ -289,11 +355,70 @@ ${listBlock(workspace.implementationPlan.apis)}
 ${listBlock(workspace.implementationPlan.tests)}
 `;
 
+const generateContextDiagram = (workspace: FeatureWorkspace): string => {
+  const featureNode = cleanNode(workspace.title || "FeatureWorkspace");
+  const entities = workspace.discovery.contextEntities;
+  const flows = workspace.discovery.contextFlows;
+
+  if (entities.length === 0) {
+    return `flowchart LR
+    ${wrapFlowchartNode(featureNode, workspace.title || "Feature Workspace", "subroutine")}
+    ${wrapFlowchartNode("Outside", "Outside World", "rectangle")} -. boundary not modeled yet .-> ${featureNode}`;
+  }
+
+  const entityLines = entities.flatMap((entity, index) => {
+    const entityId = `context_${cleanNode(entity.id || entity.name || `entity_${index}`)}_${index}`;
+    const label = entity.description?.trim()
+      ? `${entity.name || "Unnamed entity"}<br/>${escapeLabel(entity.description.trim())}`
+      : `${entity.name || "Unnamed entity"}<br/>${entity.kind}`;
+    return [
+      `    ${wrapFlowchartNode(entityId, label, contextEntityShape(entity.kind))}`,
+      `    class ${entityId} contextEntity`,
+    ];
+  });
+
+  const flowLines =
+    flows.length > 0
+      ? flows.flatMap((flow) => {
+          const entityIndex = entities.findIndex((entity) => entity.id === flow.entityId);
+          const entity = entities[entityIndex];
+          if (!entity) {
+            return [];
+          }
+
+          const entityId = `context_${cleanNode(entity.id || entity.name || `entity_${entityIndex}`)}_${entityIndex}`;
+          const label = escapeLabel(flow.label || "flow");
+          if (flow.direction === "outbound") {
+            return [`    ${featureNode} -->|"${label}"| ${entityId}`];
+          }
+          if (flow.direction === "bidirectional") {
+            return [
+              `    ${entityId} -->|"${label}"| ${featureNode}`,
+              `    ${featureNode} -->|"${label}"| ${entityId}`,
+            ];
+          }
+
+          return [`    ${entityId} -->|"${label}"| ${featureNode}`];
+        })
+      : entities.map((entity, index) => {
+          const entityId = `context_${cleanNode(entity.id || entity.name || `entity_${index}`)}_${index}`;
+          return `    ${entityId} -. boundary flow .-> ${featureNode}`;
+        });
+
+  return `flowchart LR
+    classDef featureBoundary fill:#f4e7cf,stroke:#123a35,stroke-width:4px,color:#081521,font-weight:bold;
+    classDef contextEntity fill:#eef4f7,stroke:#365166,stroke-width:2px,color:#081521;
+    ${wrapFlowchartNode(featureNode, workspace.title || "Feature Workspace", "subroutine")}
+    class ${featureNode} featureBoundary
+${entityLines.join("\n")}
+${flowLines.join("\n")}`;
+};
+
 const generateArchitectureFlowchart = (workspace: FeatureWorkspace): string => {
   if (workspace.discovery.interactions.length === 0) {
     return `flowchart LR
-    Requirement["${workspace.title}"] --> Discovery["Component discovery"]
-    Discovery --> Detail["Component refinement"]`;
+    ${wrapFlowchartNode("Requirement", workspace.title, "subroutine")} --> ${wrapFlowchartNode("Discovery", "Component discovery", "rounded")}
+    Discovery --> ${wrapFlowchartNode("Detail", "Component refinement", "rounded")}`;
   }
 
   const lines = workspace.discovery.interactions.map((interaction) => {
@@ -305,7 +430,9 @@ const generateArchitectureFlowchart = (workspace: FeatureWorkspace): string => {
       workspace.discovery.candidateComponents.find(
         (item) => item.id === interaction.toComponentId,
       )?.name || "Unknown";
-    return `    ${cleanNode(fromName)}["${fromName}"] -->|${[interaction.mechanism, interaction.data].filter(Boolean).join(": ") || "interaction"}| ${cleanNode(toName)}["${toName}"]`;
+    return `    ${wrapFlowchartNode(cleanNode(fromName), fromName, "subroutine")} -->|"${escapeLabel(
+      interactionLabel(interaction.mechanism, interaction.data),
+    )}"| ${wrapFlowchartNode(cleanNode(toName), toName, "subroutine")}`;
   });
 
   return `flowchart LR
@@ -340,9 +467,9 @@ const generateBehavioralArchitectureDiagram = (
 
   if (components.length === 0) {
     return `flowchart LR
-    Requirement["${escapeLabel(workspace.title)}"] --> Discovery["Component discovery"]
-    Discovery --> Refinement["Component refinement"]
-    Refinement --> Behavior["Behavioral architecture view"]`;
+    ${wrapFlowchartNode("Requirement", workspace.title, "subroutine")} --> ${wrapFlowchartNode("Discovery", "Component discovery", "rounded")}
+    Discovery --> ${wrapFlowchartNode("Refinement", "Component refinement", "rounded")}
+    Refinement --> ${wrapFlowchartNode("Behavior", "Behavioral architecture view", "rounded")}`;
   }
 
   const subgraphs = components.flatMap((component, index) => {
@@ -372,7 +499,7 @@ const generateBehavioralArchitectureDiagram = (
             }
 
             const lines = [
-              `        ${currentStateId}["${escapeLabel(labelParts.join("<br/>"))}"]`,
+              `        ${wrapFlowchartNode(currentStateId, labelParts.join("<br/>"), "rounded")}`,
               `        class ${currentStateId} componentState`,
             ];
 
@@ -396,7 +523,7 @@ const generateBehavioralArchitectureDiagram = (
               const fallbackTargetNode = matchedTarget
                 ? []
                 : [
-                    `        ${targetId}["${escapeLabel(transition.targetState || "Unknown target")}"]`,
+                    `        ${wrapFlowchartNode(targetId, transition.targetState || "Unknown target", "rounded")}`,
                     `        class ${targetId} componentStateGhost`,
                   ];
 
@@ -411,7 +538,7 @@ const generateBehavioralArchitectureDiagram = (
             return [...lines, ...transitionLines.flat()];
           })
         : [
-            `        ${componentId}_state_placeholder["No states yet"]`,
+            `        ${wrapFlowchartNode(`${componentId}_state_placeholder`, "No states yet", "rounded")}`,
             `        class ${componentId}_state_placeholder componentStateGhost`,
             `        ${componentId} -.-> ${componentId}_state_placeholder`,
           ];
@@ -419,12 +546,12 @@ const generateBehavioralArchitectureDiagram = (
     return [
       `    subgraph ${groupId}["${escapeLabel(component.name || `Component ${index + 1}`)}"]`,
       "        direction TB",
-      `        ${componentId}["${escapeLabel(component.name || `Component ${index + 1}`)}"]`,
+      `        ${wrapFlowchartNode(componentId, component.name || `Component ${index + 1}`, "subroutine")}`,
       `        subgraph ${stateGroupId}[" "]`,
       "            direction TB",
       ...stateNodes.map((line) => `    ${line}`),
       "        end",
-      `        ${roleNode}["Role<br/>${escapeLabel(summary)}"]`,
+      `        ${wrapFlowchartNode(roleNode, `Role<br/>${summary}`, "rectangle")}`,
       "    end",
       `    class ${componentId} componentCore`,
       `    class ${roleNode} componentMeta`,
@@ -498,8 +625,8 @@ const generateBehavioralArchitectureDiagram = (
           return `    ${sourceAnchor} -->|"discovery relation"| ${targetAnchor}`;
         });
 
-  const actorEdges = workspace.discovery.externalActors
-    .map((actor) => actor.trim())
+  const actorEdges = workspace.discovery.contextEntities
+    .map((entity) => entity.name.trim())
     .filter(Boolean)
     .slice(0, 4)
     .flatMap((actor, index) => {
@@ -517,7 +644,7 @@ const generateBehavioralArchitectureDiagram = (
         targetComponent ? components.indexOf(targetComponent) : 0,
       );
       return [
-        `    ${actorId}["${escapeLabel(actor)}"]`,
+        `    ${wrapFlowchartNode(actorId, actor, "rectangle")}`,
         `    ${actorId} -.-> ${normalizedTargetId}`,
         `    class ${actorId} actorNode`,
       ];
@@ -553,7 +680,7 @@ const generateBehavioralArchitectureDiagram = (
           ];
         const sourceNode = `${componentAnchorId(component.id, componentIndex)}_incoming_external_${eventIndex}`;
         return [
-          `    ${sourceNode}["${escapeLabel(event.source || "Outside World")}<br/>${escapeLabel(event.name || "incoming event")}"]`,
+          `    ${wrapFlowchartNode(sourceNode, `${event.source || "Outside World"}<br/>${event.name || "incoming event"}`, "rectangle")}`,
           ...targetAnchors.map(
             (targetAnchor) =>
               `    ${sourceNode} -->|"${escapeLabel(event.trigger || event.name || "incoming")}"| ${targetAnchor}`,
@@ -593,7 +720,7 @@ const generateBehavioralArchitectureDiagram = (
           signal.name,
         );
         return [
-          `    ${sinkNode}["${escapeLabel(signal.name || "outgoing signal")}<br/>${escapeLabel(signal.trigger || "Outside World")}"]`,
+          `    ${wrapFlowchartNode(sinkNode, `${signal.name || "outgoing signal"}<br/>${signal.trigger || "Outside World"}`, "rectangle")}`,
           `    ${sourceAnchor} -->|"${escapeLabel(signal.name || "outgoing")}"| ${sinkNode}`,
           `    class ${sinkNode} actorNode`,
         ];
@@ -702,6 +829,7 @@ export const generateWorkspaceOutputs = (
   selectedComponentId?: string,
 ): WorkspaceOutputs => ({
   markdown: generateMarkdown(workspace),
+  contextDiagram: generateContextDiagram(workspace),
   architectureFlowchart: generateArchitectureFlowchart(workspace),
   behavioralArchitectureDiagram: generateBehavioralArchitectureDiagram(
     workspace,

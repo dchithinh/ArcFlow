@@ -1,13 +1,14 @@
-import { createEmptyComponent } from "../schema/defaults";
+import { createEmptyComponent, createEmptyWorkspace } from "../schema/defaults";
 import type {
-  FeatureWorkspace,
   ComponentCandidate,
-  FeatureComponent,
+  ContextEntity,
   InteractionMechanism,
   EventDefinition,
-  StateDefinition,
+  FeatureComponent,
+  FeatureWorkspace,
   OwnershipDefinition,
   FailureModeDefinition,
+  StateDefinition,
 } from "../schema/workspace";
 
 const STORAGE_KEY = "archflow.workspaces.v2";
@@ -75,7 +76,8 @@ const isBrowser = typeof window !== "undefined";
 
 const createComponentId = (index: number): string => `legacy-component-${index}-${Math.random().toString(36).slice(2, 7)}`;
 const createTaskId = (index: number): string => `legacy-task-${index}-${Math.random().toString(36).slice(2, 7)}`;
-
+const createContextEntityId = (index: number): string =>
+  `legacy-context-entity-${index}-${Math.random().toString(36).slice(2, 7)}`;
 const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => {
   const candidateComponents: ComponentCandidate[] =
     legacy.responsibilities?.map((item, index) => ({
@@ -140,6 +142,20 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
   }
 
   const nameToId = new Map(candidateComponents.map((item) => [item.name, item.id]));
+  const legacyContextEntities: ContextEntity[] = [
+    ...(legacy.io?.inputs ?? []).map((input, index) => ({
+      id: createContextEntityId(index),
+      name: input,
+      kind: "other" as const,
+      description: "Migrated from legacy input list",
+    })),
+    ...(legacy.io?.outputs ?? []).map((output, index) => ({
+      id: createContextEntityId(index + (legacy.io?.inputs?.length ?? 0)),
+      name: output,
+      kind: "other" as const,
+      description: "Migrated from legacy output list",
+    })),
+  ];
 
   return {
     id: legacy.id,
@@ -159,10 +175,8 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
       openQuestions: legacy.systemPurpose?.failureCriteria ?? [],
     },
     discovery: {
-      externalActors: [
-        ...(legacy.io?.inputs ?? []),
-        ...(legacy.io?.outputs ?? []),
-      ],
+      contextEntities: legacyContextEntities,
+      contextFlows: [],
       responsibilities: (legacy.responsibilities ?? []).map((item) => item.responsibility ?? "").filter(Boolean),
       candidateComponents,
       interactions: (legacy.interactions ?? []).map((item, index) => ({
@@ -196,6 +210,49 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
   };
 };
 
+const normalizeWorkspace = (workspace: FeatureWorkspace): FeatureWorkspace => {
+  const base = createEmptyWorkspace();
+
+  return {
+    ...base,
+    ...workspace,
+    featureSummary: {
+      ...base.featureSummary,
+      ...workspace.featureSummary,
+    },
+    discovery: {
+      ...base.discovery,
+      ...workspace.discovery,
+      contextEntities: Array.isArray(workspace.discovery?.contextEntities)
+        ? workspace.discovery.contextEntities
+        : [],
+      contextFlows: Array.isArray(workspace.discovery?.contextFlows)
+        ? workspace.discovery.contextFlows
+        : [],
+      responsibilities: Array.isArray(workspace.discovery?.responsibilities)
+        ? workspace.discovery.responsibilities
+        : [],
+      candidateComponents: Array.isArray(workspace.discovery?.candidateComponents)
+        ? workspace.discovery.candidateComponents
+        : [],
+      interactions: Array.isArray(workspace.discovery?.interactions)
+        ? workspace.discovery.interactions
+        : [],
+      candidateTasks: Array.isArray(workspace.discovery?.candidateTasks)
+        ? workspace.discovery.candidateTasks
+        : [],
+      systemRisks: Array.isArray(workspace.discovery?.systemRisks)
+        ? workspace.discovery.systemRisks
+        : [],
+    },
+    components: Array.isArray(workspace.components) ? workspace.components : [],
+    implementationPlan: {
+      ...base.implementationPlan,
+      ...workspace.implementationPlan,
+    },
+  };
+};
+
 export const loadWorkspaces = (): FeatureWorkspace[] => {
   if (!isBrowser) {
     return [];
@@ -205,7 +262,7 @@ export const loadWorkspaces = (): FeatureWorkspace[] => {
     const currentRaw = window.localStorage.getItem(STORAGE_KEY);
     if (currentRaw) {
       const parsed = JSON.parse(currentRaw) as StoredPayload;
-      return Array.isArray(parsed.workspaces) ? parsed.workspaces : [];
+      return Array.isArray(parsed.workspaces) ? parsed.workspaces.map(normalizeWorkspace) : [];
     }
 
     const legacyRaw = window.localStorage.getItem(LEGACY_STORAGE_KEY);

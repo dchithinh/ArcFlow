@@ -8,7 +8,13 @@ import {
   StringListEditor,
 } from "../../components/form/ListEditors";
 import { MermaidPreview } from "../../components/preview/MermaidPreview";
-import { createEmptyCandidateComponent, createEmptyCandidateTask, createEmptyComponent } from "../../features/workspaces/schema/defaults";
+import {
+  createEmptyCandidateComponent,
+  createEmptyCandidateTask,
+  createEmptyComponent,
+  createEmptyContextEntity,
+  createEmptyContextFlow,
+} from "../../features/workspaces/schema/defaults";
 import {
   canGenerateDiscoveryDraft,
   canGenerateImplementationPlanWithAi,
@@ -24,6 +30,8 @@ import {
   WORKSPACE_SECTIONS,
   type CandidateTask,
   type ComponentCandidate,
+  type ContextEntity,
+  type ContextFlow,
   type ComponentInteraction,
   type FailureModeDefinition,
   type FeatureComponent,
@@ -61,7 +69,11 @@ const requirementsToText = (requirements: string[]): string =>
     .filter(Boolean)
     .join("\n");
 
+const stripRequirementPrefix = (value: string): string =>
+  value.replace(/^REQ-\d+\s*:\s*/i, "").trim();
+
 const headingAliases = {
+  summary: new Set(["summary", "feature summary"]),
   requirement: new Set([
     "requirement",
     "requirements",
@@ -308,6 +320,7 @@ export const FeatureWorkspacePage = ({
     try {
       const content = await file.text();
       const { title, sections } = parseMarkdownSections(content);
+      const summaryBlock = resolveSectionBlock(sections, headingAliases.summary);
       const requirementBlock = resolveSectionBlock(sections, headingAliases.requirement);
       const constraintsBlock = resolveSectionBlock(sections, headingAliases.constraints);
       const responsibilitiesBlock = resolveSectionBlock(
@@ -322,9 +335,12 @@ export const FeatureWorkspacePage = ({
       );
 
       const nextTitle = title || inferTitleFromFileName(file.name) || workspace.title;
+      const nextSummary = toParagraph(summaryBlock);
       const nextRequirements = toBulletList(requirementBlock);
       const nextRequirement =
-        (nextRequirements.length > 0 ? requirementsToText(nextRequirements) : "") ||
+        (nextRequirements.length > 0
+          ? requirementsToText(nextRequirements.map(stripRequirementPrefix))
+          : "") ||
         toParagraph(requirementBlock) ||
         (sections.size === 1 ? content.trim() : workspace.requirement);
       const nextConstraints = toBulletList(constraintsBlock);
@@ -340,9 +356,10 @@ export const FeatureWorkspacePage = ({
           requirement: nextRequirement,
           featureSummary: {
             ...current.featureSummary,
+            summary: nextSummary || current.featureSummary.summary,
             goals:
               nextRequirements.length > 0
-                ? nextRequirements
+                ? nextRequirements.map(stripRequirementPrefix)
                 : nextGoals.length > 0
                   ? nextGoals
                   : current.featureSummary.goals,
@@ -647,9 +664,7 @@ export const FeatureWorkspacePage = ({
             aiElapsedSeconds={aiElapsedSeconds}
             importStatus={importStatus}
             importMessage={importMessage}
-            importInputRef={importInputRef}
             onGenerateAiDraft={generateAiDraft}
-            onImportRequirementFile={importRequirementFile}
             onRefineComponentWithAi={refineComponentWithAi}
             onGenerateImplementationPlanWithAi={generateImplementationPlanWithAi}
             onChange={(updater) => onChange((current) => updateTimestamp(updater(current)))}
@@ -766,6 +781,15 @@ export const FeatureWorkspacePage = ({
               {outputs.markdown}
             </pre>
           </PreviewCard>
+          <DiagramPreviewCard
+            title="Context Diagram"
+            chart={outputs.contextDiagram}
+            previewTitle="Context Diagram"
+            expandedTitle="Context Diagram"
+            previewMinHeight="min-h-[360px]"
+            previewMinWidth="min-w-[860px]"
+            expandedMinWidth="min-w-[1300px]"
+          />
           <DiagramPreviewCard
             title="Feature Architecture Flowchart"
             chart={outputs.architectureFlowchart}
@@ -962,6 +986,30 @@ const DiagramPreviewCard = ({
   );
 };
 
+const ArchitectureViewPanel = ({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) => (
+  <section className="space-y-4 rounded-[28px] border border-white/70 bg-white/80 p-4 shadow-sm">
+    <div>
+      <h3 className="text-xl font-semibold text-ink">{title}</h3>
+      <p className="mt-1 max-w-3xl text-sm text-slate">{description}</p>
+    </div>
+    {children}
+  </section>
+);
+
+const PlannedViewNotice = ({ message }: { message: string }) => (
+  <div className="rounded-2xl border border-dashed border-slate/20 bg-mist/50 px-4 py-4 text-sm text-slate">
+    {message}
+  </div>
+);
+
 const syncComponentFromCandidate = (
   candidate: ComponentCandidate,
   components: FeatureComponent[],
@@ -996,9 +1044,7 @@ const WorkspaceSectionForm = ({
   aiElapsedSeconds,
   importStatus,
   importMessage,
-  importInputRef,
   onGenerateAiDraft,
-  onImportRequirementFile,
   onRefineComponentWithAi,
   onGenerateImplementationPlanWithAi,
   onChange,
@@ -1016,9 +1062,7 @@ const WorkspaceSectionForm = ({
   aiElapsedSeconds: number;
   importStatus: "idle" | "success" | "error";
   importMessage: string;
-  importInputRef: React.RefObject<HTMLInputElement>;
   onGenerateAiDraft: () => void;
-  onImportRequirementFile: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   onRefineComponentWithAi: (component: FeatureComponent | null) => Promise<void>;
   onGenerateImplementationPlanWithAi: () => void;
   onChange: (updater: (current: FeatureWorkspace) => FeatureWorkspace) => void;
@@ -1027,18 +1071,6 @@ const WorkspaceSectionForm = ({
     case "featureDefinition":
       return (
         <div className="grid gap-4">
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".md,.markdown,.txt,text/markdown,text/plain"
-            className="hidden"
-            onChange={onImportRequirementFile}
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => importInputRef.current?.click()} tone="secondary">
-              Import Requirement File
-            </Button>
-          </div>
           <StringListEditor
             label="Feature Requirements"
             hint="List the individual feature requirements as numbered requirement statements, for example REQ-1, REQ-2, and REQ-3."
@@ -1144,262 +1176,574 @@ const WorkspaceSectionForm = ({
     case "featureDesign":
       return (
         <div className="space-y-5">
-          <Field
-            label="Candidate Components"
-            hint="These are the subsystems you believe this feature needs before detailed design."
+          <ArchitectureViewPanel
+            title="Context Diagram"
+            description="Shows the system boundary, external actors, and what crosses into or out of the feature."
           >
-            <div className="space-y-4">
-              {workspace.discovery.candidateComponents.map((candidate, index) => (
-                <div key={candidate.id} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
-                  <div className="space-y-1.5">
-                    <SectionInputLabel>Component Name</SectionInputLabel>
-                    <TextInput
-                      value={candidate.name}
-                      onChange={(value) =>
-                        onChange((current) => {
-                          const nextCandidates = [...current.discovery.candidateComponents];
-                          const updated = { ...nextCandidates[index], name: value };
-                          nextCandidates[index] = updated;
-                          return {
-                            ...current,
-                            discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                            components: syncComponentFromCandidate(updated, current.components),
-                          };
-                        })
-                      }
-                      placeholder="Component name"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <SectionInputLabel>Component Responsibility</SectionInputLabel>
-                    <TextArea
-                      value={candidate.responsibility}
-                      onChange={(value) =>
-                        onChange((current) => {
-                          const nextCandidates = [...current.discovery.candidateComponents];
-                          const updated = { ...nextCandidates[index], responsibility: value };
-                          nextCandidates[index] = updated;
-                          return {
-                            ...current,
-                            discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                            components: syncComponentFromCandidate(updated, current.components),
-                          };
-                        })
-                      }
-                      placeholder="What is this component responsible for?"
-                      rows={3}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <SectionInputLabel>Rationale</SectionInputLabel>
-                    <TextArea
-                      value={candidate.rationale ?? ""}
-                      onChange={(value) =>
-                        onChange((current) => {
-                          const nextCandidates = [...current.discovery.candidateComponents];
-                          nextCandidates[index] = { ...nextCandidates[index], rationale: value };
-                          return {
-                            ...current,
-                            discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                          };
-                        })
-                      }
-                      placeholder="Why does this component exist?"
-                      rows={2}
-                    />
-                  </div>
-                  <div className="flex gap-2">
+            <Field
+              label="Context Entities"
+              hint="Add the outside users, devices, systems, or services that interact with this feature."
+            >
+              <div className="space-y-4">
+                {workspace.discovery.contextEntities.map((entity, index) => (
+                  <div
+                    key={entity.id}
+                    className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
+                  >
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>Entity Name</SectionInputLabel>
+                      <TextInput
+                        value={entity.name}
+                        onChange={(value) =>
+                          onChange((current) => {
+                            const next = [...current.discovery.contextEntities];
+                            next[index] = { ...next[index], name: value };
+                            return {
+                              ...current,
+                              discovery: { ...current.discovery, contextEntities: next },
+                            };
+                          })
+                        }
+                        placeholder="Entity name"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>Entity Type</SectionInputLabel>
+                      <select
+                        className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                        value={entity.kind}
+                        onChange={(event) =>
+                          onChange((current) => {
+                            const next = [...current.discovery.contextEntities];
+                            next[index] = {
+                              ...next[index],
+                              kind: event.target.value as ContextEntity["kind"],
+                            };
+                            return {
+                              ...current,
+                              discovery: { ...current.discovery, contextEntities: next },
+                            };
+                          })
+                        }
+                      >
+                        {["user", "device", "system", "service", "timer", "sensor", "actuator", "other"].map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>Description</SectionInputLabel>
+                      <TextArea
+                        value={entity.description ?? ""}
+                        onChange={(value) =>
+                          onChange((current) => {
+                            const next = [...current.discovery.contextEntities];
+                            next[index] = { ...next[index], description: value };
+                            return {
+                              ...current,
+                              discovery: { ...current.discovery, contextEntities: next },
+                            };
+                          })
+                        }
+                        placeholder="How does this entity relate to the feature?"
+                        rows={3}
+                      />
+                    </div>
                     <Button
-                      onClick={() => {
-                        const fallbackId =
-                          workspace.discovery.candidateComponents[index + 1]?.id ??
-                          workspace.discovery.candidateComponents[index - 1]?.id ??
-                          null;
-                        setSelectedComponentId(
-                          selectedComponentId === candidate.id ? fallbackId : selectedComponentId,
-                        );
+                      onClick={() =>
                         onChange((current) => ({
                           ...current,
                           discovery: {
                             ...current.discovery,
-                            candidateComponents: current.discovery.candidateComponents.filter(
-                              (item) => item.id !== candidate.id,
+                            contextEntities: current.discovery.contextEntities.filter(
+                              (_, currentIndex) => currentIndex !== index,
                             ),
-                            interactions: current.discovery.interactions.filter(
-                              (interaction) =>
-                                interaction.fromComponentId !== candidate.id &&
-                                interaction.toComponentId !== candidate.id,
+                            contextFlows: current.discovery.contextFlows.filter(
+                              (flow) => flow.entityId !== entity.id,
                             ),
                           },
-                          components: current.components.filter((component) => component.id !== candidate.id),
-                        }));
-                      }}
+                        }))
+                      }
                       tone="danger"
                     >
-                      Remove Component
-                    </Button>
-                    <Button onClick={() => setSelectedComponentId(candidate.id)} tone="secondary">
-                      Focus Detail Editor
+                      Remove Context Entity
                     </Button>
                   </div>
-                </div>
-              ))}
-              <Button
-                onClick={() => {
-                  const candidate = createEmptyCandidateComponent();
-                  setSelectedComponentId(candidate.id);
-                  onChange((current) => ({
-                    ...current,
-                    discovery: {
-                      ...current.discovery,
-                      candidateComponents: [...current.discovery.candidateComponents, candidate],
-                    },
-                    components: [...current.components, createEmptyComponent(candidate)],
-                  }));
-                }}
-              >
-                Add Candidate Component
-              </Button>
-            </div>
-          </Field>
-          <Field
-            label="Component Interactions"
-            hint="Describe how the candidate components interact before refining their internal state."
-          >
-            <div className="space-y-4">
-              {workspace.discovery.interactions.map((interaction, index) => (
-                <div
-                  key={`${interaction.fromComponentId}-${interaction.toComponentId}-${index}`}
-                  className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
-                >
-                  <div className="space-y-1.5">
-                    <SectionInputLabel>From Component</SectionInputLabel>
-                    <select
-                      className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-                      value={interaction.fromComponentId}
-                      onChange={(event) =>
-                        onChange((current) => {
-                          const next = [...current.discovery.interactions];
-                          next[index] = { ...next[index], fromComponentId: event.target.value };
-                          return { ...current, discovery: { ...current.discovery, interactions: next } };
-                        })
-                      }
-                    >
-                      {workspace.discovery.candidateComponents.map((component) => (
-                        <option key={component.id} value={component.id}>
-                          {component.name || "Unnamed component"}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <SectionInputLabel>To Component</SectionInputLabel>
-                    <select
-                      className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-                      value={interaction.toComponentId}
-                      onChange={(event) =>
-                        onChange((current) => {
-                          const next = [...current.discovery.interactions];
-                          next[index] = { ...next[index], toComponentId: event.target.value };
-                          return { ...current, discovery: { ...current.discovery, interactions: next } };
-                        })
-                      }
-                    >
-                      {workspace.discovery.candidateComponents.map((component) => (
-                        <option key={component.id} value={component.id}>
-                          {component.name || "Unnamed component"}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <ObjectListEditor<ComponentInteraction>
-                    label="Interaction"
-                    items={[interaction]}
-                    onChange={(items) =>
-                      onChange((current) => {
-                        const next = [...current.discovery.interactions];
-                        next[index] = items[0];
-                        return { ...current, discovery: { ...current.discovery, interactions: next } };
-                      })
-                    }
-                    template={{
-                      fromComponentId: interaction.fromComponentId,
-                      toComponentId: interaction.toComponentId,
-                      mechanism: "queue",
-                      data: "",
-                      notes: "",
-                    }}
-                    fields={[
-                      {
-                        key: "mechanism",
-                        label: "Mechanism",
-                        type: "select",
-                        options: [
-                          "queue",
-                          "event",
-                          "notification",
-                          "callback",
-                          "shared_memory",
-                          "direct_call",
-                          "other",
+                ))}
+                <Button
+                  onClick={() =>
+                    onChange((current) => ({
+                      ...current,
+                      discovery: {
+                        ...current.discovery,
+                        contextEntities: [
+                          ...current.discovery.contextEntities,
+                          createEmptyContextEntity(),
                         ],
                       },
-                      { key: "data", label: "Data" },
-                      { key: "notes", label: "Notes", type: "textarea" },
-                    ]}
-                  />
-                  <Button
-                    onClick={() =>
-                      onChange((current) => ({
-                        ...current,
-                        discovery: {
-                          ...current.discovery,
-                          interactions: current.discovery.interactions.filter(
-                            (_, currentIndex) => currentIndex !== index,
-                          ),
-                        },
-                      }))
-                    }
-                    tone="danger"
-                  >
-                    Remove Interaction
-                  </Button>
-                </div>
-              ))}
-              <Button
-                onClick={() => {
-                  if (workspace.discovery.candidateComponents.length < 2) {
-                    return;
+                    }))
                   }
-                  const first = workspace.discovery.candidateComponents[0];
-                  const second = workspace.discovery.candidateComponents[1];
-                  onChange((current) => ({
-                    ...current,
-                    discovery: {
-                      ...current.discovery,
-                      interactions: [
-                        ...current.discovery.interactions,
-                        {
-                          fromComponentId: first.id,
-                          toComponentId: second.id,
-                          mechanism: "queue",
-                          data: "",
-                          notes: "",
-                        },
-                      ],
-                    },
-                  }));
-                }}
-              >
-                Add Interaction
-              </Button>
-            </div>
-          </Field>
-          <div className="space-y-4">
-          <Field
-            label="Component Details"
-            hint="Each feature workspace can hold multiple components. Refine one component at a time."
+                >
+                  Add Context Entity
+                </Button>
+              </div>
+            </Field>
+            <Field
+              label="Boundary Flows"
+              hint="Describe each input or output that crosses the feature boundary."
+            >
+              <div className="space-y-4">
+                {workspace.discovery.contextEntities.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-4 text-sm text-slate">
+                    Add at least one context entity before defining boundary flows.
+                  </div>
+                ) : null}
+                {workspace.discovery.contextFlows.map((flow, index) => (
+                  <div
+                    key={flow.id}
+                    className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
+                  >
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>External Entity</SectionInputLabel>
+                      <select
+                        className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                        value={flow.entityId}
+                        onChange={(event) =>
+                          onChange((current) => {
+                            const next = [...current.discovery.contextFlows];
+                            next[index] = { ...next[index], entityId: event.target.value };
+                            return {
+                              ...current,
+                              discovery: { ...current.discovery, contextFlows: next },
+                            };
+                          })
+                        }
+                      >
+                        {workspace.discovery.contextEntities.map((entity) => (
+                          <option key={entity.id} value={entity.id}>
+                            {entity.name || "Unnamed entity"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>Direction</SectionInputLabel>
+                      <select
+                        className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                        value={flow.direction}
+                        onChange={(event) =>
+                          onChange((current) => {
+                            const next = [...current.discovery.contextFlows];
+                            next[index] = {
+                              ...next[index],
+                              direction: event.target.value as ContextFlow["direction"],
+                            };
+                            return {
+                              ...current,
+                              discovery: { ...current.discovery, contextFlows: next },
+                            };
+                          })
+                        }
+                      >
+                        {["inbound", "outbound", "bidirectional"].map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>Flow Label</SectionInputLabel>
+                      <TextInput
+                        value={flow.label}
+                        onChange={(value) =>
+                          onChange((current) => {
+                            const next = [...current.discovery.contextFlows];
+                            next[index] = { ...next[index], label: value };
+                            return {
+                              ...current,
+                              discovery: { ...current.discovery, contextFlows: next },
+                            };
+                          })
+                        }
+                        placeholder="What crosses the boundary?"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>Description</SectionInputLabel>
+                      <TextArea
+                        value={flow.description ?? ""}
+                        onChange={(value) =>
+                          onChange((current) => {
+                            const next = [...current.discovery.contextFlows];
+                            next[index] = { ...next[index], description: value };
+                            return {
+                              ...current,
+                              discovery: { ...current.discovery, contextFlows: next },
+                            };
+                          })
+                        }
+                        placeholder="Optional context for this boundary flow"
+                        rows={3}
+                      />
+                    </div>
+                    <Button
+                      onClick={() =>
+                        onChange((current) => ({
+                          ...current,
+                          discovery: {
+                            ...current.discovery,
+                            contextFlows: current.discovery.contextFlows.filter(
+                              (_, currentIndex) => currentIndex !== index,
+                            ),
+                          },
+                        }))
+                      }
+                      tone="danger"
+                    >
+                      Remove Boundary Flow
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  onClick={() =>
+                    onChange((current) => ({
+                      ...current,
+                      discovery: {
+                        ...current.discovery,
+                        contextFlows: [
+                          ...current.discovery.contextFlows,
+                          createEmptyContextFlow(
+                            current.discovery.contextEntities[0]?.id ?? "",
+                          ),
+                        ],
+                      },
+                    }))
+                  }
+                  disabled={workspace.discovery.contextEntities.length === 0}
+                >
+                  Add Boundary Flow
+                </Button>
+              </div>
+            </Field>
+          </ArchitectureViewPanel>
+
+          <ArchitectureViewPanel
+            title="Functional / Feature Breakdown"
+            description="Explains what the feature must do through its summary, requirements, and responsibilities."
           >
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Field
+                label="Feature Requirements"
+                hint="These come from the Feature Definition tab and define what the feature must achieve."
+              >
+                <div className="rounded-2xl bg-mist/60 p-4 text-sm text-ink">
+                  {workspace.featureSummary.goals.length > 0 ? (
+                    <ul className="space-y-2">
+                      {workspace.featureSummary.goals.map((goal, index) => (
+                        <li key={`${goal}-${index}`}>
+                          <span className="font-medium text-copper">REQ-{index + 1}</span>
+                          <span className="ml-2">{goal}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-slate">No feature requirements documented yet.</p>
+                  )}
+                </div>
+              </Field>
+              <Field
+                label="Feature Responsibilities"
+                hint="Responsibilities define the jobs the feature must own and usually drive component boundaries."
+              >
+                <div className="rounded-2xl bg-mist/60 p-4 text-sm text-ink">
+                  {workspace.discovery.responsibilities.length > 0 ? (
+                    <ul className="space-y-2">
+                      {workspace.discovery.responsibilities.map((item, index) => (
+                        <li key={`${item}-${index}`}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-slate">No responsibilities documented yet.</p>
+                  )}
+                </div>
+              </Field>
+            </div>
+          </ArchitectureViewPanel>
+
+          <ArchitectureViewPanel
+            title="Component / Container Diagram"
+            description="Identifies the major internal building blocks and the responsibility of each one."
+          >
+            <Field
+              label="Candidate Components"
+              hint="These are the subsystems you believe this feature needs before detailed design."
+            >
+              <div className="space-y-4">
+                {workspace.discovery.candidateComponents.map((candidate, index) => (
+                  <div key={candidate.id} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>Component Name</SectionInputLabel>
+                      <TextInput
+                        value={candidate.name}
+                        onChange={(value) =>
+                          onChange((current) => {
+                            const nextCandidates = [...current.discovery.candidateComponents];
+                            const updated = { ...nextCandidates[index], name: value };
+                            nextCandidates[index] = updated;
+                            return {
+                              ...current,
+                              discovery: { ...current.discovery, candidateComponents: nextCandidates },
+                              components: syncComponentFromCandidate(updated, current.components),
+                            };
+                          })
+                        }
+                        placeholder="Component name"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>Component Responsibility</SectionInputLabel>
+                      <TextArea
+                        value={candidate.responsibility}
+                        onChange={(value) =>
+                          onChange((current) => {
+                            const nextCandidates = [...current.discovery.candidateComponents];
+                            const updated = { ...nextCandidates[index], responsibility: value };
+                            nextCandidates[index] = updated;
+                            return {
+                              ...current,
+                              discovery: { ...current.discovery, candidateComponents: nextCandidates },
+                              components: syncComponentFromCandidate(updated, current.components),
+                            };
+                          })
+                        }
+                        placeholder="What is this component responsible for?"
+                        rows={3}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>Rationale</SectionInputLabel>
+                      <TextArea
+                        value={candidate.rationale ?? ""}
+                        onChange={(value) =>
+                          onChange((current) => {
+                            const nextCandidates = [...current.discovery.candidateComponents];
+                            nextCandidates[index] = { ...nextCandidates[index], rationale: value };
+                            return {
+                              ...current,
+                              discovery: { ...current.discovery, candidateComponents: nextCandidates },
+                            };
+                          })
+                        }
+                        placeholder="Why does this component exist?"
+                        rows={2}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => {
+                          const fallbackId =
+                            workspace.discovery.candidateComponents[index + 1]?.id ??
+                            workspace.discovery.candidateComponents[index - 1]?.id ??
+                            null;
+                          setSelectedComponentId(
+                            selectedComponentId === candidate.id ? fallbackId : selectedComponentId,
+                          );
+                          onChange((current) => ({
+                            ...current,
+                            discovery: {
+                              ...current.discovery,
+                              candidateComponents: current.discovery.candidateComponents.filter(
+                                (item) => item.id !== candidate.id,
+                              ),
+                              interactions: current.discovery.interactions.filter(
+                                (interaction) =>
+                                  interaction.fromComponentId !== candidate.id &&
+                                  interaction.toComponentId !== candidate.id,
+                              ),
+                            },
+                            components: current.components.filter((component) => component.id !== candidate.id),
+                          }));
+                        }}
+                        tone="danger"
+                      >
+                        Remove Component
+                      </Button>
+                      <Button onClick={() => setSelectedComponentId(candidate.id)} tone="secondary">
+                        Focus Detail Editor
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  onClick={() => {
+                    const candidate = createEmptyCandidateComponent();
+                    setSelectedComponentId(candidate.id);
+                    onChange((current) => ({
+                      ...current,
+                      discovery: {
+                        ...current.discovery,
+                        candidateComponents: [...current.discovery.candidateComponents, candidate],
+                      },
+                      components: [...current.components, createEmptyComponent(candidate)],
+                    }));
+                  }}
+                >
+                  Add Candidate Component
+                </Button>
+              </div>
+            </Field>
+          </ArchitectureViewPanel>
+
+          <ArchitectureViewPanel
+            title="Interaction / Data Flow Diagram"
+            description="Shows how components communicate and what data, events, or signals move between them."
+          >
+            <Field
+              label="Component Interactions"
+              hint="Describe how the candidate components interact before refining their internal state."
+            >
+              <div className="space-y-4">
+                {workspace.discovery.interactions.map((interaction, index) => (
+                  <div
+                    key={`${interaction.fromComponentId}-${interaction.toComponentId}-${index}`}
+                    className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
+                  >
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>From Component</SectionInputLabel>
+                      <select
+                        className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                        value={interaction.fromComponentId}
+                        onChange={(event) =>
+                          onChange((current) => {
+                            const next = [...current.discovery.interactions];
+                            next[index] = { ...next[index], fromComponentId: event.target.value };
+                            return { ...current, discovery: { ...current.discovery, interactions: next } };
+                          })
+                        }
+                      >
+                        {workspace.discovery.candidateComponents.map((component) => (
+                          <option key={component.id} value={component.id}>
+                            {component.name || "Unnamed component"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <SectionInputLabel>To Component</SectionInputLabel>
+                      <select
+                        className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                        value={interaction.toComponentId}
+                        onChange={(event) =>
+                          onChange((current) => {
+                            const next = [...current.discovery.interactions];
+                            next[index] = { ...next[index], toComponentId: event.target.value };
+                            return { ...current, discovery: { ...current.discovery, interactions: next } };
+                          })
+                        }
+                      >
+                        {workspace.discovery.candidateComponents.map((component) => (
+                          <option key={component.id} value={component.id}>
+                            {component.name || "Unnamed component"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <ObjectListEditor<ComponentInteraction>
+                      label="Interaction"
+                      items={[interaction]}
+                      onChange={(items) =>
+                        onChange((current) => {
+                          const next = [...current.discovery.interactions];
+                          next[index] = items[0];
+                          return { ...current, discovery: { ...current.discovery, interactions: next } };
+                        })
+                      }
+                      template={{
+                        fromComponentId: interaction.fromComponentId,
+                        toComponentId: interaction.toComponentId,
+                        mechanism: "queue",
+                        data: "",
+                        notes: "",
+                      }}
+                      fields={[
+                        {
+                          key: "mechanism",
+                          label: "Mechanism",
+                          type: "select",
+                          options: [
+                            "queue",
+                            "event",
+                            "notification",
+                            "callback",
+                            "shared_memory",
+                            "direct_call",
+                            "other",
+                          ],
+                        },
+                        { key: "data", label: "Data" },
+                        { key: "notes", label: "Notes", type: "textarea" },
+                      ]}
+                    />
+                    <Button
+                      onClick={() =>
+                        onChange((current) => ({
+                          ...current,
+                          discovery: {
+                            ...current.discovery,
+                            interactions: current.discovery.interactions.filter(
+                              (_, currentIndex) => currentIndex !== index,
+                            ),
+                          },
+                        }))
+                      }
+                      tone="danger"
+                    >
+                      Remove Interaction
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  onClick={() => {
+                    if (workspace.discovery.candidateComponents.length < 2) {
+                      return;
+                    }
+                    const first = workspace.discovery.candidateComponents[0];
+                    const second = workspace.discovery.candidateComponents[1];
+                    onChange((current) => ({
+                      ...current,
+                      discovery: {
+                        ...current.discovery,
+                        interactions: [
+                          ...current.discovery.interactions,
+                          {
+                            fromComponentId: first.id,
+                            toComponentId: second.id,
+                            mechanism: "queue",
+                            data: "",
+                            notes: "",
+                          },
+                        ],
+                      },
+                    }));
+                  }}
+                >
+                  Add Interaction
+                </Button>
+              </div>
+            </Field>
+          </ArchitectureViewPanel>
+
+          <ArchitectureViewPanel
+            title="State Diagram"
+            description="Captures the behavior of important components over time, including their internal states and transitions."
+          >
+            <Field
+              label="Component Details"
+              hint="Each feature workspace can hold multiple components. Refine one component at a time."
+            >
               <div className="space-y-3">
                 {workspace.components.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-6 text-sm text-slate">
@@ -1458,7 +1802,21 @@ const WorkspaceSectionForm = ({
                 )}
               </div>
             </Field>
-          </div>
+          </ArchitectureViewPanel>
+
+          <ArchitectureViewPanel
+            title="Sequence Diagram"
+            description="Shows how one scenario unfolds step by step across components over time."
+          >
+            <PlannedViewNotice message="Not implemented yet. This will model ordered runtime scenarios such as command handling, startup, error recovery, or user interaction flows." />
+          </ArchitectureViewPanel>
+
+          <ArchitectureViewPanel
+            title="Deployment / Runtime Diagram"
+            description="Shows where execution runs: tasks, threads, cores, MCUs, devices, and other runtime boundaries."
+          >
+            <PlannedViewNotice message="Not implemented yet. This will later connect implementation tasks, runtime boundaries, and deployment ownership into a dedicated execution view." />
+          </ArchitectureViewPanel>
         </div>
       );
     case "implementationPlan":

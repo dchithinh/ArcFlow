@@ -1,12 +1,16 @@
 # STM32F4 TaskManager with FreeRTOS and LCD UI using LVGL
 
+## Feature Summary
+
+Build a firmware feature for an STM32F4-based system that supervises multiple FreeRTOS tasks and presents task and system health on an LCD through LVGL, while keeping the UI responsive and isolated from time-critical RTOS behavior.
+
 ## Feature Requirements
 
-- REQ-1: The firmware shall supervise multiple application tasks on an STM32F4 platform using FreeRTOS.
-- REQ-2: The firmware shall present task status and system health information on an LCD using the LVGL framework.
-- REQ-3: The UI path shall remain responsive without disturbing time-critical or high-priority RTOS work.
-- REQ-4: The design shall separate task supervision, UI rendering, event and message transport, and display hardware adaptation.
-- REQ-5: The feature shall support future extension for user interaction such as buttons or touch input when present.
+- The firmware shall supervise multiple application tasks on an STM32F4 platform using FreeRTOS.
+- The firmware shall present task status and system health information on an LCD using the LVGL framework.
+- The UI path shall remain responsive without disturbing time-critical or high-priority RTOS work.
+- The design shall separate task supervision, UI rendering, event and message transport, and display hardware adaptation.
+- The feature shall support future extension for user interaction such as buttons or touch input when present.
 
 ## Feature Responsibilities
 

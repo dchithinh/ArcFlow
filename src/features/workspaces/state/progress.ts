@@ -31,6 +31,12 @@ export const isWorkspaceSectionStarted = (
           component.ownership.length > 0 ||
           component.failureModes.length > 0,
       ) ||
+      workspace.discovery.contextEntities.some(
+        (entity) => hasText(entity.name) || hasText(entity.description),
+      ) ||
+      workspace.discovery.contextFlows.some(
+        (flow) => hasText(flow.label) || hasText(flow.description),
+      ) ||
       workspace.discovery.candidateComponents.some(
         (component) => hasText(component.name) || hasText(component.responsibility),
       ) ||

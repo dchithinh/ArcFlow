@@ -55,6 +55,43 @@ This means:
 - AI suggestions must write into the workspace model, not directly into markdown or diagrams
 - AI generation should be staged by workflow block instead of trying to draft the full workspace in one request
 
+## Architecture View Roadmap
+
+ArchFlow should support a small set of complementary architecture views instead of trying to force all understanding into one diagram.
+
+Priority views for this product:
+
+1. Context Diagram
+2. Functional / Feature Breakdown
+3. Component / Container Diagram
+4. Interaction / Data Flow Diagram
+5. State Diagram
+6. Sequence Diagram
+7. Deployment / Runtime Diagram
+
+Current coverage:
+
+- Implemented now:
+  - 3. Component / Container Diagram
+  - 4. Interaction / Data Flow Diagram
+  - 5. State Diagram
+- Partial now:
+  - 2. Functional / Feature Breakdown
+- Missing now:
+  - 1. Context Diagram
+  - 6. Sequence Diagram
+  - 7. Deployment / Runtime Diagram
+
+These views answer different questions:
+
+- Context Diagram: who or what is outside the system boundary and what crosses it
+- Functional / Feature Breakdown: what the feature is required to do
+- Component / Container Diagram: what the major internal building blocks are
+- Interaction / Data Flow Diagram: how components communicate and what moves between them
+- State Diagram: how important components change behavior over time
+- Sequence Diagram: how one scenario unfolds step by step
+- Deployment / Runtime Diagram: where the system runs and how execution is partitioned
+
 ## Canonical Domain Model
 
 The canonical source of truth should evolve from a flat `FirmwareDesign` to a hierarchical `FeatureWorkspace`.
@@ -214,6 +251,7 @@ type FeatureComponent = {
 - Must combine:
   - feature-level structure
   - component-level details
+- Owns the architecture-view roadmap above and keeps naming/output boundaries consistent across the supported view set.
 
 ### 7. Preview Module
 - Displays live generated output.

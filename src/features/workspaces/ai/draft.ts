@@ -280,6 +280,23 @@ export const mergeAiDiscoveryIntoWorkspace = (
       };
     })
     .filter((interaction): interaction is NonNullable<typeof interaction> => Boolean(interaction));
+  const existingContextEntities = workspace.discovery.contextEntities;
+  const entityByName = new Map(
+    existingContextEntities.map((entity) => [normalize(entity.name), entity]),
+  );
+  const nextContextEntities = uniqueList(draft.discovery.externalActors).map((actor, index) => {
+    const existing = entityByName.get(normalize(actor));
+    if (existing) {
+      return existing;
+    }
+
+    return {
+      id: `context-entity-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+      name: actor,
+      kind: "other" as const,
+      description: "",
+    };
+  });
 
   return {
     ...workspace,
@@ -293,7 +310,10 @@ export const mergeAiDiscoveryIntoWorkspace = (
     },
     discovery: {
       ...workspace.discovery,
-      externalActors: uniqueList(draft.discovery.externalActors),
+      contextEntities:
+        nextContextEntities.length > 0
+          ? nextContextEntities
+          : workspace.discovery.contextEntities,
       candidateComponents,
       interactions,
       candidateTasks: draft.discovery.candidateTasks.map(toCandidateTask),

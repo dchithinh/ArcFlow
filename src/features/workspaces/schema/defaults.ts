@@ -1,6 +1,8 @@
 import type {
   CandidateTask,
   ComponentCandidate,
+  ContextEntity,
+  ContextFlow,
   FeatureComponent,
   FeatureWorkspace,
 } from "./workspace";
@@ -47,6 +49,21 @@ export const createEmptyCandidateTask = (): CandidateTask => ({
   notes: "",
 });
 
+export const createEmptyContextEntity = (): ContextEntity => ({
+  id: createId("context-entity"),
+  name: "",
+  kind: "system",
+  description: "",
+});
+
+export const createEmptyContextFlow = (entityId = ""): ContextFlow => ({
+  id: createId("context-flow"),
+  entityId,
+  direction: "inbound",
+  label: "",
+  description: "",
+});
+
 export const createEmptyWorkspace = (): FeatureWorkspace => ({
   id: createId("workspace"),
   title: "Untitled feature workspace",
@@ -62,7 +79,8 @@ export const createEmptyWorkspace = (): FeatureWorkspace => ({
     openQuestions: [],
   },
   discovery: {
-    externalActors: [],
+    contextEntities: [],
+    contextFlows: [],
     responsibilities: [],
     candidateComponents: [],
     interactions: [],
@@ -102,6 +120,24 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
     responsibility: "Generate acknowledgements, errors, and diagnostic health reporting.",
     rationale: "Keeps user-facing responses and logs separate from control-path logic.",
   };
+  const operatorTerminalEntity: ContextEntity = {
+    id: createId("context-entity"),
+    name: "Operator Terminal",
+    kind: "user",
+    description: "Human operator issuing commands and reading responses.",
+  };
+  const uartPeripheralEntity: ContextEntity = {
+    id: createId("context-entity"),
+    name: "UART Peripheral",
+    kind: "device",
+    description: "Transport interface providing command bytes to the feature.",
+  };
+  const runtimeConfigEntity: ContextEntity = {
+    id: createId("context-entity"),
+    name: "Runtime Configuration Store",
+    kind: "system",
+    description: "Shared configuration state affected by validated commands.",
+  };
 
   return {
     id: createId("workspace"),
@@ -134,7 +170,34 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
       ],
     },
     discovery: {
-      externalActors: ["Operator terminal", "UART peripheral", "Runtime configuration store"],
+      contextEntities: [
+        operatorTerminalEntity,
+        uartPeripheralEntity,
+        runtimeConfigEntity,
+      ],
+      contextFlows: [
+        {
+          id: createId("context-flow"),
+          entityId: operatorTerminalEntity.id,
+          direction: "bidirectional",
+          label: "Operator commands and status feedback",
+          description: "The operator sends configuration commands and receives acknowledgements.",
+        },
+        {
+          id: createId("context-flow"),
+          entityId: uartPeripheralEntity.id,
+          direction: "inbound",
+          label: "UART RX command bytes",
+          description: "The transport interface delivers raw command traffic into the feature.",
+        },
+        {
+          id: createId("context-flow"),
+          entityId: runtimeConfigEntity.id,
+          direction: "outbound",
+          label: "Validated configuration updates",
+          description: "The feature applies approved configuration changes into shared runtime state.",
+        },
+      ],
       responsibilities: [
         "Acquire UART data safely",
         "Validate command framing and payload integrity",
