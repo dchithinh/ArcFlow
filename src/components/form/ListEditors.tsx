@@ -50,7 +50,7 @@ export const StringListEditor = ({
       <div className="space-y-3">
         {items.length === 0 ? <p className="text-sm text-slate">No entries yet.</p> : null}
         {items.map((item, index) => (
-          <div key={`${label}-${index}`} className="flex gap-2">
+          <div key={`${label}-${index}`} className="flex items-start gap-2">
             <div className="flex-1 space-y-1.5">
               <InputLabel>{getItemLabel ? getItemLabel(index) : `${label} ${index + 1}`}</InputLabel>
               <TextArea
@@ -60,7 +60,12 @@ export const StringListEditor = ({
                 rows={2}
               />
             </div>
-            <Button onClick={() => removeItem(index)} tone="ghost">
+            <Button
+              onClick={() => removeItem(index)}
+              tone="danger"
+              size="compact"
+              className="mt-[18px]"
+            >
               Remove
             </Button>
           </div>
@@ -116,7 +121,11 @@ export const EventListEditor = ({
             <LabeledInput label="Latency Sensitivity">
               <Toggle checked={Boolean(item.latencySensitive)} onChange={(value) => updateItem(index, "latencySensitive", value)} label="Latency-sensitive event" />
             </LabeledInput>
-            <Button onClick={() => onChange(items.filter((_, currentIndex) => currentIndex !== index))} tone="ghost">
+            <Button
+              onClick={() => onChange(items.filter((_, currentIndex) => currentIndex !== index))}
+              tone="danger"
+              size="compact"
+            >
               Remove Event
             </Button>
           </div>
@@ -186,7 +195,8 @@ export const StateListEditor = ({ items, onChange }: StateListEditorProps) => {
                       };
                       onChange(next);
                     }}
-                    tone="ghost"
+                    tone="danger"
+                    size="compact"
                   >
                     Remove Transition
                   </Button>
@@ -205,7 +215,11 @@ export const StateListEditor = ({ items, onChange }: StateListEditorProps) => {
                 Add Transition
               </Button>
             </div>
-            <Button onClick={() => onChange(items.filter((_, currentIndex) => currentIndex !== stateIndex))} tone="ghost">
+            <Button
+              onClick={() => onChange(items.filter((_, currentIndex) => currentIndex !== stateIndex))}
+              tone="danger"
+              size="compact"
+            >
               Remove State
             </Button>
           </div>
@@ -300,7 +314,11 @@ export const ObjectListEditor = <T extends SimpleRow>({
                 </LabeledInput>
               );
             })}
-            <Button onClick={() => onChange(items.filter((_, currentIndex) => currentIndex !== index))} tone="ghost">
+            <Button
+              onClick={() => onChange(items.filter((_, currentIndex) => currentIndex !== index))}
+              tone="danger"
+              size="compact"
+            >
               Remove
             </Button>
           </div>

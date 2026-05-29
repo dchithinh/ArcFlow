@@ -41,7 +41,7 @@ export const MermaidPreview = ({
   } | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
-  const clampZoom = (value: number): number => Math.min(3, Math.max(0.5, value));
+  const clampZoom = (value: number): number => Math.min(6, Math.max(0.5, value));
 
   const resetView = () => {
     setZoom(1);
@@ -165,28 +165,38 @@ export const MermaidPreview = ({
   return (
     <div className={`space-y-3 rounded-2xl bg-white p-3 ${className}`.trim()}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[10px] uppercase tracking-[0.18em] text-slate">
-          Wheel to zoom. Drag to pan when zoomed in.
-        </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="ml-auto flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setZoom((current) => clampZoom(Number((current - 0.15).toFixed(2))))}
-            className="rounded-xl border border-slate/20 px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-mist"
+            aria-label="Zoom out"
+            title="Zoom out"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate/20 text-ink transition hover:bg-mist"
           >
-            Zoom Out
+            <span className="relative block h-3.5 w-3.5 rounded-full border-2 border-current">
+              <span className="absolute left-1/2 top-1/2 h-0.5 w-1.5 -translate-x-1/2 -translate-y-1/2 bg-current" />
+              <span className="absolute -bottom-1 -right-1 h-1.5 w-0.5 rotate-45 bg-current" />
+            </span>
           </button>
           <button
             type="button"
             onClick={() => setZoom((current) => clampZoom(Number((current + 0.15).toFixed(2))))}
-            className="rounded-xl border border-slate/20 px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-mist"
+            aria-label="Zoom in"
+            title="Zoom in"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate/20 text-ink transition hover:bg-mist"
           >
-            Zoom In
+            <span className="relative block h-3.5 w-3.5 rounded-full border-2 border-current">
+              <span className="absolute left-1/2 top-1/2 h-0.5 w-1.5 -translate-x-1/2 -translate-y-1/2 bg-current" />
+              <span className="absolute left-1/2 top-1/2 h-1.5 w-0.5 -translate-x-1/2 -translate-y-1/2 bg-current" />
+              <span className="absolute -bottom-1 -right-1 h-1.5 w-0.5 rotate-45 bg-current" />
+            </span>
           </button>
           <button
             type="button"
             onClick={resetView}
-            className="rounded-xl border border-slate/20 px-3 py-1.5 text-xs font-medium text-ink transition hover:bg-mist"
+            aria-label="Reset view"
+            title="Reset view"
+            className="rounded-lg border border-slate/20 px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-mist"
           >
             Reset
           </button>

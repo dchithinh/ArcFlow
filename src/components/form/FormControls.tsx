@@ -84,7 +84,9 @@ export const Select = <T extends string>({ value, onChange, options }: SelectPro
 type ButtonProps = {
   children: ReactNode;
   onClick: () => void;
-  tone?: "primary" | "secondary" | "ghost";
+  tone?: "primary" | "secondary" | "ghost" | "danger";
+  size?: "default" | "compact";
+  className?: string;
   disabled?: boolean;
 };
 
@@ -92,21 +94,27 @@ export const Button = ({
   children,
   onClick,
   tone = "secondary",
+  size = "default",
+  className = "",
   disabled = false,
 }: ButtonProps) => {
   const toneClass =
     tone === "primary"
       ? "bg-ink text-white hover:bg-pine"
+      : tone === "danger"
+        ? "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 hover:bg-rose-100"
       : tone === "ghost"
         ? "bg-transparent text-slate hover:bg-white/60"
         : "bg-white text-ink hover:bg-sand";
+  const sizeClass =
+    size === "compact" ? "rounded-lg px-2.5 py-1.5 text-xs" : "rounded-xl px-4 py-2 text-sm";
 
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-xl px-4 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
+      className={`${sizeClass} ${className} font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`.trim()}
     >
       {children}
     </button>

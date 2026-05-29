@@ -62,9 +62,21 @@ const requirementsToText = (requirements: string[]): string =>
     .join("\n");
 
 const headingAliases = {
-  requirement: new Set(["requirement", "feature requirement", "overview", "description"]),
+  requirement: new Set([
+    "requirement",
+    "requirements",
+    "feature requirement",
+    "feature requirements",
+    "overview",
+    "description",
+  ]),
   constraints: new Set(["constraints", "constraint"]),
-  responsibilities: new Set(["responsibilities", "responsibility"]),
+  responsibilities: new Set([
+    "responsibilities",
+    "responsibility",
+    "feature responsibilities",
+    "feature responsibility",
+  ]),
   goals: new Set(["goals", "goal"]),
   assumptions: new Set(["assumptions", "assumption"]),
   openQuestions: new Set(["open questions", "questions", "question"]),
@@ -178,6 +190,7 @@ export const FeatureWorkspacePage = ({
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(
     workspace.components[0]?.id ?? null,
   );
+  const [componentDetailOpen, setComponentDetailOpen] = useState(false);
   const [aiStatus, setAiStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [aiMessage, setAiMessage] = useState("");
   const [aiStage, setAiStage] = useState<AiStage>("discovery");
@@ -227,6 +240,12 @@ export const FeatureWorkspacePage = ({
 
     return () => window.clearInterval(handle);
   }, [aiStatus]);
+
+  useEffect(() => {
+    if (!selectedComponent && componentDetailOpen) {
+      setComponentDetailOpen(false);
+    }
+  }, [componentDetailOpen, selectedComponent]);
 
   const canGenerateAiDraft = canGenerateDiscoveryDraft(workspace);
 
@@ -303,7 +322,9 @@ export const FeatureWorkspacePage = ({
       );
 
       const nextTitle = title || inferTitleFromFileName(file.name) || workspace.title;
+      const nextRequirements = toBulletList(requirementBlock);
       const nextRequirement =
+        (nextRequirements.length > 0 ? requirementsToText(nextRequirements) : "") ||
         toParagraph(requirementBlock) ||
         (sections.size === 1 ? content.trim() : workspace.requirement);
       const nextConstraints = toBulletList(constraintsBlock);
@@ -319,7 +340,12 @@ export const FeatureWorkspacePage = ({
           requirement: nextRequirement,
           featureSummary: {
             ...current.featureSummary,
-            goals: nextGoals.length > 0 ? nextGoals : current.featureSummary.goals,
+            goals:
+              nextRequirements.length > 0
+                ? nextRequirements
+                : nextGoals.length > 0
+                  ? nextGoals
+                  : current.featureSummary.goals,
             constraints:
               nextConstraints.length > 0 ? nextConstraints : current.featureSummary.constraints,
             assumptions:
@@ -398,20 +424,22 @@ export const FeatureWorkspacePage = ({
     }
   };
 
-  const refineSelectedComponentWithAi = async () => {
-    if (!canRefineComponentWithAi(workspace, selectedComponentId) || !selectedComponent) {
+  const refineComponentWithAi = async (
+    componentToRefine: FeatureComponent | null,
+  ) => {
+    if (!componentToRefine || !canRefineComponentWithAi(workspace, componentToRefine.id)) {
       return;
     }
 
     startAiRequest(
       "component",
-      `Refining ${selectedComponent.name || "selected component"} with AI...`,
+      `Refining ${componentToRefine.name || "selected component"} with AI...`,
     );
 
     try {
       const selectedCandidate =
         workspace.discovery.candidateComponents.find(
-          (candidate) => candidate.id === selectedComponent.id,
+          (candidate) => candidate.id === componentToRefine.id,
         ) ?? null;
       const data = await requestAiStage("component", {
         stage: "component",
@@ -419,9 +447,9 @@ export const FeatureWorkspacePage = ({
         requirement: workspace.requirement,
         constraints: workspace.featureSummary.constraints,
         responsibilities: workspace.discovery.responsibilities,
-        selectedComponentName: selectedComponent.name,
+        selectedComponentName: componentToRefine.name,
         selectedComponentResponsibility:
-          selectedCandidate?.responsibility || selectedComponent.summary,
+          selectedCandidate?.responsibility || componentToRefine.summary,
         candidateComponents: workspace.discovery.candidateComponents,
         interactions: namedInteractions,
         systemRisks: workspace.discovery.systemRisks,
@@ -430,13 +458,13 @@ export const FeatureWorkspacePage = ({
       const merged = updateTimestamp(
         mergeAiComponentIntoWorkspace(
           workspace,
-          selectedComponent.id,
+          componentToRefine.id,
           data.draft as AiComponentDraft,
         ),
       );
       onChange(() => merged);
       completeAiRequest(
-        `Component draft for ${selectedComponent.name || "selected component"} generated with ${data.provider}/${data.model} in ${Math.max(1, Math.round(data.durationMs / 1000))}s.`,
+        `Component draft for ${componentToRefine.name || "selected component"} generated with ${data.provider}/${data.model} in ${Math.max(1, Math.round(data.durationMs / 1000))}s.`,
       );
     } catch (error) {
       setAiStatus("error");
@@ -608,6 +636,10 @@ export const FeatureWorkspacePage = ({
             selectedComponent={selectedComponent}
             selectedComponentId={selectedComponentId}
             setSelectedComponentId={setSelectedComponentId}
+            onOpenComponentDetail={(componentId) => {
+              setSelectedComponentId(componentId);
+              setComponentDetailOpen(true);
+            }}
             canGenerateAiDraft={canGenerateAiDraft}
             aiStatus={aiStatus}
             aiStage={aiStage}
@@ -618,12 +650,100 @@ export const FeatureWorkspacePage = ({
             importInputRef={importInputRef}
             onGenerateAiDraft={generateAiDraft}
             onImportRequirementFile={importRequirementFile}
-            onRefineSelectedComponentWithAi={refineSelectedComponentWithAi}
+            onRefineComponentWithAi={refineComponentWithAi}
             onGenerateImplementationPlanWithAi={generateImplementationPlanWithAi}
             onChange={(updater) => onChange((current) => updateTimestamp(updater(current)))}
           />
         </div>
       </section>
+
+      {componentDetailOpen && selectedComponent ? (
+        <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[1200px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Component Detail</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">
+                  {selectedComponent.name || "Unnamed component"}
+                </h3>
+                <p className="mt-1 text-sm text-slate">
+                  Refine this component in a focused page with more room for its states, events, ownership, failures, and debugging design.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  onClick={async () => {
+                    await refineComponentWithAi(selectedComponent);
+                  }}
+                  tone="primary"
+                  disabled={
+                    !canRefineComponentWithAi(workspace, selectedComponent.id) ||
+                    (aiStatus === "loading" && aiStage === "component")
+                  }
+                >
+                  {aiStatus === "loading" && aiStage === "component"
+                    ? "Refining Component..."
+                    : "Refine With AI"}
+                </Button>
+                <Button onClick={() => setComponentDetailOpen(false)} tone="ghost">
+                  Close
+                </Button>
+              </div>
+            </div>
+            <div className="mt-4 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
+              <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <PreviewCard
+                  title="Behavioral Architecture Context"
+                  action={
+                    <ComponentOverlayDiagramButton
+                      title="Behavioral Architecture Context"
+                      chart={outputs.behavioralArchitectureDiagram}
+                    />
+                  }
+                >
+                  <MermaidPreview
+                    title={`${selectedComponent.name || "Component"} Behavioral Context`}
+                    chart={outputs.behavioralArchitectureDiagram}
+                    svgMode="natural"
+                    className="min-h-[420px]"
+                  />
+                </PreviewCard>
+                <PreviewCard
+                  title="Selected Component State Diagram"
+                  action={
+                    <ComponentOverlayDiagramButton
+                      title="Selected Component State Diagram"
+                      chart={outputs.componentStateDiagram}
+                    />
+                  }
+                >
+                  <MermaidPreview
+                    title={`${selectedComponent.name || "Component"} State Diagram`}
+                    chart={outputs.componentStateDiagram}
+                    svgMode="natural"
+                    className="min-h-[320px]"
+                  />
+                </PreviewCard>
+              </div>
+              <div className="overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <ComponentDetailEditor
+                  component={selectedComponent}
+                  onChange={(nextComponent) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        components: current.components.map((component) =>
+                          component.id === nextComponent.id ? nextComponent : component,
+                        ),
+                      }),
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <section className="rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel">
         <p className="text-xs uppercase tracking-[0.25em] text-copper">Generated Outputs</p>
@@ -673,22 +793,51 @@ export const FeatureWorkspacePage = ({
             previewMinWidth="min-w-[820px]"
             expandedMinWidth="min-w-[1200px]"
           />
-          <PreviewCard title="Candidate RTOS Task Table">
-            <pre className="overflow-auto rounded-2xl bg-mist p-4 text-xs text-ink">{outputs.taskTable}</pre>
-          </PreviewCard>
-          <PreviewCard title="Risk Review">
-            <ul className="space-y-2 text-sm text-ink">
-              {outputs.riskReview.map((risk) => (
-                <li key={risk} className="rounded-xl bg-mist px-3 py-2">
-                  {risk}
-                </li>
-              ))}
-            </ul>
-          </PreviewCard>
         </div>
       </section>
 
     </div>
+  );
+};
+
+const ComponentOverlayDiagramButton = ({
+  title,
+  chart,
+}: {
+  title: string;
+  chart: string;
+}) => {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <Button onClick={() => setExpanded(true)} tone="secondary">
+        Open Large View
+      </Button>
+      {expanded ? (
+        <div className="fixed inset-0 z-[60] bg-ink/75 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[96vw] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Expanded Diagram</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">{title}</h3>
+              </div>
+              <Button onClick={() => setExpanded(false)} tone="ghost">
+                Close
+              </Button>
+            </div>
+            <div className="mt-4 flex-1 overflow-auto rounded-2xl bg-mist/60 p-3">
+              <MermaidPreview
+                title={`${title} Expanded`}
+                chart={chart}
+                svgMode="natural"
+                className="min-h-full min-w-[1800px]"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 };
 
@@ -770,7 +919,7 @@ const DiagramPreviewCard = ({
 
       {expanded ? (
         <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
-          <div className="mx-auto flex h-full max-w-[1500px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+          <div className="mx-auto flex h-full max-w-[96vw] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.25em] text-copper">Expanded Diagram</p>
@@ -839,6 +988,7 @@ const WorkspaceSectionForm = ({
   selectedComponent,
   selectedComponentId,
   setSelectedComponentId,
+  onOpenComponentDetail,
   canGenerateAiDraft,
   aiStatus,
   aiStage,
@@ -849,7 +999,7 @@ const WorkspaceSectionForm = ({
   importInputRef,
   onGenerateAiDraft,
   onImportRequirementFile,
-  onRefineSelectedComponentWithAi,
+  onRefineComponentWithAi,
   onGenerateImplementationPlanWithAi,
   onChange,
 }: {
@@ -858,6 +1008,7 @@ const WorkspaceSectionForm = ({
   selectedComponent: FeatureComponent | null;
   selectedComponentId: string | null;
   setSelectedComponentId: (componentId: string | null) => void;
+  onOpenComponentDetail: (componentId: string) => void;
   canGenerateAiDraft: boolean;
   aiStatus: "idle" | "loading" | "success" | "error";
   aiStage: AiStage;
@@ -868,7 +1019,7 @@ const WorkspaceSectionForm = ({
   importInputRef: React.RefObject<HTMLInputElement>;
   onGenerateAiDraft: () => void;
   onImportRequirementFile: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
-  onRefineSelectedComponentWithAi: () => void;
+  onRefineComponentWithAi: (component: FeatureComponent | null) => Promise<void>;
   onGenerateImplementationPlanWithAi: () => void;
   onChange: (updater: (current: FeatureWorkspace) => FeatureWorkspace) => void;
 }) => {
@@ -1083,7 +1234,7 @@ const WorkspaceSectionForm = ({
                           components: current.components.filter((component) => component.id !== candidate.id),
                         }));
                       }}
-                      tone="ghost"
+                      tone="danger"
                     >
                       Remove Component
                     </Button>
@@ -1209,7 +1360,7 @@ const WorkspaceSectionForm = ({
                         },
                       }))
                     }
-                    tone="ghost"
+                    tone="danger"
                   >
                     Remove Interaction
                   </Button>
@@ -1245,10 +1396,10 @@ const WorkspaceSectionForm = ({
             </div>
           </Field>
           <div className="space-y-4">
-            <Field
-              label="Component Selection"
-              hint="Each feature workspace can hold multiple components. Refine one component at a time."
-            >
+          <Field
+            label="Component Details"
+            hint="Each feature workspace can hold multiple components. Refine one component at a time."
+          >
               <div className="space-y-3">
                 {workspace.components.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-6 text-sm text-slate">
@@ -1258,43 +1409,55 @@ const WorkspaceSectionForm = ({
                   workspace.components.map((component) => {
                     const active = component.id === selectedComponent?.id;
                     return (
-                      <button
+                      <div
                         key={component.id}
-                        type="button"
-                        onClick={() => setSelectedComponentId(component.id)}
-                        className={`w-full rounded-2xl border px-4 py-3 text-left ${
+                        className={`rounded-2xl border px-4 py-3 ${
                           active ? "border-copper bg-sand" : "border-slate/10 bg-white"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <span className="font-semibold">{component.name || "Unnamed component"}</span>
-                          <span className="text-xs uppercase tracking-[0.2em] text-copper">refine</span>
+                          <button
+                            type="button"
+                            onClick={() => onOpenComponentDetail(component.id)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <span className="block font-semibold">
+                              {component.name || "Unnamed component"}
+                            </span>
+                            <p className="mt-1 text-sm text-slate">
+                              {component.summary || "No component summary yet."}
+                            </p>
+                          </button>
+                          <div className="group relative shrink-0">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                setSelectedComponentId(component.id);
+                                await onRefineComponentWithAi(component);
+                              }}
+                              disabled={
+                                !canRefineComponentWithAi(workspace, component.id) ||
+                                (aiStatus === "loading" && aiStage === "component")
+                              }
+                              className="rounded-xl border border-copper/30 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-copper transition hover:bg-sand disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {aiStatus === "loading" &&
+                              aiStage === "component" &&
+                              selectedComponentId === component.id
+                                ? "refining"
+                                : "refine"}
+                            </button>
+                            <div className="pointer-events-none absolute right-0 top-full z-10 mt-2 hidden w-56 rounded-xl bg-ink px-3 py-2 text-[11px] leading-5 text-white shadow-lg group-hover:block">
+                              Use AI to refine this component’s internal design, including inputs, outputs, events, states, failures, and debugging hooks.
+                            </div>
+                          </div>
                         </div>
-                        <p className="mt-1 text-sm text-slate">
-                          {component.summary || "No component summary yet."}
-                        </p>
-                      </button>
+                      </div>
                     );
                   })
                 )}
               </div>
             </Field>
-            {selectedComponent ? (
-              <ComponentDetailEditor
-                component={selectedComponent}
-                onRefineWithAi={onRefineSelectedComponentWithAi}
-                aiBusy={aiStatus === "loading" && aiStage === "component"}
-                canRefineWithAi={canRefineComponentWithAi(workspace, selectedComponentId)}
-                onChange={(nextComponent) =>
-                  onChange((current) => ({
-                    ...current,
-                    components: current.components.map((component) =>
-                      component.id === nextComponent.id ? nextComponent : component,
-                    ),
-                  }))
-                }
-              />
-            ) : null}
           </div>
         </div>
       );
@@ -1355,7 +1518,7 @@ const WorkspaceSectionForm = ({
                         },
                       }))
                     }
-                    tone="ghost"
+                    tone="danger"
                   >
                     Remove Task
                   </Button>
@@ -1418,23 +1581,12 @@ const WorkspaceSectionForm = ({
 
 const ComponentDetailEditor = ({
   component,
-  onRefineWithAi,
-  aiBusy,
-  canRefineWithAi,
   onChange,
 }: {
   component: FeatureComponent;
-  onRefineWithAi: () => void;
-  aiBusy: boolean;
-  canRefineWithAi: boolean;
   onChange: (component: FeatureComponent) => void;
 }) => (
   <div className="space-y-4">
-    <div className="flex justify-start">
-      <Button onClick={onRefineWithAi} tone="primary" disabled={!canRefineWithAi || aiBusy}>
-        {aiBusy ? "Refining Component..." : "Refine Selected Component"}
-      </Button>
-    </div>
     <Field label="Component Summary">
       <TextArea
         value={component.summary}

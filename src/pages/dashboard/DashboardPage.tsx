@@ -5,10 +5,11 @@ type DashboardPageProps = {
   designs: FeatureWorkspace[];
   onCreate: () => void;
   onOpen: (designId: string) => void;
+  onRemove: (designId: string) => void;
   onLoadSample: () => void;
 };
 
-export const DashboardPage = ({ designs, onCreate, onOpen, onLoadSample }: DashboardPageProps) => (
+export const DashboardPage = ({ designs, onCreate, onOpen, onRemove, onLoadSample }: DashboardPageProps) => (
   <div className="grid gap-6 lg:grid-cols-[1.1fr_1.9fr]">
     <section className="rounded-[28px] border border-white/70 bg-ink p-6 text-white shadow-panel">
       <p className="text-xs uppercase tracking-[0.3em] text-sand/80">ArchFlow</p>
@@ -42,11 +43,9 @@ export const DashboardPage = ({ designs, onCreate, onOpen, onLoadSample }: Dashb
           </div>
         ) : (
           designs.map((design) => (
-            <button
+            <article
               key={design.id}
-              type="button"
-              onClick={() => onOpen(design.id)}
-              className="rounded-2xl border border-slate/10 bg-mist/65 p-5 text-left transition hover:-translate-y-0.5 hover:border-copper/40 hover:bg-white"
+              className="rounded-2xl border border-slate/10 bg-mist/65 p-5 transition hover:-translate-y-0.5 hover:border-copper/40 hover:bg-white"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -55,14 +54,30 @@ export const DashboardPage = ({ designs, onCreate, onOpen, onLoadSample }: Dashb
                     {design.requirement || "No requirement entered yet."}
                   </p>
                 </div>
-                <span className="rounded-full bg-white px-3 py-1 text-xs uppercase tracking-[0.2em] text-copper">
-                  Open
-                </span>
+                <div className="flex shrink-0 gap-2">
+                  <Button onClick={() => onOpen(design.id)} tone="secondary">
+                    Open
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Remove "${design.title}" from local storage? This cannot be undone.`,
+                        )
+                      ) {
+                        onRemove(design.id);
+                      }
+                    }}
+                    tone="danger"
+                  >
+                    Remove
+                  </Button>
+                </div>
               </div>
               <p className="mt-4 text-xs text-slate">
                 Updated {new Date(design.updatedAt).toLocaleString()}
               </p>
-            </button>
+            </article>
           ))
         )}
       </div>

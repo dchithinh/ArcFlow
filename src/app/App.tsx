@@ -16,6 +16,7 @@ type AppAction =
   | { type: "create"; workspace: FeatureWorkspace }
   | { type: "open"; workspaceId: string }
   | { type: "backToDashboard" }
+  | { type: "remove"; workspaceId: string }
   | { type: "replace"; workspace: FeatureWorkspace };
 
 const reducer = (state: AppState, action: AppAction): AppState => {
@@ -42,6 +43,12 @@ const reducer = (state: AppState, action: AppAction): AppState => {
       return {
         ...state,
         activeWorkspaceId: null,
+      };
+    case "remove":
+      return {
+        workspaces: state.workspaces.filter((workspace) => workspace.id !== action.workspaceId),
+        activeWorkspaceId:
+          state.activeWorkspaceId === action.workspaceId ? null : state.activeWorkspaceId,
       };
     case "replace":
       return {
@@ -127,6 +134,7 @@ export const App = () => {
           designs={state.workspaces}
           onCreate={() => dispatch({ type: "create", workspace: createEmptyWorkspace() })}
           onOpen={(designId) => dispatch({ type: "open", workspaceId: designId })}
+          onRemove={(workspaceId) => dispatch({ type: "remove", workspaceId })}
           onLoadSample={() =>
             dispatch({ type: "create", workspace: createSampleWorkspace() })
           }

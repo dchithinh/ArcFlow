@@ -312,7 +312,10 @@ const generateArchitectureFlowchart = (workspace: FeatureWorkspace): string => {
 ${lines.join("\n")}`;
 };
 
-const generateBehavioralArchitectureDiagram = (workspace: FeatureWorkspace): string => {
+const generateBehavioralArchitectureDiagram = (
+  workspace: FeatureWorkspace,
+  selectedComponentId?: string,
+): string => {
   const components =
     workspace.components.length > 0
       ? workspace.components
@@ -348,6 +351,7 @@ const generateBehavioralArchitectureDiagram = (workspace: FeatureWorkspace): str
     const stateGroupId = `${componentId}_states`;
     const roleNode = `${componentId}_role`;
     const summary = component.summary.trim() || "No responsibility summary yet";
+    const selected = selectedComponentId === component.id;
 
     const stateIds = new Map(
       component.states.map((state, stateIndex) => [
@@ -424,8 +428,18 @@ const generateBehavioralArchitectureDiagram = (workspace: FeatureWorkspace): str
       "    end",
       `    class ${componentId} componentCore`,
       `    class ${roleNode} componentMeta`,
-      `    style ${groupId} fill:#fff8ef,stroke:#b85f2c,stroke-width:3px,color:#081521`,
+      `    style ${groupId} fill:${selected ? "#fff2d7" : "#fff8ef"},stroke:${selected ? "#0f766e" : "#b85f2c"},stroke-width:${selected ? "5px" : "3px"},color:#081521`,
       `    style ${stateGroupId} fill:transparent,stroke:transparent`,
+      ...(selected
+        ? [
+            `    style ${componentId} fill:#f5ecd8,stroke:#0f766e,stroke-width:3px,color:#081521,font-weight:bold`,
+            `    style ${roleNode} fill:#fff7eb,stroke:#0f766e,stroke-width:2px,color:#081521`,
+            ...Array.from(stateIds.values()).map(
+              (stateId) =>
+                `    style ${stateId} fill:#fffbeb,stroke:#0f766e,stroke-width:2.5px,color:#081521`,
+            ),
+          ]
+        : []),
     ];
   });
 
@@ -689,7 +703,10 @@ export const generateWorkspaceOutputs = (
 ): WorkspaceOutputs => ({
   markdown: generateMarkdown(workspace),
   architectureFlowchart: generateArchitectureFlowchart(workspace),
-  behavioralArchitectureDiagram: generateBehavioralArchitectureDiagram(workspace),
+  behavioralArchitectureDiagram: generateBehavioralArchitectureDiagram(
+    workspace,
+    selectedComponentId,
+  ),
   componentStateDiagram: generateComponentStateDiagram(workspace, selectedComponentId),
   taskTable: generateTaskTable(workspace),
   riskReview: generateRiskReview(workspace),
