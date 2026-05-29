@@ -14,6 +14,9 @@ import {
   createEmptyComponent,
   createEmptyContextEntity,
   createEmptyContextFlow,
+  createEmptySequenceParticipant,
+  createEmptySequenceScenario,
+  createEmptySequenceStep,
 } from "../../features/workspaces/schema/defaults";
 import {
   canGenerateDiscoveryDraft,
@@ -37,6 +40,8 @@ import {
   type FeatureComponent,
   type FeatureWorkspace,
   type OwnershipDefinition,
+  type SequenceParticipant,
+  type SequenceStep,
   type WorkspaceSectionId,
 } from "../../features/workspaces/schema/workspace";
 import { generateWorkspaceOutputs } from "../../features/workspaces/generators";
@@ -202,7 +207,11 @@ export const FeatureWorkspacePage = ({
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(
     workspace.components[0]?.id ?? null,
   );
+  const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(
+    workspace.discovery.sequenceScenarios[0]?.id ?? null,
+  );
   const [componentDetailOpen, setComponentDetailOpen] = useState(false);
+  const [scenarioDetailOpen, setScenarioDetailOpen] = useState(false);
   const [aiStatus, setAiStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [aiMessage, setAiMessage] = useState("");
   const [aiStage, setAiStage] = useState<AiStage>("discovery");
@@ -211,8 +220,13 @@ export const FeatureWorkspacePage = ({
   const [importMessage, setImportMessage] = useState("");
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const outputs = useMemo(
-    () => generateWorkspaceOutputs(workspace, selectedComponentId ?? undefined),
-    [selectedComponentId, workspace],
+    () =>
+      generateWorkspaceOutputs(
+        workspace,
+        selectedComponentId ?? undefined,
+        selectedScenarioId ?? undefined,
+      ),
+    [selectedComponentId, selectedScenarioId, workspace],
   );
 
   const startedSections = WORKSPACE_SECTIONS.filter((section) =>
@@ -221,6 +235,10 @@ export const FeatureWorkspacePage = ({
   const selectedComponent =
     workspace.components.find((component) => component.id === selectedComponentId) ??
     workspace.components[0] ??
+    null;
+  const selectedScenario =
+    workspace.discovery.sequenceScenarios.find((scenario) => scenario.id === selectedScenarioId) ??
+    workspace.discovery.sequenceScenarios[0] ??
     null;
 
   const updateTimestamp = (next: FeatureWorkspace): FeatureWorkspace => ({
@@ -238,6 +256,17 @@ export const FeatureWorkspacePage = ({
 
     setSelectedComponentId(workspace.components[0]?.id ?? null);
   }, [selectedComponentId, workspace.components]);
+
+  useEffect(() => {
+    if (
+      selectedScenarioId &&
+      workspace.discovery.sequenceScenarios.some((scenario) => scenario.id === selectedScenarioId)
+    ) {
+      return;
+    }
+
+    setSelectedScenarioId(workspace.discovery.sequenceScenarios[0]?.id ?? null);
+  }, [selectedScenarioId, workspace.discovery.sequenceScenarios]);
 
   useEffect(() => {
     if (aiStatus !== "loading") {
@@ -258,6 +287,12 @@ export const FeatureWorkspacePage = ({
       setComponentDetailOpen(false);
     }
   }, [componentDetailOpen, selectedComponent]);
+
+  useEffect(() => {
+    if (!selectedScenario && scenarioDetailOpen) {
+      setScenarioDetailOpen(false);
+    }
+  }, [scenarioDetailOpen, selectedScenario]);
 
   const canGenerateAiDraft = canGenerateDiscoveryDraft(workspace);
 
@@ -653,9 +688,15 @@ export const FeatureWorkspacePage = ({
             selectedComponent={selectedComponent}
             selectedComponentId={selectedComponentId}
             setSelectedComponentId={setSelectedComponentId}
+            selectedScenario={selectedScenario}
+            setSelectedScenarioId={setSelectedScenarioId}
             onOpenComponentDetail={(componentId) => {
               setSelectedComponentId(componentId);
               setComponentDetailOpen(true);
+            }}
+            onOpenScenarioDetail={(scenarioId) => {
+              setSelectedScenarioId(scenarioId);
+              setScenarioDetailOpen(true);
             }}
             canGenerateAiDraft={canGenerateAiDraft}
             aiStatus={aiStatus}
@@ -760,65 +801,146 @@ export const FeatureWorkspacePage = ({
         </div>
       ) : null}
 
-      <section className="rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel">
-        <p className="text-xs uppercase tracking-[0.25em] text-copper">Generated Outputs</p>
-        <h2 className="mt-2 text-2xl font-semibold">Live Preview</h2>
-        <div className="mt-2 rounded-2xl bg-mist px-4 py-3 text-sm text-slate">
-          {selectedComponent
-            ? `Component state preview is currently focused on "${selectedComponent.name || "Selected Component"}".`
-            : "No component selected yet. Add candidate components to refine the design."}
+      {scenarioDetailOpen && selectedScenario ? (
+        <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[1200px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Runtime Scenario</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">
+                  {selectedScenario.name || "Unnamed scenario"}
+                </h3>
+                <p className="mt-1 text-sm text-slate">
+                  Refine this runtime scenario in a focused page with more room for participants, ordered steps, and the generated sequence view.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setScenarioDetailOpen(false)} tone="ghost">
+                  Close
+                </Button>
+              </div>
+            </div>
+            <div className="mt-4 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
+              <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <PreviewCard
+                  title="Selected Sequence Diagram"
+                  action={
+                    <ComponentOverlayDiagramButton
+                      title={selectedScenario.name || "Selected Sequence Diagram"}
+                      chart={outputs.sequenceDiagram}
+                    />
+                  }
+                >
+                  <MermaidPreview
+                    title={`${selectedScenario.name || "Scenario"} Sequence Diagram`}
+                    chart={outputs.sequenceDiagram}
+                    svgMode="natural"
+                    className="min-h-[420px]"
+                  />
+                </PreviewCard>
+              </div>
+              <div className="overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <SequenceScenarioDetailEditor
+                  scenario={selectedScenario}
+                  onChange={(nextScenario) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          sequenceScenarios: current.discovery.sequenceScenarios.map((scenario) =>
+                            scenario.id === nextScenario.id ? nextScenario : scenario,
+                          ),
+                        },
+                      }),
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="mt-5 space-y-5">
-          <PreviewCard
-            title="Feature Workspace Markdown"
-            action={
-              <Button onClick={() => onExport(outputs.markdown, workspace.title)}>
-                Export Markdown
-              </Button>
-            }
-          >
-            <pre className="max-h-[420px] overflow-auto rounded-2xl bg-ink p-4 text-xs text-white">
-              {outputs.markdown}
-            </pre>
-          </PreviewCard>
-          <DiagramPreviewCard
-            title="Context Diagram"
-            chart={outputs.contextDiagram}
-            previewTitle="Context Diagram"
-            expandedTitle="Context Diagram"
-            previewMinHeight="min-h-[360px]"
-            previewMinWidth="min-w-[860px]"
-            expandedMinWidth="min-w-[1300px]"
-          />
-          <DiagramPreviewCard
-            title="Feature Architecture Flowchart"
-            chart={outputs.architectureFlowchart}
-            previewTitle="Architecture Flowchart"
-            expandedTitle="Feature Architecture Flowchart"
-            previewMinHeight="min-h-[420px]"
-            previewMinWidth="min-w-[980px]"
-            expandedMinWidth="min-w-[1400px]"
-          />
-          <DiagramPreviewCard
-            title="Behavioral Architecture Diagram"
-            chart={outputs.behavioralArchitectureDiagram}
-            previewTitle="Behavioral Architecture Diagram"
-            expandedTitle="Behavioral Architecture Diagram"
-            previewMinHeight="min-h-[460px]"
-            previewMinWidth="min-w-[1100px]"
-            expandedMinWidth="min-w-[1600px]"
-          />
-          <DiagramPreviewCard
-            title="Selected Component State Diagram"
-            chart={outputs.componentStateDiagram}
-            previewTitle="Component State Diagram"
-            expandedTitle="Selected Component State Diagram"
-            previewMinHeight="min-h-[360px]"
-            previewMinWidth="min-w-[820px]"
-            expandedMinWidth="min-w-[1200px]"
-          />
-        </div>
-      </section>
+      ) : null}
+
+      {activeSection === "featureDefinition" ? (
+        <section className="rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel">
+          <p className="text-xs uppercase tracking-[0.25em] text-copper">Generated Outputs</p>
+          <h2 className="mt-2 text-2xl font-semibold">Feature Workspace Markdown</h2>
+          <div className="mt-5">
+            <PreviewCard
+              title="Feature Workspace Markdown"
+              action={
+                <Button onClick={() => onExport(outputs.markdown, workspace.title)}>
+                  Export Markdown
+                </Button>
+              }
+            >
+              <pre className="max-h-[420px] overflow-auto rounded-2xl bg-ink p-4 text-xs text-white">
+                {outputs.markdown}
+              </pre>
+            </PreviewCard>
+          </div>
+        </section>
+      ) : null}
+
+      {activeSection === "featureDesign" ? (
+        <section className="rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel">
+          <p className="text-xs uppercase tracking-[0.25em] text-copper">Generated Outputs</p>
+          <h2 className="mt-2 text-2xl font-semibold">Live Diagrams</h2>
+          <div className="mt-2 rounded-2xl bg-mist px-4 py-3 text-sm text-slate">
+            {selectedComponent
+              ? `Component state preview is currently focused on "${selectedComponent.name || "Selected Component"}".`
+              : "No component selected yet. Add candidate components to refine the design."}
+          </div>
+          <div className="mt-5 space-y-5">
+            <DiagramPreviewCard
+              title="Context Diagram"
+              chart={outputs.contextDiagram}
+              previewTitle="Context Diagram"
+              expandedTitle="Context Diagram"
+              previewMinHeight="min-h-[360px]"
+              previewMinWidth="min-w-[860px]"
+              expandedMinWidth="min-w-[1300px]"
+            />
+            <DiagramPreviewCard
+              title="Feature Architecture Flowchart"
+              chart={outputs.architectureFlowchart}
+              previewTitle="Architecture Flowchart"
+              expandedTitle="Feature Architecture Flowchart"
+              previewMinHeight="min-h-[420px]"
+              previewMinWidth="min-w-[980px]"
+              expandedMinWidth="min-w-[1400px]"
+            />
+            <DiagramPreviewCard
+              title="Behavioral Architecture Diagram"
+              chart={outputs.behavioralArchitectureDiagram}
+              previewTitle="Behavioral Architecture Diagram"
+              expandedTitle="Behavioral Architecture Diagram"
+              previewMinHeight="min-h-[460px]"
+              previewMinWidth="min-w-[1100px]"
+              expandedMinWidth="min-w-[1600px]"
+            />
+            <DiagramPreviewCard
+              title="Selected Component State Diagram"
+              chart={outputs.componentStateDiagram}
+              previewTitle="Component State Diagram"
+              expandedTitle="Selected Component State Diagram"
+              previewMinHeight="min-h-[360px]"
+              previewMinWidth="min-w-[820px]"
+              expandedMinWidth="min-w-[1200px]"
+            />
+            <DiagramPreviewCard
+              title={selectedScenario ? `Sequence Diagram: ${selectedScenario.name || "Selected Scenario"}` : "Sequence Diagram"}
+              chart={outputs.sequenceDiagram}
+              previewTitle="Sequence Diagram"
+              expandedTitle={selectedScenario ? `Sequence Diagram: ${selectedScenario.name || "Selected Scenario"}` : "Sequence Diagram"}
+              previewMinHeight="min-h-[360px]"
+              previewMinWidth="min-w-[980px]"
+              expandedMinWidth="min-w-[1400px]"
+            />
+          </div>
+        </section>
+      ) : null}
 
     </div>
   );
@@ -1030,13 +1152,299 @@ const syncComponentFromCandidate = (
   );
 };
 
+const SequenceScenarioDetailEditor = ({
+  scenario,
+  onChange,
+}: {
+  scenario: FeatureWorkspace["discovery"]["sequenceScenarios"][number];
+  onChange: (nextScenario: FeatureWorkspace["discovery"]["sequenceScenarios"][number]) => void;
+}) => {
+  const updateParticipant = (
+    participantId: string,
+    patch: Partial<SequenceParticipant>,
+  ) => {
+    onChange({
+      ...scenario,
+      participants: scenario.participants.map((participant) =>
+        participant.id === participantId ? { ...participant, ...patch } : participant,
+      ),
+    });
+  };
+
+  const updateStep = (stepId: string, patch: Partial<SequenceStep>) => {
+    onChange({
+      ...scenario,
+      steps: scenario.steps.map((step) =>
+        step.id === stepId ? { ...step, ...patch } : step,
+      ),
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <Field
+        label="Scenario Metadata"
+        hint="Define the scenario purpose, what starts it, and the expected result."
+      >
+        <div className="grid gap-3">
+          <div className="space-y-1.5">
+            <SectionInputLabel>Scenario Name</SectionInputLabel>
+            <TextInput
+              value={scenario.name}
+              onChange={(value) => onChange({ ...scenario, name: value })}
+              placeholder="Handle a valid command packet"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <SectionInputLabel>Scenario Goal</SectionInputLabel>
+            <TextArea
+              value={scenario.goal}
+              onChange={(value) => onChange({ ...scenario, goal: value })}
+              placeholder="What success looks like for this runtime flow."
+            />
+          </div>
+          <div className="space-y-1.5">
+            <SectionInputLabel>Trigger</SectionInputLabel>
+            <TextArea
+              value={scenario.trigger}
+              onChange={(value) => onChange({ ...scenario, trigger: value })}
+              placeholder="What starts this scenario?"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <SectionInputLabel>Outcome</SectionInputLabel>
+            <TextArea
+              value={scenario.outcome}
+              onChange={(value) => onChange({ ...scenario, outcome: value })}
+              placeholder="What should be true when the flow completes?"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <SectionInputLabel>Failure Path</SectionInputLabel>
+            <TextArea
+              value={scenario.failurePath ?? ""}
+              onChange={(value) => onChange({ ...scenario, failurePath: value })}
+              placeholder="Optional alternate or failure outcome."
+            />
+          </div>
+        </div>
+      </Field>
+
+      <Field
+        label="Participants"
+        hint="List the actors, components, devices, or systems that appear in this scenario."
+      >
+        <div className="space-y-4">
+          {scenario.participants.length === 0 ? (
+            <p className="text-sm text-slate">No participants yet.</p>
+          ) : (
+            scenario.participants.map((participant) => (
+              <div
+                key={participant.id}
+                className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
+              >
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Participant Name</SectionInputLabel>
+                  <TextInput
+                    value={participant.name}
+                    onChange={(value) => updateParticipant(participant.id, { name: value })}
+                    placeholder="Participant name"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Participant Type</SectionInputLabel>
+                  <select
+                    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                    value={participant.kind}
+                    onChange={(event) =>
+                      updateParticipant(participant.id, {
+                        kind: event.target.value as SequenceParticipant["kind"],
+                      })
+                    }
+                  >
+                    {["actor", "component", "system", "device", "service"].map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Description</SectionInputLabel>
+                  <TextArea
+                    value={participant.description ?? ""}
+                    onChange={(value) =>
+                      updateParticipant(participant.id, { description: value })
+                    }
+                    placeholder="What role this participant plays in the scenario."
+                  />
+                </div>
+                <Button
+                  onClick={() =>
+                    onChange({
+                      ...scenario,
+                      participants: scenario.participants.filter(
+                        (item) => item.id !== participant.id,
+                      ),
+                      steps: scenario.steps.map((step) => ({
+                        ...step,
+                        fromParticipantId:
+                          step.fromParticipantId === participant.id ? "" : step.fromParticipantId,
+                        toParticipantId:
+                          step.toParticipantId === participant.id ? "" : step.toParticipantId,
+                      })),
+                    })
+                  }
+                  tone="danger"
+                  size="compact"
+                >
+                  Remove Participant
+                </Button>
+              </div>
+            ))
+          )}
+          <Button
+            onClick={() =>
+              onChange({
+                ...scenario,
+                participants: [...scenario.participants, createEmptySequenceParticipant()],
+              })
+            }
+          >
+            Add Participant
+          </Button>
+        </div>
+      </Field>
+
+      <Field
+        label="Ordered Steps"
+        hint="Describe the step-by-step messages or events between participants."
+      >
+        <div className="space-y-4">
+          {scenario.steps.length === 0 ? (
+            <p className="text-sm text-slate">No steps yet.</p>
+          ) : (
+            scenario.steps.map((step) => (
+              <div
+                key={step.id}
+                className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
+              >
+                <div className="space-y-1.5">
+                  <SectionInputLabel>From</SectionInputLabel>
+                  <select
+                    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                    value={step.fromParticipantId}
+                    onChange={(event) =>
+                      updateStep(step.id, { fromParticipantId: event.target.value })
+                    }
+                  >
+                    <option value="">Select sender</option>
+                    {scenario.participants.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.name || "Unnamed participant"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>To</SectionInputLabel>
+                  <select
+                    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                    value={step.toParticipantId}
+                    onChange={(event) =>
+                      updateStep(step.id, { toParticipantId: event.target.value })
+                    }
+                  >
+                    <option value="">Select receiver</option>
+                    {scenario.participants.map((participant) => (
+                      <option key={participant.id} value={participant.id}>
+                        {participant.name || "Unnamed participant"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Step Type</SectionInputLabel>
+                  <select
+                    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                    value={step.type}
+                    onChange={(event) =>
+                      updateStep(step.id, {
+                        type: event.target.value as SequenceStep["type"],
+                      })
+                    }
+                  >
+                    {["call", "async", "return", "event"].map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Message</SectionInputLabel>
+                  <TextArea
+                    value={step.message}
+                    onChange={(value) => updateStep(step.id, { message: value })}
+                    placeholder="What is sent or performed at this step?"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Note</SectionInputLabel>
+                  <TextArea
+                    value={step.note ?? ""}
+                    onChange={(value) => updateStep(step.id, { note: value })}
+                    placeholder="Optional note or constraint for this step."
+                  />
+                </div>
+                <Button
+                  onClick={() =>
+                    onChange({
+                      ...scenario,
+                      steps: scenario.steps.filter((item) => item.id !== step.id),
+                    })
+                  }
+                  tone="danger"
+                  size="compact"
+                >
+                  Remove Step
+                </Button>
+              </div>
+            ))
+          )}
+          <Button
+            onClick={() => {
+              const firstParticipantId = scenario.participants[0]?.id ?? "";
+              const secondParticipantId =
+                scenario.participants[1]?.id ?? firstParticipantId;
+              onChange({
+                ...scenario,
+                steps: [
+                  ...scenario.steps,
+                  createEmptySequenceStep(firstParticipantId, secondParticipantId),
+                ],
+              });
+            }}
+            disabled={scenario.participants.length === 0}
+          >
+            Add Step
+          </Button>
+        </div>
+      </Field>
+    </div>
+  );
+};
+
 const WorkspaceSectionForm = ({
   activeSection,
   workspace,
   selectedComponent,
   selectedComponentId,
   setSelectedComponentId,
+  selectedScenario,
+  setSelectedScenarioId,
   onOpenComponentDetail,
+  onOpenScenarioDetail,
   canGenerateAiDraft,
   aiStatus,
   aiStage,
@@ -1054,7 +1462,10 @@ const WorkspaceSectionForm = ({
   selectedComponent: FeatureComponent | null;
   selectedComponentId: string | null;
   setSelectedComponentId: (componentId: string | null) => void;
+  selectedScenario: FeatureWorkspace["discovery"]["sequenceScenarios"][number] | null;
+  setSelectedScenarioId: (scenarioId: string | null) => void;
   onOpenComponentDetail: (componentId: string) => void;
+  onOpenScenarioDetail: (scenarioId: string) => void;
   canGenerateAiDraft: boolean;
   aiStatus: "idle" | "loading" | "success" | "error";
   aiStage: AiStage;
@@ -1067,6 +1478,11 @@ const WorkspaceSectionForm = ({
   onGenerateImplementationPlanWithAi: () => void;
   onChange: (updater: (current: FeatureWorkspace) => FeatureWorkspace) => void;
 }) => {
+  const updateTimestamp = (next: FeatureWorkspace): FeatureWorkspace => ({
+    ...next,
+    updatedAt: new Date().toISOString(),
+  });
+
   switch (activeSection) {
     case "featureDefinition":
       return (
@@ -1808,7 +2224,84 @@ const WorkspaceSectionForm = ({
             title="Sequence Diagram"
             description="Shows how one scenario unfolds step by step across components over time."
           >
-            <PlannedViewNotice message="Not implemented yet. This will model ordered runtime scenarios such as command handling, startup, error recovery, or user interaction flows." />
+            <Field
+              label="Runtime Scenarios"
+              hint="Capture one scenario at a time so the sequence diagram can show who participates and what order messages occur."
+            >
+              <div className="space-y-3">
+                {workspace.discovery.sequenceScenarios.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-6 text-sm text-slate">
+                    No scenarios yet. Add one to describe a concrete runtime flow such as command handling, startup, or error recovery.
+                  </div>
+                ) : (
+                  workspace.discovery.sequenceScenarios.map((scenario) => {
+                    const active = scenario.id === selectedScenario?.id;
+                    return (
+                      <div
+                        key={scenario.id}
+                        className={`rounded-2xl border px-4 py-3 ${
+                          active ? "border-copper bg-sand" : "border-slate/10 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <button
+                            type="button"
+                            onClick={() => onOpenScenarioDetail(scenario.id)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <span className="block font-semibold">
+                              {scenario.name || "Unnamed scenario"}
+                            </span>
+                            <p className="mt-1 text-sm text-slate">
+                              {scenario.trigger || "No trigger documented yet."}
+                            </p>
+                          </button>
+                          <Button
+                            onClick={() =>
+                              onChange((current) =>
+                                updateTimestamp({
+                                  ...current,
+                                  discovery: {
+                                    ...current.discovery,
+                                    sequenceScenarios: current.discovery.sequenceScenarios.filter(
+                                      (item) => item.id !== scenario.id,
+                                    ),
+                                  },
+                                }),
+                              )
+                            }
+                            tone="danger"
+                            size="compact"
+                          >
+                            Remove Scenario
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                <Button
+                  onClick={() => {
+                    const nextScenario = createEmptySequenceScenario();
+                    setSelectedScenarioId(nextScenario.id);
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          sequenceScenarios: [
+                            ...current.discovery.sequenceScenarios,
+                            nextScenario,
+                          ],
+                        },
+                      }),
+                    );
+                  }}
+                >
+                  Add Scenario
+                </Button>
+              </div>
+            </Field>
           </ArchitectureViewPanel>
 
           <ArchitectureViewPanel

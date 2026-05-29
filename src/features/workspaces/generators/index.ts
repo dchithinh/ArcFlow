@@ -6,6 +6,7 @@ export type WorkspaceOutputs = {
   architectureFlowchart: string;
   behavioralArchitectureDiagram: string;
   componentStateDiagram: string;
+  sequenceDiagram: string;
   taskTable: string;
   riskReview: string[];
 };
@@ -26,6 +27,37 @@ const getComponentById = (
 const cleanNode = (value: string): string =>
   value.replace(/[^a-zA-Z0-9_]/g, "_") || "Node";
 const escapeLabel = (value: string): string => value.replace(/"/g, "&quot;");
+const wrapText = (value: string, maxCharsPerLine: number): string => {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const words = normalized.split(" ");
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    if (!currentLine) {
+      currentLine = word;
+      continue;
+    }
+
+    if (`${currentLine} ${word}`.length <= maxCharsPerLine) {
+      currentLine = `${currentLine} ${word}`;
+      continue;
+    }
+
+    lines.push(currentLine);
+    currentLine = word;
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines.map(escapeLabel).join("<br/>");
+};
 const componentAnchorId = (componentId: string, index: number): string =>
   cleanNode(`${componentId || "component"}_${index}`);
 const shorten = (value: string, maxLength = 52): string =>
@@ -255,6 +287,45 @@ ${workspace.discovery.interactions.length > 0
         })
         .join("\n")
     : "- No interactions documented yet"}
+
+## Sequence Scenarios
+${workspace.discovery.sequenceScenarios.length > 0
+    ? workspace.discovery.sequenceScenarios
+        .map(
+          (scenario) => `### ${scenario.name || "Unnamed scenario"}
+- Goal: ${scenario.goal || "Not documented yet"}
+- Trigger: ${scenario.trigger || "Not documented yet"}
+- Outcome: ${scenario.outcome || "Not documented yet"}
+- Failure Path: ${scenario.failurePath || "Not documented yet"}
+- Participants:
+${scenario.participants.length > 0
+              ? scenario.participants
+                  .map(
+                    (participant) =>
+                      `  - ${participant.name || "Unnamed participant"} (${participant.kind})${participant.description ? `: ${participant.description}` : ""}`,
+                  )
+                  .join("\n")
+              : "  - None documented yet"}
+- Steps:
+${scenario.steps.length > 0
+              ? scenario.steps
+                  .map((step, index) => {
+                    const fromName =
+                      scenario.participants.find(
+                        (participant) => participant.id === step.fromParticipantId,
+                      )?.name || "Unknown sender";
+                    const toName =
+                      scenario.participants.find(
+                        (participant) => participant.id === step.toParticipantId,
+                      )?.name || "Unknown receiver";
+                    return `  - ${index + 1}. ${fromName} -> ${toName} [${step.type}]: ${step.message || "No message"}${step.note ? ` (${step.note})` : ""}`;
+                  })
+                  .join("\n")
+              : "  - None documented yet"}
+`,
+        )
+        .join("\n")
+    : "- No sequence scenarios documented yet"}
 
 ## Implementation Tasks
 ${workspace.discovery.candidateTasks.length > 0
@@ -774,6 +845,113 @@ const generateComponentStateDiagram = (
   return lines.join("\n");
 };
 
+const sequenceArrowForType = (
+  type: FeatureWorkspace["discovery"]["sequenceScenarios"][number]["steps"][number]["type"],
+): string => {
+  switch (type) {
+    case "async":
+      return "->>";
+    case "return":
+      return "-->>";
+    default:
+      return "->>";
+  }
+};
+
+const sequenceParticipantDeclaration = (
+  participant: FeatureWorkspace["discovery"]["sequenceScenarios"][number]["participants"][number],
+  alias: string,
+): string => {
+  const label = wrapText(participant.name.trim() || "Unnamed participant", 18);
+  switch (participant.kind) {
+    case "actor":
+      return `    actor ${alias} as ${escapeLabel(label)}`;
+    case "device":
+      return `    participant ${alias} as ${escapeLabel(label)}`;
+    case "service":
+      return `    participant ${alias} as ${escapeLabel(label)}`;
+    case "system":
+      return `    participant ${alias} as ${escapeLabel(label)}`;
+    default:
+      return `    participant ${alias} as ${escapeLabel(label)}`;
+  }
+};
+
+const generateSequenceDiagram = (
+  workspace: FeatureWorkspace,
+  selectedScenarioId?: string,
+): string => {
+  const scenario =
+    workspace.discovery.sequenceScenarios.find((item) => item.id === selectedScenarioId) ??
+    workspace.discovery.sequenceScenarios[0];
+
+  if (!scenario) {
+    return `sequenceDiagram
+    autonumber
+    participant Feature as ${escapeLabel(workspace.title || "Feature Workspace")}
+    Note over Feature: Add a scenario to model step-by-step runtime behavior.`;
+  }
+
+  const participantAliases = new Map(
+    scenario.participants.map((participant, index) => [
+      participant.id,
+      `P${index + 1}`,
+    ]),
+  );
+  const firstAlias = participantAliases.values().next().value || "Feature";
+
+  const participantLines =
+    scenario.participants.length > 0
+      ? scenario.participants.map((participant) =>
+          sequenceParticipantDeclaration(
+            participant,
+            participantAliases.get(participant.id) || cleanNode(participant.name || "P"),
+          ),
+        )
+      : [`    participant Feature as ${escapeLabel(workspace.title || "Feature Workspace")}`];
+
+  const introNotes = [
+    scenario.goal ? `Goal: ${scenario.goal}` : "",
+    scenario.trigger ? `Trigger: ${scenario.trigger}` : "",
+  ]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => `    Note left of ${firstAlias}: ${wrapText(value, 36)}`);
+
+  const stepLines =
+    scenario.steps.length > 0
+      ? scenario.steps.flatMap((step) => {
+          const fromAlias =
+            participantAliases.get(step.fromParticipantId) ||
+            firstAlias;
+          const toAlias =
+            participantAliases.get(step.toParticipantId) ||
+            firstAlias;
+          const message = wrapText(step.message || "message", 28);
+          const lines = [
+            `    ${fromAlias}${sequenceArrowForType(step.type)}${toAlias}: ${message}`,
+          ];
+          if (step.note?.trim()) {
+            lines.push(
+              `    Note over ${fromAlias},${toAlias}: ${wrapText(step.note.trim(), 42)}`,
+            );
+          }
+          return lines;
+        })
+      : [`    Note over ${firstAlias}: Add steps to render the runtime flow.`];
+
+  const closingNotes = [scenario.outcome.trim(), scenario.failurePath?.trim() || ""]
+    .filter(Boolean)
+    .map((value) => `    Note left of ${firstAlias}: ${wrapText(value, 36)}`);
+
+  return `sequenceDiagram
+    autonumber
+    %% ${escapeLabel(scenario.name || "Sequence Scenario")}
+${participantLines.join("\n")}
+${introNotes.length > 0 ? `${introNotes.join("\n")}\n` : ""}${stepLines.join("\n")}
+${closingNotes.join("\n")}`;
+};
+
 const generateTaskTable = (workspace: FeatureWorkspace): string => {
   const header = `| Task | Responsibility | Priority | Type | Trigger | May Block |
 |---|---|---|---|---|---|`;
@@ -827,6 +1005,7 @@ const generateRiskReview = (workspace: FeatureWorkspace): string[] => {
 export const generateWorkspaceOutputs = (
   workspace: FeatureWorkspace,
   selectedComponentId?: string,
+  selectedScenarioId?: string,
 ): WorkspaceOutputs => ({
   markdown: generateMarkdown(workspace),
   contextDiagram: generateContextDiagram(workspace),
@@ -836,6 +1015,7 @@ export const generateWorkspaceOutputs = (
     selectedComponentId,
   ),
   componentStateDiagram: generateComponentStateDiagram(workspace, selectedComponentId),
+  sequenceDiagram: generateSequenceDiagram(workspace, selectedScenarioId),
   taskTable: generateTaskTable(workspace),
   riskReview: generateRiskReview(workspace),
 });

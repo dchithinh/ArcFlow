@@ -42,6 +42,21 @@ export const isWorkspaceSectionStarted = (
       ) ||
       workspace.discovery.interactions.some(
         (interaction) => hasText(interaction.data) || hasText(interaction.notes),
+      ) ||
+      workspace.discovery.sequenceScenarios.some(
+        (scenario) =>
+          hasText(scenario.name) ||
+          hasText(scenario.goal) ||
+          hasText(scenario.trigger) ||
+          hasText(scenario.outcome) ||
+          hasText(scenario.failurePath) ||
+          scenario.participants.some(
+            (participant) =>
+              hasText(participant.name) || hasText(participant.description),
+          ) ||
+          scenario.steps.some(
+            (step) => hasText(step.message) || hasText(step.note),
+          ),
       );
     case "implementationPlan":
       return (

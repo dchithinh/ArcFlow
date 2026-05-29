@@ -18,6 +18,8 @@ export type ContextEntityKind =
   | "actuator"
   | "other";
 export type ContextFlowDirection = "inbound" | "outbound" | "bidirectional";
+export type SequenceParticipantKind = "actor" | "component" | "system" | "device" | "service";
+export type SequenceStepType = "call" | "async" | "return" | "event";
 
 export type WorkspaceSectionId =
   | "featureDefinition"
@@ -70,6 +72,33 @@ export type ContextFlow = {
   direction: ContextFlowDirection;
   label: string;
   description?: string;
+};
+
+export type SequenceParticipant = {
+  id: string;
+  name: string;
+  kind: SequenceParticipantKind;
+  description?: string;
+};
+
+export type SequenceStep = {
+  id: string;
+  fromParticipantId: string;
+  toParticipantId: string;
+  message: string;
+  type: SequenceStepType;
+  note?: string;
+};
+
+export type SequenceScenario = {
+  id: string;
+  name: string;
+  goal: string;
+  trigger: string;
+  outcome: string;
+  failurePath?: string;
+  participants: SequenceParticipant[];
+  steps: SequenceStep[];
 };
 
 export type ComponentCandidate = {
@@ -137,6 +166,7 @@ export type FeatureWorkspace = {
     responsibilities: string[];
     candidateComponents: ComponentCandidate[];
     interactions: ComponentInteraction[];
+    sequenceScenarios: SequenceScenario[];
     candidateTasks: CandidateTask[];
     systemRisks: string[];
   };

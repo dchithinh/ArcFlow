@@ -21,6 +21,11 @@ const formatSvg = (svg: string, svgMode: "fit" | "natural"): string => {
   );
 };
 
+const toMermaidRenderId = (title: string): string =>
+  `mermaid-${title.replace(/[^a-zA-Z0-9_-]+/g, "-")}-${Math.random()
+    .toString(36)
+    .slice(2, 7)}`;
+
 export const MermaidPreview = ({
   chart,
   title,
@@ -73,7 +78,7 @@ export const MermaidPreview = ({
 
         await mermaid.parse(chart, { suppressErrors: false });
         const result = await mermaid.render(
-          `mermaid-${title.replace(/\s+/g, "-")}-${Math.random().toString(36).slice(2, 7)}`,
+          toMermaidRenderId(title),
           chart,
         );
 

@@ -5,6 +5,9 @@ import type {
   ContextFlow,
   FeatureComponent,
   FeatureWorkspace,
+  SequenceParticipant,
+  SequenceScenario,
+  SequenceStep,
 } from "./workspace";
 
 const createId = (prefix: string): string =>
@@ -64,6 +67,36 @@ export const createEmptyContextFlow = (entityId = ""): ContextFlow => ({
   description: "",
 });
 
+export const createEmptySequenceParticipant = (): SequenceParticipant => ({
+  id: createId("sequence-participant"),
+  name: "",
+  kind: "component",
+  description: "",
+});
+
+export const createEmptySequenceStep = (
+  fromParticipantId = "",
+  toParticipantId = "",
+): SequenceStep => ({
+  id: createId("sequence-step"),
+  fromParticipantId,
+  toParticipantId,
+  message: "",
+  type: "call",
+  note: "",
+});
+
+export const createEmptySequenceScenario = (): SequenceScenario => ({
+  id: createId("sequence-scenario"),
+  name: "",
+  goal: "",
+  trigger: "",
+  outcome: "",
+  failurePath: "",
+  participants: [],
+  steps: [],
+});
+
 export const createEmptyWorkspace = (): FeatureWorkspace => ({
   id: createId("workspace"),
   title: "Untitled feature workspace",
@@ -84,6 +117,7 @@ export const createEmptyWorkspace = (): FeatureWorkspace => ({
     responsibilities: [],
     candidateComponents: [],
     interactions: [],
+    sequenceScenarios: [],
     candidateTasks: [],
     systemRisks: [],
   },
@@ -137,6 +171,36 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
     name: "Runtime Configuration Store",
     kind: "system",
     description: "Shared configuration state affected by validated commands.",
+  };
+  const terminalParticipant: SequenceParticipant = {
+    id: createId("sequence-participant"),
+    name: "Operator Terminal",
+    kind: "actor",
+    description: "Originates configuration commands and reads responses.",
+  };
+  const ingressParticipant: SequenceParticipant = {
+    id: createId("sequence-participant"),
+    name: "Command Ingress",
+    kind: "component",
+    description: "Frames UART traffic into packets.",
+  };
+  const parserParticipant: SequenceParticipant = {
+    id: createId("sequence-participant"),
+    name: "Command Parser",
+    kind: "component",
+    description: "Validates and decodes commands.",
+  };
+  const coordinatorParticipant: SequenceParticipant = {
+    id: createId("sequence-participant"),
+    name: "Config Coordinator",
+    kind: "component",
+    description: "Applies validated updates.",
+  };
+  const reporterParticipant: SequenceParticipant = {
+    id: createId("sequence-participant"),
+    name: "Response Reporter",
+    kind: "component",
+    description: "Produces user-visible success or error feedback.",
   };
 
   return {
@@ -224,6 +288,62 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
           toComponentId: responseReporter.id,
           mechanism: "notification",
           data: "Apply result and status details",
+        },
+      ],
+      sequenceScenarios: [
+        {
+          id: createId("sequence-scenario"),
+          name: "Apply a valid UART configuration command",
+          goal: "Accept a valid command packet and apply the requested configuration change.",
+          trigger: "A complete UART command packet arrives from the operator terminal.",
+          outcome: "Runtime configuration is updated and a success response is reported.",
+          failurePath: "If validation fails, configuration is left unchanged and an error response is sent instead.",
+          participants: [
+            terminalParticipant,
+            ingressParticipant,
+            parserParticipant,
+            coordinatorParticipant,
+            reporterParticipant,
+          ],
+          steps: [
+            {
+              id: createId("sequence-step"),
+              fromParticipantId: terminalParticipant.id,
+              toParticipantId: ingressParticipant.id,
+              message: "Send UART command packet",
+              type: "async",
+              note: "Transport-facing ingress begins framing and integrity checks.",
+            },
+            {
+              id: createId("sequence-step"),
+              fromParticipantId: ingressParticipant.id,
+              toParticipantId: parserParticipant.id,
+              message: "Deliver framed command packet",
+              type: "async",
+            },
+            {
+              id: createId("sequence-step"),
+              fromParticipantId: parserParticipant.id,
+              toParticipantId: coordinatorParticipant.id,
+              message: "Apply validated command object",
+              type: "call",
+              note: "Only validated commands cross into configuration ownership.",
+            },
+            {
+              id: createId("sequence-step"),
+              fromParticipantId: coordinatorParticipant.id,
+              toParticipantId: reporterParticipant.id,
+              message: "Notify apply result",
+              type: "event",
+            },
+            {
+              id: createId("sequence-step"),
+              fromParticipantId: reporterParticipant.id,
+              toParticipantId: terminalParticipant.id,
+              message: "Return success acknowledgement",
+              type: "return",
+            },
+          ],
         },
       ],
       candidateTasks: [
