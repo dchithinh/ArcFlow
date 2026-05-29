@@ -57,7 +57,7 @@ export const StringListEditor = ({
                 value={item}
                 onChange={(value) => updateItem(index, value)}
                 placeholder={placeholder}
-                rows={2}
+                rows={1}
               />
             </div>
             <Button

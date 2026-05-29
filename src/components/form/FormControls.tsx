@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 
 type FieldProps = {
   label: string;
@@ -18,14 +18,47 @@ type TextInputProps = {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
-  rows?: number;
 };
 
-export const TextInput = ({ value, onChange, placeholder, rows = 2 }: TextInputProps) => (
-  <textarea
+const AutoTextarea = ({
+  value,
+  onChange,
+  placeholder,
+  rows,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  rows: number;
+}) => {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!ref.current) {
+      return;
+    }
+
+    ref.current.style.height = "auto";
+    ref.current.style.height = `${ref.current.scrollHeight}px`;
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      className="w-full resize-none overflow-hidden rounded-xl border border-slate/20 bg-white px-3 py-1.5 text-sm leading-5 text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+      value={value}
+      rows={rows}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+    />
+  );
+};
+
+export const TextInput = ({ value, onChange, placeholder }: TextInputProps) => (
+  <input
     className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+    type="text"
     value={value}
-    rows={rows}
     onChange={(event) => onChange(event.target.value)}
     placeholder={placeholder}
   />
@@ -38,14 +71,8 @@ type TextAreaProps = {
   rows?: number;
 };
 
-export const TextArea = ({ value, onChange, placeholder, rows = 4 }: TextAreaProps) => (
-  <textarea
-    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-    value={value}
-    rows={rows}
-    onChange={(event) => onChange(event.target.value)}
-    placeholder={placeholder}
-  />
+export const TextArea = ({ value, onChange, placeholder, rows = 1 }: TextAreaProps) => (
+  <AutoTextarea value={value} onChange={onChange} placeholder={placeholder} rows={rows} />
 );
 
 type ToggleProps = {
