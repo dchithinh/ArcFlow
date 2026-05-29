@@ -210,8 +210,12 @@ export const FeatureWorkspacePage = ({
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(
     workspace.discovery.sequenceScenarios[0]?.id ?? null,
   );
+  const [selectedInteractionIndex, setSelectedInteractionIndex] = useState<number | null>(
+    workspace.discovery.interactions.length > 0 ? 0 : null,
+  );
   const [componentDetailOpen, setComponentDetailOpen] = useState(false);
   const [scenarioDetailOpen, setScenarioDetailOpen] = useState(false);
+  const [interactionDetailOpen, setInteractionDetailOpen] = useState(false);
   const [aiStatus, setAiStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [aiMessage, setAiMessage] = useState("");
   const [aiStage, setAiStage] = useState<AiStage>("discovery");
@@ -240,6 +244,10 @@ export const FeatureWorkspacePage = ({
     workspace.discovery.sequenceScenarios.find((scenario) => scenario.id === selectedScenarioId) ??
     workspace.discovery.sequenceScenarios[0] ??
     null;
+  const selectedInteraction =
+    selectedInteractionIndex !== null
+      ? workspace.discovery.interactions[selectedInteractionIndex] ?? null
+      : workspace.discovery.interactions[0] ?? null;
 
   const updateTimestamp = (next: FeatureWorkspace): FeatureWorkspace => ({
     ...next,
@@ -269,6 +277,19 @@ export const FeatureWorkspacePage = ({
   }, [selectedScenarioId, workspace.discovery.sequenceScenarios]);
 
   useEffect(() => {
+    if (
+      selectedInteractionIndex !== null &&
+      workspace.discovery.interactions[selectedInteractionIndex]
+    ) {
+      return;
+    }
+
+    setSelectedInteractionIndex(
+      workspace.discovery.interactions.length > 0 ? 0 : null,
+    );
+  }, [selectedInteractionIndex, workspace.discovery.interactions]);
+
+  useEffect(() => {
     if (aiStatus !== "loading") {
       setAiElapsedSeconds(0);
       return;
@@ -293,6 +314,12 @@ export const FeatureWorkspacePage = ({
       setScenarioDetailOpen(false);
     }
   }, [scenarioDetailOpen, selectedScenario]);
+
+  useEffect(() => {
+    if (!selectedInteraction && interactionDetailOpen) {
+      setInteractionDetailOpen(false);
+    }
+  }, [interactionDetailOpen, selectedInteraction]);
 
   const canGenerateAiDraft = canGenerateDiscoveryDraft(workspace);
 
@@ -690,6 +717,7 @@ export const FeatureWorkspacePage = ({
             setSelectedComponentId={setSelectedComponentId}
             selectedScenario={selectedScenario}
             setSelectedScenarioId={setSelectedScenarioId}
+            selectedInteractionIndex={selectedInteractionIndex}
             onOpenComponentDetail={(componentId) => {
               setSelectedComponentId(componentId);
               setComponentDetailOpen(true);
@@ -697,6 +725,10 @@ export const FeatureWorkspacePage = ({
             onOpenScenarioDetail={(scenarioId) => {
               setSelectedScenarioId(scenarioId);
               setScenarioDetailOpen(true);
+            }}
+            onOpenInteractionDetail={(interactionIndex) => {
+              setSelectedInteractionIndex(interactionIndex);
+              setInteractionDetailOpen(true);
             }}
             canGenerateAiDraft={canGenerateAiDraft}
             aiStatus={aiStatus}
@@ -850,6 +882,68 @@ export const FeatureWorkspacePage = ({
                           ...current.discovery,
                           sequenceScenarios: current.discovery.sequenceScenarios.map((scenario) =>
                             scenario.id === nextScenario.id ? nextScenario : scenario,
+                          ),
+                        },
+                      }),
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {interactionDetailOpen && selectedInteraction ? (
+        <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[1200px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Interaction Detail</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">
+                  {formatInteractionName(workspace, selectedInteraction)}
+                </h3>
+                <p className="mt-1 text-sm text-slate">
+                  Refine this interaction in a focused page with more room for its direction, mechanism, data, and notes.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setInteractionDetailOpen(false)} tone="ghost">
+                  Close
+                </Button>
+              </div>
+            </div>
+            <div className="mt-4 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
+              <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <PreviewCard
+                  title="Interaction / Data Flow Context"
+                  action={
+                    <ComponentOverlayDiagramButton
+                      title="Feature Architecture Flowchart"
+                      chart={outputs.architectureFlowchart}
+                    />
+                  }
+                >
+                  <MermaidPreview
+                    title={`${formatInteractionName(workspace, selectedInteraction)} Context`}
+                    chart={outputs.architectureFlowchart}
+                    svgMode="natural"
+                    className="min-h-[420px]"
+                  />
+                </PreviewCard>
+              </div>
+              <div className="overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <InteractionDetailEditor
+                  interaction={selectedInteraction}
+                  components={workspace.discovery.candidateComponents}
+                  onChange={(nextInteraction) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          interactions: current.discovery.interactions.map((interaction, index) =>
+                            index === selectedInteractionIndex ? nextInteraction : interaction,
                           ),
                         },
                       }),
@@ -1152,6 +1246,125 @@ const syncComponentFromCandidate = (
   );
 };
 
+const getComponentNameById = (
+  components: ComponentCandidate[],
+  componentId: string,
+): string =>
+  components.find((component) => component.id === componentId)?.name || "Unnamed component";
+
+const formatInteractionName = (
+  workspace: FeatureWorkspace,
+  interaction: ComponentInteraction,
+): string =>
+  `${getComponentNameById(workspace.discovery.candidateComponents, interaction.fromComponentId)} -> ${getComponentNameById(
+    workspace.discovery.candidateComponents,
+    interaction.toComponentId,
+  )}`;
+
+const InteractionDetailEditor = ({
+  interaction,
+  components,
+  onChange,
+}: {
+  interaction: ComponentInteraction;
+  components: ComponentCandidate[];
+  onChange: (nextInteraction: ComponentInteraction) => void;
+}) => (
+  <div className="space-y-4">
+    <Field
+      label="Interaction Details"
+      hint="Describe the direction, mechanism, payload, and notes for this interaction."
+    >
+      <div className="grid gap-3">
+        <div className="space-y-1.5">
+          <SectionInputLabel>Interaction Name</SectionInputLabel>
+          <div className="rounded-2xl bg-white px-3 py-2 text-sm text-ink">
+            {`${getComponentNameById(components, interaction.fromComponentId)} -> ${getComponentNameById(
+              components,
+              interaction.toComponentId,
+            )}`}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>From Component</SectionInputLabel>
+          <select
+            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+            value={interaction.fromComponentId}
+            onChange={(event) =>
+              onChange({ ...interaction, fromComponentId: event.target.value })
+            }
+          >
+            {components.map((component) => (
+              <option key={component.id} value={component.id}>
+                {component.name || "Unnamed component"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>To Component</SectionInputLabel>
+          <select
+            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+            value={interaction.toComponentId}
+            onChange={(event) =>
+              onChange({ ...interaction, toComponentId: event.target.value })
+            }
+          >
+            {components.map((component) => (
+              <option key={component.id} value={component.id}>
+                {component.name || "Unnamed component"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Mechanism</SectionInputLabel>
+          <select
+            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+            value={interaction.mechanism}
+            onChange={(event) =>
+              onChange({
+                ...interaction,
+                mechanism: event.target.value as ComponentInteraction["mechanism"],
+              })
+            }
+          >
+            {[
+              "queue",
+              "event",
+              "notification",
+              "callback",
+              "shared_memory",
+              "direct_call",
+              "other",
+            ].map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Data / Signal</SectionInputLabel>
+          <TextArea
+            value={interaction.data}
+            onChange={(value) => onChange({ ...interaction, data: value })}
+            placeholder="What data, event, or signal crosses this interaction?"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Notes</SectionInputLabel>
+          <TextArea
+            value={interaction.notes ?? ""}
+            onChange={(value) => onChange({ ...interaction, notes: value })}
+            placeholder="Any delivery rules, timing, buffering, or ownership notes."
+          />
+        </div>
+      </div>
+    </Field>
+  </div>
+);
+
 const SequenceScenarioDetailEditor = ({
   scenario,
   onChange,
@@ -1443,8 +1656,10 @@ const WorkspaceSectionForm = ({
   setSelectedComponentId,
   selectedScenario,
   setSelectedScenarioId,
+  selectedInteractionIndex,
   onOpenComponentDetail,
   onOpenScenarioDetail,
+  onOpenInteractionDetail,
   canGenerateAiDraft,
   aiStatus,
   aiStage,
@@ -1464,8 +1679,10 @@ const WorkspaceSectionForm = ({
   setSelectedComponentId: (componentId: string | null) => void;
   selectedScenario: FeatureWorkspace["discovery"]["sequenceScenarios"][number] | null;
   setSelectedScenarioId: (scenarioId: string | null) => void;
+  selectedInteractionIndex: number | null;
   onOpenComponentDetail: (componentId: string) => void;
   onOpenScenarioDetail: (scenarioId: string) => void;
+  onOpenInteractionDetail: (interactionIndex: number) => void;
   canGenerateAiDraft: boolean;
   aiStatus: "idle" | "loading" | "success" | "error";
   aiStage: AiStage;
@@ -2025,100 +2242,42 @@ const WorkspaceSectionForm = ({
                 {workspace.discovery.interactions.map((interaction, index) => (
                   <div
                     key={`${interaction.fromComponentId}-${interaction.toComponentId}-${index}`}
-                    className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
+                    className={`rounded-2xl border px-4 py-3 ${
+                      selectedInteractionIndex === index ? "border-copper bg-sand" : "border-slate/10 bg-white"
+                    }`}
                   >
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>From Component</SectionInputLabel>
-                      <select
-                        className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-                        value={interaction.fromComponentId}
-                        onChange={(event) =>
-                          onChange((current) => {
-                            const next = [...current.discovery.interactions];
-                            next[index] = { ...next[index], fromComponentId: event.target.value };
-                            return { ...current, discovery: { ...current.discovery, interactions: next } };
-                          })
-                        }
+                    <div className="flex items-start justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => onOpenInteractionDetail(index)}
+                        className="min-w-0 flex-1 text-left"
                       >
-                        {workspace.discovery.candidateComponents.map((component) => (
-                          <option key={component.id} value={component.id}>
-                            {component.name || "Unnamed component"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>To Component</SectionInputLabel>
-                      <select
-                        className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-                        value={interaction.toComponentId}
-                        onChange={(event) =>
-                          onChange((current) => {
-                            const next = [...current.discovery.interactions];
-                            next[index] = { ...next[index], toComponentId: event.target.value };
-                            return { ...current, discovery: { ...current.discovery, interactions: next } };
-                          })
+                        <span className="block font-semibold">
+                          {formatInteractionName(workspace, interaction)}
+                        </span>
+                        <p className="mt-1 text-sm text-slate">
+                          {interaction.mechanism}
+                          {interaction.data ? ` | ${interaction.data}` : ""}
+                        </p>
+                      </button>
+                      <Button
+                        onClick={() =>
+                          onChange((current) => ({
+                            ...current,
+                            discovery: {
+                              ...current.discovery,
+                              interactions: current.discovery.interactions.filter(
+                                (_, currentIndex) => currentIndex !== index,
+                              ),
+                            },
+                          }))
                         }
+                        tone="danger"
+                        size="compact"
                       >
-                        {workspace.discovery.candidateComponents.map((component) => (
-                          <option key={component.id} value={component.id}>
-                            {component.name || "Unnamed component"}
-                          </option>
-                        ))}
-                      </select>
+                        Remove Interaction
+                      </Button>
                     </div>
-                    <ObjectListEditor<ComponentInteraction>
-                      label="Interaction"
-                      items={[interaction]}
-                      onChange={(items) =>
-                        onChange((current) => {
-                          const next = [...current.discovery.interactions];
-                          next[index] = items[0];
-                          return { ...current, discovery: { ...current.discovery, interactions: next } };
-                        })
-                      }
-                      template={{
-                        fromComponentId: interaction.fromComponentId,
-                        toComponentId: interaction.toComponentId,
-                        mechanism: "queue",
-                        data: "",
-                        notes: "",
-                      }}
-                      fields={[
-                        {
-                          key: "mechanism",
-                          label: "Mechanism",
-                          type: "select",
-                          options: [
-                            "queue",
-                            "event",
-                            "notification",
-                            "callback",
-                            "shared_memory",
-                            "direct_call",
-                            "other",
-                          ],
-                        },
-                        { key: "data", label: "Data" },
-                        { key: "notes", label: "Notes", type: "textarea" },
-                      ]}
-                    />
-                    <Button
-                      onClick={() =>
-                        onChange((current) => ({
-                          ...current,
-                          discovery: {
-                            ...current.discovery,
-                            interactions: current.discovery.interactions.filter(
-                              (_, currentIndex) => currentIndex !== index,
-                            ),
-                          },
-                        }))
-                      }
-                      tone="danger"
-                    >
-                      Remove Interaction
-                    </Button>
                   </div>
                 ))}
                 <Button
@@ -2144,6 +2303,7 @@ const WorkspaceSectionForm = ({
                         ],
                       },
                     }));
+                    onOpenInteractionDetail(workspace.discovery.interactions.length);
                   }}
                 >
                   Add Interaction
