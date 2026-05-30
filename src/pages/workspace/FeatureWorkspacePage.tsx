@@ -248,6 +248,10 @@ export const FeatureWorkspacePage = ({
     workspace.components.find((component) => component.id === selectedComponentId) ??
     workspace.components[0] ??
     null;
+  const selectedCandidateComponent =
+    workspace.discovery.candidateComponents.find(
+      (component) => component.id === selectedComponentId,
+    ) ?? null;
   const selectedScenario =
     workspace.discovery.sequenceScenarios.find((scenario) => scenario.id === selectedScenarioId) ??
     workspace.discovery.sequenceScenarios[0] ??
@@ -870,10 +874,19 @@ export const FeatureWorkspacePage = ({
                 ) : (
                   <ComponentContainerEditor
                     component={selectedComponent}
-                    onChange={(nextComponent) =>
+                    candidate={selectedCandidateComponent}
+                    onChange={(nextComponent, nextCandidate) =>
                       onChange((current) =>
                         updateTimestamp({
                           ...current,
+                          discovery: {
+                            ...current.discovery,
+                            candidateComponents: nextCandidate
+                              ? current.discovery.candidateComponents.map((candidate) =>
+                                  candidate.id === nextCandidate.id ? nextCandidate : candidate,
+                                )
+                              : current.discovery.candidateComponents,
+                          },
                           components: current.components.map((component) =>
                             component.id === nextComponent.id ? nextComponent : component,
                           ),
@@ -2642,10 +2655,12 @@ const WorkspaceSectionForm = ({
 
 const ComponentContainerEditor = ({
   component,
+  candidate,
   onChange,
 }: {
   component: FeatureComponent;
-  onChange: (component: FeatureComponent) => void;
+  candidate: ComponentCandidate | null;
+  onChange: (component: FeatureComponent, candidate: ComponentCandidate | null) => void;
 }) => (
   <div className="space-y-4">
     <Field
@@ -2655,21 +2670,63 @@ const ComponentContainerEditor = ({
       <div className="grid gap-3">
         <div className="space-y-1.5">
           <SectionInputLabel>Component Name</SectionInputLabel>
-          <div className="rounded-2xl bg-white px-3 py-2 text-sm text-ink">
-            {component.name || "Unnamed component"}
-          </div>
+          <TextInput
+            value={candidate?.name ?? component.name}
+            onChange={(value) =>
+              onChange(
+                {
+                  ...component,
+                  name: value,
+                },
+                candidate
+                  ? {
+                      ...candidate,
+                      name: value,
+                    }
+                  : null,
+              )
+            }
+            placeholder="Component name"
+          />
         </div>
         <div className="space-y-1.5">
-          <SectionInputLabel>Component Summary</SectionInputLabel>
+          <SectionInputLabel>Component Responsibility</SectionInputLabel>
           <TextArea
-            value={component.summary}
+            value={candidate?.responsibility ?? component.summary}
             onChange={(value) =>
-              onChange({
-                ...component,
-                summary: value,
-              })
+              onChange(
+                {
+                  ...component,
+                  summary: value,
+                },
+                candidate
+                  ? {
+                      ...candidate,
+                      responsibility: value,
+                    }
+                  : null,
+              )
             }
             rows={3}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Rationale</SectionInputLabel>
+          <TextArea
+            value={candidate?.rationale ?? ""}
+            onChange={(value) =>
+              onChange(
+                component,
+                candidate
+                  ? {
+                      ...candidate,
+                      rationale: value,
+                    }
+                  : null,
+              )
+            }
+            placeholder="Why does this component exist?"
+            rows={2}
           />
         </div>
       </div>
@@ -2677,37 +2734,37 @@ const ComponentContainerEditor = ({
     <StringListEditor
       label="Inputs"
       items={component.inputs}
-      onChange={(items) => onChange({ ...component, inputs: items })}
+      onChange={(items) => onChange({ ...component, inputs: items }, candidate)}
       placeholder="Input"
     />
     <StringListEditor
       label="Outputs"
       items={component.outputs}
-      onChange={(items) => onChange({ ...component, outputs: items })}
+      onChange={(items) => onChange({ ...component, outputs: items }, candidate)}
       placeholder="Output"
     />
     <EventListEditor
       title="Incoming Events"
       hint="Events coming from outside the component that this component reacts to."
       items={component.incomingEvents}
-      onChange={(items) => onChange({ ...component, incomingEvents: items })}
+      onChange={(items) => onChange({ ...component, incomingEvents: items }, candidate)}
     />
     <EventListEditor
       title="Internal Signals"
       hint="Signals generated by the component itself and used by its internal behavior."
       items={component.internalSignals}
-      onChange={(items) => onChange({ ...component, internalSignals: items })}
+      onChange={(items) => onChange({ ...component, internalSignals: items }, candidate)}
     />
     <EventListEditor
       title="Outgoing Signals"
       hint="Signals or events this component emits for other components to handle."
       items={component.outgoingSignals}
-      onChange={(items) => onChange({ ...component, outgoingSignals: items })}
+      onChange={(items) => onChange({ ...component, outgoingSignals: items }, candidate)}
     />
     <ObjectListEditor<OwnershipDefinition>
       label="Resource Ownership"
       items={component.ownership}
-      onChange={(items) => onChange({ ...component, ownership: items })}
+      onChange={(items) => onChange({ ...component, ownership: items }, candidate)}
       template={{ resource: "", owner: "", accessRules: "" }}
       fields={[
         { key: "resource", label: "Resource" },
@@ -2718,7 +2775,7 @@ const ComponentContainerEditor = ({
     <ObjectListEditor<FailureModeDefinition>
       label="Failure Modes"
       items={component.failureModes}
-      onChange={(items) => onChange({ ...component, failureModes: items })}
+      onChange={(items) => onChange({ ...component, failureModes: items }, candidate)}
       template={{ scenario: "", impact: "", recovery: "" }}
       fields={[
         { key: "scenario", label: "Failure Scenario" },
@@ -2730,10 +2787,13 @@ const ComponentContainerEditor = ({
       label="Logs"
       items={component.debugging.logs}
       onChange={(items) =>
-        onChange({
-          ...component,
-          debugging: { ...component.debugging, logs: items },
-        })
+        onChange(
+          {
+            ...component,
+            debugging: { ...component.debugging, logs: items },
+          },
+          candidate,
+        )
       }
       placeholder="Log signal"
     />
@@ -2741,10 +2801,13 @@ const ComponentContainerEditor = ({
       label="Trace Points"
       items={component.debugging.traces}
       onChange={(items) =>
-        onChange({
-          ...component,
-          debugging: { ...component.debugging, traces: items },
-        })
+        onChange(
+          {
+            ...component,
+            debugging: { ...component.debugging, traces: items },
+          },
+          candidate,
+        )
       }
       placeholder="Trace point"
     />
@@ -2752,10 +2815,13 @@ const ComponentContainerEditor = ({
       label="Observability Points"
       items={component.debugging.observability}
       onChange={(items) =>
-        onChange({
-          ...component,
-          debugging: { ...component.debugging, observability: items },
-        })
+        onChange(
+          {
+            ...component,
+            debugging: { ...component.debugging, observability: items },
+          },
+          candidate,
+        )
       }
       placeholder="Observability point"
     />
