@@ -207,6 +207,9 @@ export const FeatureWorkspacePage = ({
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(
     workspace.components[0]?.id ?? null,
   );
+  const [selectedContextEntityId, setSelectedContextEntityId] = useState<string | null>(
+    workspace.discovery.contextEntities[0]?.id ?? null,
+  );
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(
     workspace.discovery.sequenceScenarios[0]?.id ?? null,
   );
@@ -214,6 +217,7 @@ export const FeatureWorkspacePage = ({
     workspace.discovery.interactions.length > 0 ? 0 : null,
   );
   const [componentDetailOpen, setComponentDetailOpen] = useState(false);
+  const [contextDetailOpen, setContextDetailOpen] = useState(false);
   const [scenarioDetailOpen, setScenarioDetailOpen] = useState(false);
   const [interactionDetailOpen, setInteractionDetailOpen] = useState(false);
   const [aiStatus, setAiStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -244,6 +248,10 @@ export const FeatureWorkspacePage = ({
     workspace.discovery.sequenceScenarios.find((scenario) => scenario.id === selectedScenarioId) ??
     workspace.discovery.sequenceScenarios[0] ??
     null;
+  const selectedContextEntity =
+    workspace.discovery.contextEntities.find((entity) => entity.id === selectedContextEntityId) ??
+    workspace.discovery.contextEntities[0] ??
+    null;
   const selectedInteraction =
     selectedInteractionIndex !== null
       ? workspace.discovery.interactions[selectedInteractionIndex] ?? null
@@ -264,6 +272,17 @@ export const FeatureWorkspacePage = ({
 
     setSelectedComponentId(workspace.components[0]?.id ?? null);
   }, [selectedComponentId, workspace.components]);
+
+  useEffect(() => {
+    if (
+      selectedContextEntityId &&
+      workspace.discovery.contextEntities.some((entity) => entity.id === selectedContextEntityId)
+    ) {
+      return;
+    }
+
+    setSelectedContextEntityId(workspace.discovery.contextEntities[0]?.id ?? null);
+  }, [selectedContextEntityId, workspace.discovery.contextEntities]);
 
   useEffect(() => {
     if (
@@ -308,6 +327,12 @@ export const FeatureWorkspacePage = ({
       setComponentDetailOpen(false);
     }
   }, [componentDetailOpen, selectedComponent]);
+
+  useEffect(() => {
+    if (!selectedContextEntity && contextDetailOpen) {
+      setContextDetailOpen(false);
+    }
+  }, [contextDetailOpen, selectedContextEntity]);
 
   useEffect(() => {
     if (!selectedScenario && scenarioDetailOpen) {
@@ -715,12 +740,17 @@ export const FeatureWorkspacePage = ({
             selectedComponent={selectedComponent}
             selectedComponentId={selectedComponentId}
             setSelectedComponentId={setSelectedComponentId}
+            selectedContextEntityId={selectedContextEntityId}
             selectedScenario={selectedScenario}
             setSelectedScenarioId={setSelectedScenarioId}
             selectedInteractionIndex={selectedInteractionIndex}
             onOpenComponentDetail={(componentId) => {
               setSelectedComponentId(componentId);
               setComponentDetailOpen(true);
+            }}
+            onOpenContextDetail={(entityId) => {
+              setSelectedContextEntityId(entityId);
+              setContextDetailOpen(true);
             }}
             onOpenScenarioDetail={(scenarioId) => {
               setSelectedScenarioId(scenarioId);
@@ -823,6 +853,76 @@ export const FeatureWorkspacePage = ({
                         components: current.components.map((component) =>
                           component.id === nextComponent.id ? nextComponent : component,
                         ),
+                      }),
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {contextDetailOpen && selectedContextEntity ? (
+        <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[1100px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Context Detail</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">
+                  {selectedContextEntity.name || "Unnamed context entity"}
+                </h3>
+                <p className="mt-1 text-sm text-slate">
+                  Refine this external entity and the boundary flows that connect it to the feature.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setContextDetailOpen(false)} tone="ghost">
+                  Close
+                </Button>
+              </div>
+            </div>
+            <div className="mt-4 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
+              <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <PreviewCard
+                  title="Context Diagram"
+                  action={
+                    <ComponentOverlayDiagramButton
+                      title="Context Diagram"
+                      chart={outputs.contextDiagram}
+                    />
+                  }
+                >
+                  <MermaidPreview
+                    title={`${selectedContextEntity.name || "Context"} Diagram`}
+                    chart={outputs.contextDiagram}
+                    svgMode="natural"
+                    className="min-h-[420px]"
+                  />
+                </PreviewCard>
+              </div>
+              <div className="overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <ContextEntityDetailEditor
+                  entity={selectedContextEntity}
+                  flows={workspace.discovery.contextFlows.filter(
+                    (flow) => flow.entityId === selectedContextEntity.id,
+                  )}
+                  onChange={(nextEntity, nextFlows) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          contextEntities: current.discovery.contextEntities.map((entity) =>
+                            entity.id === nextEntity.id ? nextEntity : entity,
+                          ),
+                          contextFlows: [
+                            ...current.discovery.contextFlows.filter(
+                              (flow) => flow.entityId !== nextEntity.id,
+                            ),
+                            ...nextFlows,
+                          ],
+                        },
                       }),
                     )
                   }
@@ -1226,26 +1326,6 @@ const PlannedViewNotice = ({ message }: { message: string }) => (
   </div>
 );
 
-const syncComponentFromCandidate = (
-  candidate: ComponentCandidate,
-  components: FeatureComponent[],
-): FeatureComponent[] => {
-  const existing = components.find((component) => component.id === candidate.id);
-  if (!existing) {
-    return [...components, createEmptyComponent(candidate)];
-  }
-
-  return components.map((component) =>
-    component.id === candidate.id
-      ? {
-          ...component,
-          name: candidate.name || component.name,
-          summary: component.summary || candidate.responsibility,
-        }
-      : component,
-  );
-};
-
 const getComponentNameById = (
   components: ComponentCandidate[],
   componentId: string,
@@ -1364,6 +1444,147 @@ const InteractionDetailEditor = ({
     </Field>
   </div>
 );
+
+const ContextEntityDetailEditor = ({
+  entity,
+  flows,
+  onChange,
+}: {
+  entity: ContextEntity;
+  flows: ContextFlow[];
+  onChange: (nextEntity: ContextEntity, nextFlows: ContextFlow[]) => void;
+}) => {
+  const updateFlow = (flowId: string, updates: Partial<ContextFlow>) => {
+    onChange(
+      entity,
+      flows.map((flow) => (flow.id === flowId ? { ...flow, ...updates } : flow)),
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <Field
+        label="Context Entity"
+        hint="Define the outside actor, device, system, or service and the boundary flows it exchanges with this feature."
+      >
+        <div className="grid gap-3">
+          <div className="space-y-1.5">
+            <SectionInputLabel>Entity Name</SectionInputLabel>
+            <TextInput
+              value={entity.name}
+              onChange={(value) => onChange({ ...entity, name: value }, flows)}
+              placeholder="Entity name"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <SectionInputLabel>Entity Type</SectionInputLabel>
+            <select
+              className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+              value={entity.kind}
+              onChange={(event) =>
+                onChange(
+                  { ...entity, kind: event.target.value as ContextEntity["kind"] },
+                  flows,
+                )
+              }
+            >
+              {["user", "device", "system", "service", "timer", "sensor", "actuator", "other"].map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <SectionInputLabel>Description</SectionInputLabel>
+            <TextArea
+              value={entity.description ?? ""}
+              onChange={(value) => onChange({ ...entity, description: value }, flows)}
+              placeholder="How does this entity relate to the feature?"
+              rows={3}
+            />
+          </div>
+        </div>
+      </Field>
+
+      <Field
+        label="Boundary Flows"
+        hint="Capture each input or output that crosses the feature boundary for this entity."
+      >
+        <div className="space-y-4">
+          {flows.length === 0 ? (
+            <p className="text-sm text-slate">No boundary flows yet.</p>
+          ) : (
+            flows.map((flow) => (
+              <div
+                key={flow.id}
+                className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
+              >
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Direction</SectionInputLabel>
+                  <select
+                    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                    value={flow.direction}
+                    onChange={(event) =>
+                      updateFlow(flow.id, {
+                        direction: event.target.value as ContextFlow["direction"],
+                      })
+                    }
+                  >
+                    {["inbound", "outbound", "bidirectional"].map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Flow Label</SectionInputLabel>
+                  <TextInput
+                    value={flow.label}
+                    onChange={(value) => updateFlow(flow.id, { label: value })}
+                    placeholder="What crosses the boundary?"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>Description</SectionInputLabel>
+                  <TextArea
+                    value={flow.description ?? ""}
+                    onChange={(value) => updateFlow(flow.id, { description: value })}
+                    placeholder="Optional context for this boundary flow"
+                    rows={3}
+                  />
+                </div>
+                <Button
+                  onClick={() =>
+                    onChange(
+                      entity,
+                      flows.filter((item) => item.id !== flow.id),
+                    )
+                  }
+                  tone="danger"
+                  size="compact"
+                >
+                  Remove Boundary Flow
+                </Button>
+              </div>
+            ))
+          )}
+          <Button
+            onClick={() =>
+              onChange(
+                entity,
+                [...flows, createEmptyContextFlow(entity.id)],
+              )
+            }
+          >
+            Add Boundary Flow
+          </Button>
+        </div>
+      </Field>
+    </div>
+  );
+};
 
 const SequenceScenarioDetailEditor = ({
   scenario,
@@ -1654,10 +1875,12 @@ const WorkspaceSectionForm = ({
   selectedComponent,
   selectedComponentId,
   setSelectedComponentId,
+  selectedContextEntityId,
   selectedScenario,
   setSelectedScenarioId,
   selectedInteractionIndex,
   onOpenComponentDetail,
+  onOpenContextDetail,
   onOpenScenarioDetail,
   onOpenInteractionDetail,
   canGenerateAiDraft,
@@ -1677,10 +1900,12 @@ const WorkspaceSectionForm = ({
   selectedComponent: FeatureComponent | null;
   selectedComponentId: string | null;
   setSelectedComponentId: (componentId: string | null) => void;
+  selectedContextEntityId: string | null;
   selectedScenario: FeatureWorkspace["discovery"]["sequenceScenarios"][number] | null;
   setSelectedScenarioId: (scenarioId: string | null) => void;
   selectedInteractionIndex: number | null;
   onOpenComponentDetail: (componentId: string) => void;
+  onOpenContextDetail: (entityId: string) => void;
   onOpenScenarioDetail: (scenarioId: string) => void;
   onOpenInteractionDetail: (interactionIndex: number) => void;
   canGenerateAiDraft: boolean;
@@ -1810,260 +2035,6 @@ const WorkspaceSectionForm = ({
       return (
         <div className="space-y-5">
           <ArchitectureViewPanel
-            title="Context Diagram"
-            description="Shows the system boundary, external actors, and what crosses into or out of the feature."
-          >
-            <Field
-              label="Context Entities"
-              hint="Add the outside users, devices, systems, or services that interact with this feature."
-            >
-              <div className="space-y-4">
-                {workspace.discovery.contextEntities.map((entity, index) => (
-                  <div
-                    key={entity.id}
-                    className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
-                  >
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>Entity Name</SectionInputLabel>
-                      <TextInput
-                        value={entity.name}
-                        onChange={(value) =>
-                          onChange((current) => {
-                            const next = [...current.discovery.contextEntities];
-                            next[index] = { ...next[index], name: value };
-                            return {
-                              ...current,
-                              discovery: { ...current.discovery, contextEntities: next },
-                            };
-                          })
-                        }
-                        placeholder="Entity name"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>Entity Type</SectionInputLabel>
-                      <select
-                        className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-                        value={entity.kind}
-                        onChange={(event) =>
-                          onChange((current) => {
-                            const next = [...current.discovery.contextEntities];
-                            next[index] = {
-                              ...next[index],
-                              kind: event.target.value as ContextEntity["kind"],
-                            };
-                            return {
-                              ...current,
-                              discovery: { ...current.discovery, contextEntities: next },
-                            };
-                          })
-                        }
-                      >
-                        {["user", "device", "system", "service", "timer", "sensor", "actuator", "other"].map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>Description</SectionInputLabel>
-                      <TextArea
-                        value={entity.description ?? ""}
-                        onChange={(value) =>
-                          onChange((current) => {
-                            const next = [...current.discovery.contextEntities];
-                            next[index] = { ...next[index], description: value };
-                            return {
-                              ...current,
-                              discovery: { ...current.discovery, contextEntities: next },
-                            };
-                          })
-                        }
-                        placeholder="How does this entity relate to the feature?"
-                        rows={3}
-                      />
-                    </div>
-                    <Button
-                      onClick={() =>
-                        onChange((current) => ({
-                          ...current,
-                          discovery: {
-                            ...current.discovery,
-                            contextEntities: current.discovery.contextEntities.filter(
-                              (_, currentIndex) => currentIndex !== index,
-                            ),
-                            contextFlows: current.discovery.contextFlows.filter(
-                              (flow) => flow.entityId !== entity.id,
-                            ),
-                          },
-                        }))
-                      }
-                      tone="danger"
-                    >
-                      Remove Context Entity
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  onClick={() =>
-                    onChange((current) => ({
-                      ...current,
-                      discovery: {
-                        ...current.discovery,
-                        contextEntities: [
-                          ...current.discovery.contextEntities,
-                          createEmptyContextEntity(),
-                        ],
-                      },
-                    }))
-                  }
-                >
-                  Add Context Entity
-                </Button>
-              </div>
-            </Field>
-            <Field
-              label="Boundary Flows"
-              hint="Describe each input or output that crosses the feature boundary."
-            >
-              <div className="space-y-4">
-                {workspace.discovery.contextEntities.length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-4 text-sm text-slate">
-                    Add at least one context entity before defining boundary flows.
-                  </div>
-                ) : null}
-                {workspace.discovery.contextFlows.map((flow, index) => (
-                  <div
-                    key={flow.id}
-                    className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
-                  >
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>External Entity</SectionInputLabel>
-                      <select
-                        className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-                        value={flow.entityId}
-                        onChange={(event) =>
-                          onChange((current) => {
-                            const next = [...current.discovery.contextFlows];
-                            next[index] = { ...next[index], entityId: event.target.value };
-                            return {
-                              ...current,
-                              discovery: { ...current.discovery, contextFlows: next },
-                            };
-                          })
-                        }
-                      >
-                        {workspace.discovery.contextEntities.map((entity) => (
-                          <option key={entity.id} value={entity.id}>
-                            {entity.name || "Unnamed entity"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>Direction</SectionInputLabel>
-                      <select
-                        className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-                        value={flow.direction}
-                        onChange={(event) =>
-                          onChange((current) => {
-                            const next = [...current.discovery.contextFlows];
-                            next[index] = {
-                              ...next[index],
-                              direction: event.target.value as ContextFlow["direction"],
-                            };
-                            return {
-                              ...current,
-                              discovery: { ...current.discovery, contextFlows: next },
-                            };
-                          })
-                        }
-                      >
-                        {["inbound", "outbound", "bidirectional"].map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>Flow Label</SectionInputLabel>
-                      <TextInput
-                        value={flow.label}
-                        onChange={(value) =>
-                          onChange((current) => {
-                            const next = [...current.discovery.contextFlows];
-                            next[index] = { ...next[index], label: value };
-                            return {
-                              ...current,
-                              discovery: { ...current.discovery, contextFlows: next },
-                            };
-                          })
-                        }
-                        placeholder="What crosses the boundary?"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>Description</SectionInputLabel>
-                      <TextArea
-                        value={flow.description ?? ""}
-                        onChange={(value) =>
-                          onChange((current) => {
-                            const next = [...current.discovery.contextFlows];
-                            next[index] = { ...next[index], description: value };
-                            return {
-                              ...current,
-                              discovery: { ...current.discovery, contextFlows: next },
-                            };
-                          })
-                        }
-                        placeholder="Optional context for this boundary flow"
-                        rows={3}
-                      />
-                    </div>
-                    <Button
-                      onClick={() =>
-                        onChange((current) => ({
-                          ...current,
-                          discovery: {
-                            ...current.discovery,
-                            contextFlows: current.discovery.contextFlows.filter(
-                              (_, currentIndex) => currentIndex !== index,
-                            ),
-                          },
-                        }))
-                      }
-                      tone="danger"
-                    >
-                      Remove Boundary Flow
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  onClick={() =>
-                    onChange((current) => ({
-                      ...current,
-                      discovery: {
-                        ...current.discovery,
-                        contextFlows: [
-                          ...current.discovery.contextFlows,
-                          createEmptyContextFlow(
-                            current.discovery.contextEntities[0]?.id ?? "",
-                          ),
-                        ],
-                      },
-                    }))
-                  }
-                  disabled={workspace.discovery.contextEntities.length === 0}
-                >
-                  Add Boundary Flow
-                </Button>
-              </div>
-            </Field>
-          </ArchitectureViewPanel>
-
-          <ArchitectureViewPanel
             title="Functional / Feature Breakdown"
             description="Explains what the feature must do through its summary, requirements, and responsibilities."
           >
@@ -2107,109 +2078,162 @@ const WorkspaceSectionForm = ({
           </ArchitectureViewPanel>
 
           <ArchitectureViewPanel
+            title="Context Diagram"
+            description="Shows the system boundary, external actors, and what crosses into or out of the feature."
+          >
+            <Field
+              label="Context Entities"
+              hint="This view shows the external entities around the feature. Click one to open its detail popup and edit its boundary flows there."
+            >
+              <div className="space-y-4">
+                {workspace.discovery.contextEntities.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-6 text-sm text-slate">
+                    No context entities yet. Add one to define something outside the feature boundary, then click it to refine its details.
+                  </div>
+                ) : (
+                  workspace.discovery.contextEntities.map((entity, index) => {
+                    const flowCount = workspace.discovery.contextFlows.filter(
+                      (flow) => flow.entityId === entity.id,
+                    ).length;
+                    return (
+                      <div
+                        key={entity.id}
+                        className={`rounded-2xl border px-4 py-3 ${
+                          selectedContextEntityId === entity.id ? "border-copper bg-sand" : "border-slate/10 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <button
+                            type="button"
+                            onClick={() => onOpenContextDetail(entity.id)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <span className="block font-semibold">
+                              {entity.name || "Unnamed entity"}
+                            </span>
+                            <p className="mt-1 text-sm text-slate">
+                              {entity.kind}
+                              {entity.description ? ` | ${entity.description}` : ""}
+                            </p>
+                            <p className="mt-2 text-xs text-slate/80">
+                              {flowCount} boundary flow{flowCount === 1 ? "" : "s"}
+                            </p>
+                          </button>
+                          <Button
+                            onClick={() =>
+                              onChange((current) => ({
+                                ...current,
+                                discovery: {
+                                  ...current.discovery,
+                                  contextEntities: current.discovery.contextEntities.filter(
+                                    (_, currentIndex) => currentIndex !== index,
+                                  ),
+                                  contextFlows: current.discovery.contextFlows.filter(
+                                    (flow) => flow.entityId !== entity.id,
+                                  ),
+                                },
+                              }))
+                            }
+                            tone="danger"
+                            size="compact"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                <Button
+                  onClick={() => {
+                    const entity = createEmptyContextEntity();
+                    onChange((current) => ({
+                      ...current,
+                      discovery: {
+                        ...current.discovery,
+                        contextEntities: [...current.discovery.contextEntities, entity],
+                      },
+                    }));
+                    onOpenContextDetail(entity.id);
+                  }}
+                >
+                  Add Context Entity
+                </Button>
+              </div>
+            </Field>
+          </ArchitectureViewPanel>
+
+          <ArchitectureViewPanel
             title="Component / Container Diagram"
             description="Identifies the major internal building blocks and the responsibility of each one."
           >
             <Field
               label="Candidate Components"
-              hint="These are the subsystems you believe this feature needs before detailed design."
+              hint="This view shows the main component boxes for the feature. Click a component to open its detail popup and refine it there."
             >
               <div className="space-y-4">
-                {workspace.discovery.candidateComponents.map((candidate, index) => (
-                  <div key={candidate.id} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>Component Name</SectionInputLabel>
-                      <TextInput
-                        value={candidate.name}
-                        onChange={(value) =>
-                          onChange((current) => {
-                            const nextCandidates = [...current.discovery.candidateComponents];
-                            const updated = { ...nextCandidates[index], name: value };
-                            nextCandidates[index] = updated;
-                            return {
-                              ...current,
-                              discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                              components: syncComponentFromCandidate(updated, current.components),
-                            };
-                          })
-                        }
-                        placeholder="Component name"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>Component Responsibility</SectionInputLabel>
-                      <TextArea
-                        value={candidate.responsibility}
-                        onChange={(value) =>
-                          onChange((current) => {
-                            const nextCandidates = [...current.discovery.candidateComponents];
-                            const updated = { ...nextCandidates[index], responsibility: value };
-                            nextCandidates[index] = updated;
-                            return {
-                              ...current,
-                              discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                              components: syncComponentFromCandidate(updated, current.components),
-                            };
-                          })
-                        }
-                        placeholder="What is this component responsible for?"
-                        rows={3}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <SectionInputLabel>Rationale</SectionInputLabel>
-                      <TextArea
-                        value={candidate.rationale ?? ""}
-                        onChange={(value) =>
-                          onChange((current) => {
-                            const nextCandidates = [...current.discovery.candidateComponents];
-                            nextCandidates[index] = { ...nextCandidates[index], rationale: value };
-                            return {
-                              ...current,
-                              discovery: { ...current.discovery, candidateComponents: nextCandidates },
-                            };
-                          })
-                        }
-                        placeholder="Why does this component exist?"
-                        rows={2}
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => {
-                          const fallbackId =
-                            workspace.discovery.candidateComponents[index + 1]?.id ??
-                            workspace.discovery.candidateComponents[index - 1]?.id ??
-                            null;
-                          setSelectedComponentId(
-                            selectedComponentId === candidate.id ? fallbackId : selectedComponentId,
-                          );
-                          onChange((current) => ({
-                            ...current,
-                            discovery: {
-                              ...current.discovery,
-                              candidateComponents: current.discovery.candidateComponents.filter(
-                                (item) => item.id !== candidate.id,
-                              ),
-                              interactions: current.discovery.interactions.filter(
-                                (interaction) =>
-                                  interaction.fromComponentId !== candidate.id &&
-                                  interaction.toComponentId !== candidate.id,
-                              ),
-                            },
-                            components: current.components.filter((component) => component.id !== candidate.id),
-                          }));
-                        }}
-                        tone="danger"
-                      >
-                        Remove Component
-                      </Button>
-                      <Button onClick={() => setSelectedComponentId(candidate.id)} tone="secondary">
-                        Focus Detail Editor
-                      </Button>
-                    </div>
+                {workspace.discovery.candidateComponents.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-6 text-sm text-slate">
+                    No components yet. Add one to define a feature building block, then click it to refine the detail view.
                   </div>
-                ))}
+                ) : (
+                  workspace.discovery.candidateComponents.map((candidate, index) => (
+                    <div
+                      key={candidate.id}
+                      className={`rounded-2xl border px-4 py-3 ${
+                        selectedComponentId === candidate.id ? "border-copper bg-sand" : "border-slate/10 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onOpenComponentDetail(candidate.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span className="block font-semibold">
+                            {candidate.name || "Unnamed component"}
+                          </span>
+                          <p className="mt-1 text-sm text-slate">
+                            {candidate.responsibility || "No responsibility documented yet."}
+                          </p>
+                          {candidate.rationale ? (
+                            <p className="mt-2 text-xs text-slate/80">{candidate.rationale}</p>
+                          ) : null}
+                        </button>
+                        <Button
+                          onClick={() => {
+                            const fallbackId =
+                              workspace.discovery.candidateComponents[index + 1]?.id ??
+                              workspace.discovery.candidateComponents[index - 1]?.id ??
+                              null;
+                            setSelectedComponentId(
+                              selectedComponentId === candidate.id ? fallbackId : selectedComponentId,
+                            );
+                            onChange((current) => ({
+                              ...current,
+                              discovery: {
+                                ...current.discovery,
+                                candidateComponents: current.discovery.candidateComponents.filter(
+                                  (item) => item.id !== candidate.id,
+                                ),
+                                interactions: current.discovery.interactions.filter(
+                                  (interaction) =>
+                                    interaction.fromComponentId !== candidate.id &&
+                                    interaction.toComponentId !== candidate.id,
+                                ),
+                              },
+                              components: current.components.filter((component) => component.id !== candidate.id),
+                            }));
+                          }}
+                          tone="danger"
+                          size="compact"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
                 <Button
                   onClick={() => {
                     const candidate = createEmptyCandidateComponent();
@@ -2222,6 +2246,7 @@ const WorkspaceSectionForm = ({
                       },
                       components: [...current.components, createEmptyComponent(candidate)],
                     }));
+                    onOpenComponentDetail(candidate.id);
                   }}
                 >
                   Add Candidate Component
