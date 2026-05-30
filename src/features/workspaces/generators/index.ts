@@ -497,6 +497,7 @@ const generateArchitectureFlowchart = (workspace: FeatureWorkspace): string => {
     Discovery --> ${wrapFlowchartNode("Detail", "Component refinement", "rounded")}`;
   }
 
+  const nodes = new Map<string, string>();
   const lines = workspace.discovery.interactions.map((interaction) => {
     const fromName =
       workspace.discovery.candidateComponents.find(
@@ -506,12 +507,33 @@ const generateArchitectureFlowchart = (workspace: FeatureWorkspace): string => {
       workspace.discovery.candidateComponents.find(
         (item) => item.id === interaction.toComponentId,
       )?.name || "Unknown";
-    return `    ${wrapFlowchartNode(cleanNode(fromName), fromName, "subroutine")} -->|"${escapeLabel(
+
+    if (!nodes.has(fromName)) {
+      nodes.set(fromName, cleanNode(fromName));
+    }
+    if (!nodes.has(toName)) {
+      nodes.set(toName, cleanNode(toName));
+    }
+
+    return `    ${nodes.get(fromName)} -->|"${escapeLabel(
       interactionLabel(interaction.mechanism, interaction.data),
-    )}"| ${wrapFlowchartNode(cleanNode(toName), toName, "subroutine")}`;
+    )}"| ${nodes.get(toName)}`;
   });
 
-  return `flowchart LR
+  const nodeLines = Array.from(nodes.entries()).map(([name, id]) =>
+    `    ${wrapFlowchartNode(id, name, "subroutine")}`,
+  );
+
+  const useVerticalLayout =
+    nodes.size >= 4 || workspace.discovery.interactions.length >= 4;
+  const direction = useVerticalLayout ? "TB" : "LR";
+
+  return `flowchart ${direction}
+    classDef architectureNode fill:#eef4f7,stroke:#365166,stroke-width:2px,color:#081521;
+${nodeLines.join("\n")}
+${Array.from(nodes.values())
+  .map((id) => `    class ${id} architectureNode`)
+  .join("\n")}
 ${lines.join("\n")}`;
 };
 
