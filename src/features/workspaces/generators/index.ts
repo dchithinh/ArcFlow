@@ -426,7 +426,10 @@ ${listBlock(workspace.implementationPlan.apis)}
 ${listBlock(workspace.implementationPlan.tests)}
 `;
 
-const generateContextDiagram = (workspace: FeatureWorkspace): string => {
+const generateContextDiagram = (
+  workspace: FeatureWorkspace,
+  selectedContextEntityId?: string,
+): string => {
   const featureNode = cleanNode(workspace.title || "FeatureWorkspace");
   const entities = workspace.discovery.contextEntities;
   const flows = workspace.discovery.contextFlows;
@@ -439,12 +442,13 @@ const generateContextDiagram = (workspace: FeatureWorkspace): string => {
 
   const entityLines = entities.flatMap((entity, index) => {
     const entityId = `context_${cleanNode(entity.id || entity.name || `entity_${index}`)}_${index}`;
+    const selected = selectedContextEntityId === entity.id;
     const label = entity.description?.trim()
       ? `${entity.name || "Unnamed entity"}<br/>${escapeLabel(entity.description.trim())}`
       : `${entity.name || "Unnamed entity"}<br/>${entity.kind}`;
     return [
       `    ${wrapFlowchartNode(entityId, label, contextEntityShape(entity.kind))}`,
-      `    class ${entityId} contextEntity`,
+      `    class ${entityId} ${selected ? "contextEntitySelected" : "contextEntity"}`,
     ];
   });
 
@@ -479,6 +483,7 @@ const generateContextDiagram = (workspace: FeatureWorkspace): string => {
   return `flowchart LR
     classDef featureBoundary fill:#f4e7cf,stroke:#123a35,stroke-width:4px,color:#081521,font-weight:bold;
     classDef contextEntity fill:#eef4f7,stroke:#365166,stroke-width:2px,color:#081521;
+    classDef contextEntitySelected fill:#fff2d7,stroke:#b85f2c,stroke-width:4px,color:#081521,font-weight:bold;
     ${wrapFlowchartNode(featureNode, workspace.title || "Feature Workspace", "subroutine")}
     class ${featureNode} featureBoundary
 ${entityLines.join("\n")}
@@ -1005,10 +1010,11 @@ const generateRiskReview = (workspace: FeatureWorkspace): string[] => {
 export const generateWorkspaceOutputs = (
   workspace: FeatureWorkspace,
   selectedComponentId?: string,
+  selectedContextEntityId?: string,
   selectedScenarioId?: string,
 ): WorkspaceOutputs => ({
   markdown: generateMarkdown(workspace),
-  contextDiagram: generateContextDiagram(workspace),
+  contextDiagram: generateContextDiagram(workspace, selectedContextEntityId),
   architectureFlowchart: generateArchitectureFlowchart(workspace),
   behavioralArchitectureDiagram: generateBehavioralArchitectureDiagram(
     workspace,

@@ -197,6 +197,8 @@ type AiStageSuccessResponse = {
   durationMs: number;
 };
 
+type ComponentDetailMode = "container" | "state";
+
 export const FeatureWorkspacePage = ({
   workspace,
   onBack,
@@ -217,6 +219,7 @@ export const FeatureWorkspacePage = ({
     workspace.discovery.interactions.length > 0 ? 0 : null,
   );
   const [componentDetailOpen, setComponentDetailOpen] = useState(false);
+  const [componentDetailMode, setComponentDetailMode] = useState<ComponentDetailMode>("container");
   const [contextDetailOpen, setContextDetailOpen] = useState(false);
   const [scenarioDetailOpen, setScenarioDetailOpen] = useState(false);
   const [interactionDetailOpen, setInteractionDetailOpen] = useState(false);
@@ -232,9 +235,10 @@ export const FeatureWorkspacePage = ({
       generateWorkspaceOutputs(
         workspace,
         selectedComponentId ?? undefined,
+        selectedContextEntityId ?? undefined,
         selectedScenarioId ?? undefined,
       ),
-    [selectedComponentId, selectedScenarioId, workspace],
+    [selectedComponentId, selectedContextEntityId, selectedScenarioId, workspace],
   );
 
   const startedSections = WORKSPACE_SECTIONS.filter((section) =>
@@ -744,8 +748,9 @@ export const FeatureWorkspacePage = ({
             selectedScenario={selectedScenario}
             setSelectedScenarioId={setSelectedScenarioId}
             selectedInteractionIndex={selectedInteractionIndex}
-            onOpenComponentDetail={(componentId) => {
+            onOpenComponentDetail={(componentId, mode = "container") => {
               setSelectedComponentId(componentId);
+              setComponentDetailMode(mode);
               setComponentDetailOpen(true);
             }}
             onOpenContextDetail={(entityId) => {
@@ -810,53 +815,73 @@ export const FeatureWorkspacePage = ({
             </div>
             <div className="mt-4 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
               <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
-                <PreviewCard
-                  title="Behavioral Architecture Context"
-                  action={
-                    <ComponentOverlayDiagramButton
-                      title="Behavioral Architecture Context"
+                {componentDetailMode === "container" ? (
+                  <PreviewCard
+                    title="Behavioral Architecture Context"
+                    action={
+                      <ComponentOverlayDiagramButton
+                        title="Behavioral Architecture Context"
+                        chart={outputs.behavioralArchitectureDiagram}
+                      />
+                    }
+                  >
+                    <MermaidPreview
+                      title={`${selectedComponent.name || "Component"} Behavioral Context`}
                       chart={outputs.behavioralArchitectureDiagram}
+                      svgMode="natural"
+                      className="min-h-[420px]"
                     />
-                  }
-                >
-                  <MermaidPreview
-                    title={`${selectedComponent.name || "Component"} Behavioral Context`}
-                    chart={outputs.behavioralArchitectureDiagram}
-                    svgMode="natural"
-                    className="min-h-[420px]"
-                  />
-                </PreviewCard>
-                <PreviewCard
-                  title="Selected Component State Diagram"
-                  action={
-                    <ComponentOverlayDiagramButton
-                      title="Selected Component State Diagram"
+                  </PreviewCard>
+                ) : null}
+                {componentDetailMode === "state" ? (
+                  <PreviewCard
+                    title="Selected Component State Diagram"
+                    action={
+                      <ComponentOverlayDiagramButton
+                        title="Selected Component State Diagram"
+                        chart={outputs.componentStateDiagram}
+                      />
+                    }
+                  >
+                    <MermaidPreview
+                      title={`${selectedComponent.name || "Component"} State Diagram`}
                       chart={outputs.componentStateDiagram}
+                      svgMode="natural"
+                      className="min-h-[420px]"
                     />
-                  }
-                >
-                  <MermaidPreview
-                    title={`${selectedComponent.name || "Component"} State Diagram`}
-                    chart={outputs.componentStateDiagram}
-                    svgMode="natural"
-                    className="min-h-[320px]"
-                  />
-                </PreviewCard>
+                  </PreviewCard>
+                ) : null}
               </div>
               <div className="overflow-y-auto rounded-2xl bg-mist/60 p-4">
-                <ComponentDetailEditor
-                  component={selectedComponent}
-                  onChange={(nextComponent) =>
-                    onChange((current) =>
-                      updateTimestamp({
-                        ...current,
-                        components: current.components.map((component) =>
-                          component.id === nextComponent.id ? nextComponent : component,
-                        ),
-                      }),
-                    )
-                  }
-                />
+                {componentDetailMode === "state" ? (
+                  <ComponentStateEditor
+                    component={selectedComponent}
+                    onChange={(nextComponent) =>
+                      onChange((current) =>
+                        updateTimestamp({
+                          ...current,
+                          components: current.components.map((component) =>
+                            component.id === nextComponent.id ? nextComponent : component,
+                          ),
+                        }),
+                      )
+                    }
+                  />
+                ) : (
+                  <ComponentContainerEditor
+                    component={selectedComponent}
+                    onChange={(nextComponent) =>
+                      onChange((current) =>
+                        updateTimestamp({
+                          ...current,
+                          components: current.components.map((component) =>
+                            component.id === nextComponent.id ? nextComponent : component,
+                          ),
+                        }),
+                      )
+                    }
+                  />
+                )}
               </div>
             </div>
           </div>
@@ -1904,7 +1929,7 @@ const WorkspaceSectionForm = ({
   selectedScenario: FeatureWorkspace["discovery"]["sequenceScenarios"][number] | null;
   setSelectedScenarioId: (scenarioId: string | null) => void;
   selectedInteractionIndex: number | null;
-  onOpenComponentDetail: (componentId: string) => void;
+  onOpenComponentDetail: (componentId: string, mode?: ComponentDetailMode) => void;
   onOpenContextDetail: (entityId: string) => void;
   onOpenScenarioDetail: (scenarioId: string) => void;
   onOpenInteractionDetail: (interactionIndex: number) => void;
@@ -2185,11 +2210,11 @@ const WorkspaceSectionForm = ({
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <button
-                          type="button"
-                          onClick={() => onOpenComponentDetail(candidate.id)}
-                          className="min-w-0 flex-1 text-left"
-                        >
+                          <button
+                            type="button"
+                            onClick={() => onOpenComponentDetail(candidate.id, "container")}
+                            className="min-w-0 flex-1 text-left"
+                          >
                           <span className="block font-semibold">
                             {candidate.name || "Unnamed component"}
                           </span>
@@ -2361,11 +2386,11 @@ const WorkspaceSectionForm = ({
                         }`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <button
-                            type="button"
-                            onClick={() => onOpenComponentDetail(component.id)}
-                            className="min-w-0 flex-1 text-left"
-                          >
+                            <button
+                              type="button"
+                              onClick={() => onOpenComponentDetail(component.id, "state")}
+                              className="min-w-0 flex-1 text-left"
+                            >
                             <span className="block font-semibold">
                               {component.name || "Unnamed component"}
                             </span>
@@ -2615,7 +2640,7 @@ const WorkspaceSectionForm = ({
   }
 };
 
-const ComponentDetailEditor = ({
+const ComponentContainerEditor = ({
   component,
   onChange,
 }: {
@@ -2623,17 +2648,31 @@ const ComponentDetailEditor = ({
   onChange: (component: FeatureComponent) => void;
 }) => (
   <div className="space-y-4">
-    <Field label="Component Summary">
-      <TextArea
-        value={component.summary}
-        onChange={(value) =>
-          onChange({
-            ...component,
-            summary: value,
-          })
-        }
-        rows={3}
-      />
+    <Field
+      label="Component Boundary"
+      hint="Focus this view on what the component is responsible for, what crosses its boundary, and its non-state design ownership."
+    >
+      <div className="grid gap-3">
+        <div className="space-y-1.5">
+          <SectionInputLabel>Component Name</SectionInputLabel>
+          <div className="rounded-2xl bg-white px-3 py-2 text-sm text-ink">
+            {component.name || "Unnamed component"}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Component Summary</SectionInputLabel>
+          <TextArea
+            value={component.summary}
+            onChange={(value) =>
+              onChange({
+                ...component,
+                summary: value,
+              })
+            }
+            rows={3}
+          />
+        </div>
+      </div>
     </Field>
     <StringListEditor
       label="Inputs"
@@ -2665,7 +2704,6 @@ const ComponentDetailEditor = ({
       items={component.outgoingSignals}
       onChange={(items) => onChange({ ...component, outgoingSignals: items })}
     />
-    <StateListEditor items={component.states} onChange={(items) => onChange({ ...component, states: items })} />
     <ObjectListEditor<OwnershipDefinition>
       label="Resource Ownership"
       items={component.ownership}
@@ -2720,6 +2758,32 @@ const ComponentDetailEditor = ({
         })
       }
       placeholder="Observability point"
+    />
+  </div>
+);
+
+const ComponentStateEditor = ({
+  component,
+  onChange,
+}: {
+  component: FeatureComponent;
+  onChange: (component: FeatureComponent) => void;
+}) => (
+  <div className="space-y-4">
+    <Field
+      label="Component States"
+      hint="Focus this view on the internal states and transitions for the selected component."
+    >
+      <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate">
+        <p className="font-semibold text-ink">{component.name || "Unnamed component"}</p>
+        <p className="mt-1">
+          {component.summary || "No component summary yet."}
+        </p>
+      </div>
+    </Field>
+    <StateListEditor
+      items={component.states}
+      onChange={(items) => onChange({ ...component, states: items })}
     />
   </div>
 );
