@@ -219,7 +219,7 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
   };
 };
 
-const normalizeWorkspace = (workspace: FeatureWorkspace): FeatureWorkspace => {
+export const normalizeImportedWorkspace = (workspace: FeatureWorkspace): FeatureWorkspace => {
   const base = createEmptyWorkspace();
 
   return {
@@ -307,7 +307,7 @@ export const loadWorkspaces = (): FeatureWorkspace[] => {
     const currentRaw = window.localStorage.getItem(STORAGE_KEY);
     if (currentRaw) {
       const parsed = JSON.parse(currentRaw) as StoredPayload;
-      return Array.isArray(parsed.workspaces) ? parsed.workspaces.map(normalizeWorkspace) : [];
+      return Array.isArray(parsed.workspaces) ? parsed.workspaces.map(normalizeImportedWorkspace) : [];
     }
 
     const legacyRaw = window.localStorage.getItem(LEGACY_STORAGE_KEY);

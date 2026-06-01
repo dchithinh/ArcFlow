@@ -110,6 +110,13 @@ An example import file is included at:
 
 - [stm32f4-taskmanager-lvgl-feature.md](/mnt/d/learn/ArchFlow/examples/stm32f4-taskmanager-lvgl-feature.md)
 
+For exact cross-PC round-trip of a full workspace, use:
+
+- `Export Workspace JSON` from the workspace page
+- `Import Workspace JSON` from the dashboard
+
+The markdown preview/export is now feature-definition-only and is intended for human-readable requirement sharing, not full workspace restoration.
+
 ## Current MVP Features
 
 - Dashboard for saved feature workspaces
@@ -121,12 +128,13 @@ An example import file is included at:
 - Per-component detail editor
 - AI-assisted staged drafting for discovery, component refinement, and implementation planning
 - Markdown requirement import for AI input prefill
-- Live markdown preview
+- Live feature-requirement markdown preview
 - Mermaid feature architecture flowchart preview
 - Mermaid selected-component state diagram preview
 - RTOS task table generation
 - Risk review generation
-- Markdown export
+- Requirement markdown export
+- Workspace JSON export/import
 - Browser `localStorage` persistence
 
 ## Notes

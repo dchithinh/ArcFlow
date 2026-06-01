@@ -278,6 +278,7 @@ type FeatureWorkspacePageProps = {
   onBack: () => void;
   onChange: (updater: (current: FeatureWorkspace) => FeatureWorkspace) => void;
   onExport: (markdown: string, fileName: string) => void;
+  onExportWorkspaceJson: (workspace: FeatureWorkspace) => void;
 };
 
 type AiStage = "discovery" | "component" | "implementation";
@@ -297,6 +298,7 @@ export const FeatureWorkspacePage = ({
   onBack,
   onChange,
   onExport,
+  onExportWorkspaceJson,
 }: FeatureWorkspacePageProps) => {
   const [activeSection, setActiveSection] = useState<WorkspaceSectionId>("featureDefinition");
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(
@@ -884,6 +886,12 @@ export const FeatureWorkspacePage = ({
                 />
               </Field>
             </>
+          ) : activeSection === "featureDesign" ? (
+            <div className="flex flex-wrap gap-2">
+              <Button onClick={() => onExportWorkspaceJson(workspace)} tone="secondary">
+                Export Workspace JSON
+              </Button>
+            </div>
           ) : (
             <div className="space-y-3 rounded-2xl border border-slate/10 bg-mist/40 px-4 py-3">
               <StaticContextBlock
@@ -1537,13 +1545,13 @@ export const FeatureWorkspacePage = ({
       {activeSection === "featureDefinition" ? (
         <section className="rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel">
           <p className="text-xs uppercase tracking-[0.25em] text-copper">Generated Outputs</p>
-          <h2 className="mt-2 text-2xl font-semibold">Feature Workspace Markdown</h2>
+          <h2 className="mt-2 text-2xl font-semibold">Feature Requirement Markdown</h2>
           <div className="mt-5">
             <PreviewCard
-              title="Feature Workspace Markdown"
+              title="Feature Requirement Markdown"
               action={
                 <Button onClick={() => onExport(outputs.markdown, workspace.title)}>
-                  Export Markdown
+                  Export Requirement Markdown
                 </Button>
               }
             >

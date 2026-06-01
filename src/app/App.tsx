@@ -4,7 +4,11 @@ import { DashboardPage } from "../pages/dashboard/DashboardPage";
 import { FeatureWorkspacePage } from "../pages/workspace/FeatureWorkspacePage";
 import { createEmptyWorkspace, createSampleWorkspace } from "../features/workspaces/schema/defaults";
 import type { FeatureWorkspace } from "../features/workspaces/schema/workspace";
-import { loadWorkspaces, saveWorkspaces } from "../features/workspaces/storage/local-storage";
+import {
+  loadWorkspaces,
+  normalizeImportedWorkspace,
+  saveWorkspaces,
+} from "../features/workspaces/storage/local-storage";
 
 type AppState = {
   workspaces: FeatureWorkspace[];
@@ -100,6 +104,30 @@ export const App = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  const exportWorkspaceJson = (workspace: FeatureWorkspace) => {
+    const blob = new Blob([JSON.stringify(workspace, null, 2)], {
+      type: "application/json;charset=utf-8",
+    });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${workspace.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "feature-workspace"}.workspace.json`;
+    anchor.click();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const importWorkspaceJson = async (file: File) => {
+    const content = await file.text();
+    const parsed = JSON.parse(content) as FeatureWorkspace;
+    const normalized = normalizeImportedWorkspace(parsed);
+    const importedWorkspace: FeatureWorkspace = {
+      ...normalized,
+      id: `${normalized.id}-${Date.now()}`,
+      updatedAt: new Date().toISOString(),
+    };
+    dispatch({ type: "create", workspace: importedWorkspace });
+  };
+
   return (
     <AppFrame
       header={
@@ -129,6 +157,7 @@ export const App = () => {
             });
           }}
           onExport={exportMarkdown}
+          onExportWorkspaceJson={exportWorkspaceJson}
         />
       ) : (
         <DashboardPage
@@ -139,6 +168,7 @@ export const App = () => {
           onLoadSample={() =>
             dispatch({ type: "create", workspace: createSampleWorkspace() })
           }
+          onImportWorkspaceJson={importWorkspaceJson}
         />
       )}
     </AppFrame>

@@ -1,3 +1,4 @@
+import { useRef, type ChangeEvent } from "react";
 import type { FeatureWorkspace } from "../../features/workspaces/schema/workspace";
 import { Button } from "../../components/form/FormControls";
 
@@ -7,9 +8,33 @@ type DashboardPageProps = {
   onOpen: (designId: string) => void;
   onRemove: (designId: string) => void;
   onLoadSample: () => void;
+  onImportWorkspaceJson: (file: File) => Promise<void>;
 };
 
-export const DashboardPage = ({ designs, onCreate, onOpen, onRemove, onLoadSample }: DashboardPageProps) => (
+export const DashboardPage = ({
+  designs,
+  onCreate,
+  onOpen,
+  onRemove,
+  onLoadSample,
+  onImportWorkspaceJson,
+}: DashboardPageProps) => {
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      await onImportWorkspaceJson(file);
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  return (
   <div className="grid gap-6 lg:grid-cols-[1.1fr_1.9fr]">
     <section className="rounded-[28px] border border-white/70 bg-ink p-6 text-white shadow-panel">
       <p className="text-xs uppercase tracking-[0.3em] text-sand/80">ArchFlow</p>
@@ -24,6 +49,16 @@ export const DashboardPage = ({ designs, onCreate, onOpen, onRemove, onLoadSampl
           Create Feature Workspace
         </Button>
         <Button onClick={onLoadSample}>Load Sample Workspace</Button>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".json,application/json"
+          className="hidden"
+          onChange={handleImport}
+        />
+        <Button onClick={() => importInputRef.current?.click()}>
+          Import Workspace JSON
+        </Button>
       </div>
     </section>
 
@@ -83,4 +118,5 @@ export const DashboardPage = ({ designs, onCreate, onOpen, onRemove, onLoadSampl
       </div>
     </section>
   </div>
-);
+  );
+};
