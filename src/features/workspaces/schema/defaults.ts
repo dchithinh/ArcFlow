@@ -145,6 +145,12 @@ export const createEmptyWorkspace = (): FeatureWorkspace => ({
     runtimeLinks: [],
     candidateTasks: [],
     systemRisks: [],
+    customOptions: {
+      interactionMechanisms: [],
+      runtimeNodeKinds: [],
+      runtimeLinkKinds: [],
+      contextEntityKinds: [],
+    },
   },
   components: [],
   implementationPlan: {
@@ -484,6 +490,12 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
           notes: "Response path leaves the MCU through the UART hardware boundary.",
         },
       ],
+      customOptions: {
+        interactionMechanisms: [],
+        runtimeNodeKinds: [],
+        runtimeLinkKinds: [],
+        contextEntityKinds: [],
+      },
       candidateTasks: [
         {
           id: createId("task"),

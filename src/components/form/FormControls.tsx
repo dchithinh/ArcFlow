@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 type FieldProps = {
   label: string;
@@ -88,6 +88,9 @@ export const Toggle = ({ checked, onChange, label }: ToggleProps) => (
   </label>
 );
 
+const selectClassName =
+  "w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20";
+
 type SelectProps<T extends string> = {
   value: T;
   onChange: (value: T) => void;
@@ -95,11 +98,7 @@ type SelectProps<T extends string> = {
 };
 
 export const Select = <T extends string>({ value, onChange, options }: SelectProps<T>) => (
-  <select
-    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
-    value={value}
-    onChange={(event) => onChange(event.target.value as T)}
-  >
+  <select className={selectClassName} value={value} onChange={(event) => onChange(event.target.value as T)}>
     {options.map((option) => (
       <option key={option} value={option}>
         {option}
@@ -107,6 +106,152 @@ export const Select = <T extends string>({ value, onChange, options }: SelectPro
     ))}
   </select>
 );
+
+type SelectWithOtherProps<T extends string> = {
+  value: string;
+  onChange: (value: string) => void;
+  options: T[];
+  otherValue?: T;
+  customPlaceholder?: string;
+  customOptions?: string[];
+  onAddCustomOption?: (value: string) => void;
+  onRemoveCustomOption?: (value: string) => void;
+};
+
+const customOptionValue = "__custom_other_option__";
+
+export const SelectWithOther = <T extends string>({
+  value,
+  onChange,
+  options,
+  otherValue = "other" as T,
+  customPlaceholder = "Enter custom label",
+  customOptions = [],
+  onAddCustomOption,
+  onRemoveCustomOption,
+}: SelectWithOtherProps<T>) => {
+  const hasOther = options.includes(otherValue);
+  const uniqueCustomOptions = Array.from(
+    new Set(
+      customOptions
+        .map((option) => option.trim())
+        .filter((option) => option && !options.includes(option as T)),
+    ),
+  );
+  const isListedCustomValue = uniqueCustomOptions.includes(value);
+  const isCustomValue =
+    hasOther &&
+    value.trim() !== "" &&
+    value !== otherValue &&
+    !options.includes(value as T);
+  const showCustomField = hasOther && (value === otherValue || (isCustomValue && !isListedCustomValue));
+  const selectValue = isListedCustomValue
+    ? value
+    : isCustomValue
+      ? customOptionValue
+      : value;
+  const [customDraft, setCustomDraft] = useState("");
+
+  useEffect(() => {
+    if (value === otherValue) {
+      setCustomDraft("");
+      return;
+    }
+
+    if (isCustomValue && !isListedCustomValue) {
+      setCustomDraft(value);
+      return;
+    }
+
+    setCustomDraft("");
+  }, [isCustomValue, isListedCustomValue, otherValue, value]);
+
+  const submitCustomOption = () => {
+    const nextValue = customDraft.trim();
+    if (!nextValue) {
+      return;
+    }
+
+    onAddCustomOption?.(nextValue);
+    onChange(nextValue);
+    setCustomDraft("");
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-start gap-2">
+        <div className="min-w-[220px] flex-1">
+          <select
+            className={selectClassName}
+            value={selectValue}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              if (nextValue === customOptionValue) {
+                return;
+              }
+              onChange(nextValue);
+            }}
+          >
+            {options
+              .filter((option) => option !== otherValue)
+              .map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            {uniqueCustomOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+            {options.includes(otherValue) ? (
+              <option value={otherValue}>{otherValue}</option>
+            ) : null}
+            {isCustomValue && !isListedCustomValue ? (
+              <option value={customOptionValue}>other (custom)</option>
+            ) : null}
+          </select>
+        </div>
+        {isListedCustomValue ? (
+          <Button
+            onClick={() => {
+              onRemoveCustomOption?.(value);
+              onChange(otherValue);
+            }}
+            tone="ghost"
+            size="compact"
+          >
+            Remove Option
+          </Button>
+        ) : null}
+      </div>
+      {showCustomField ? (
+        <div className="flex flex-wrap items-start gap-2">
+          <div className="min-w-[220px] flex-1">
+            <TextInput
+              value={customDraft}
+              onChange={(nextValue) => setCustomDraft(nextValue)}
+              placeholder={customPlaceholder}
+            />
+          </div>
+          <Button onClick={submitCustomOption} size="compact">
+            Add Option
+          </Button>
+          <Button
+            onClick={() => {
+              setCustomDraft("");
+              onChange(otherValue);
+            }}
+            tone="ghost"
+            size="compact"
+          >
+            Clear
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+};
 
 type ButtonProps = {
   children: ReactNode;

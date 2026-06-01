@@ -203,6 +203,12 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
         ...(legacy.rtos?.timingRisks ?? []),
         ...(legacy.rtos?.synchronization ?? []),
       ],
+      customOptions: {
+        interactionMechanisms: [],
+        runtimeNodeKinds: [],
+        runtimeLinkKinds: [],
+        contextEntityKinds: [],
+      },
     },
     components: Array.from(componentMap.values()),
     implementationPlan: {
@@ -259,6 +265,30 @@ const normalizeWorkspace = (workspace: FeatureWorkspace): FeatureWorkspace => {
       systemRisks: Array.isArray(workspace.discovery?.systemRisks)
         ? workspace.discovery.systemRisks
         : [],
+      customOptions: {
+        ...base.discovery.customOptions,
+        ...workspace.discovery?.customOptions,
+        interactionMechanisms: Array.isArray(
+          workspace.discovery?.customOptions?.interactionMechanisms,
+        )
+          ? workspace.discovery.customOptions.interactionMechanisms
+          : [],
+        runtimeNodeKinds: Array.isArray(
+          workspace.discovery?.customOptions?.runtimeNodeKinds,
+        )
+          ? workspace.discovery.customOptions.runtimeNodeKinds
+          : [],
+        runtimeLinkKinds: Array.isArray(
+          workspace.discovery?.customOptions?.runtimeLinkKinds,
+        )
+          ? workspace.discovery.customOptions.runtimeLinkKinds
+          : [],
+        contextEntityKinds: Array.isArray(
+          workspace.discovery?.customOptions?.contextEntityKinds,
+        )
+          ? workspace.discovery.customOptions.contextEntityKinds
+          : [],
+      },
     },
     components: Array.isArray(workspace.components) ? workspace.components : [],
     implementationPlan: {

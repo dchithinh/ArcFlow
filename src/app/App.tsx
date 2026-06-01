@@ -17,7 +17,11 @@ type AppAction =
   | { type: "open"; workspaceId: string }
   | { type: "backToDashboard" }
   | { type: "remove"; workspaceId: string }
-  | { type: "replace"; workspace: FeatureWorkspace };
+  | {
+      type: "update";
+      workspaceId: string;
+      updater: (current: FeatureWorkspace) => FeatureWorkspace;
+    };
 
 const reducer = (state: AppState, action: AppAction): AppState => {
   switch (action.type) {
@@ -50,11 +54,11 @@ const reducer = (state: AppState, action: AppAction): AppState => {
         activeWorkspaceId:
           state.activeWorkspaceId === action.workspaceId ? null : state.activeWorkspaceId,
       };
-    case "replace":
+    case "update":
       return {
         ...state,
         workspaces: state.workspaces.map((workspace) =>
-          workspace.id === action.workspace.id ? action.workspace : workspace,
+          workspace.id === action.workspaceId ? action.updater(workspace) : workspace,
         ),
       };
     default:
@@ -118,14 +122,11 @@ export const App = () => {
           workspace={activeWorkspace}
           onBack={() => dispatch({ type: "backToDashboard" })}
           onChange={(updater) => {
-            const current = state.workspaces.find(
-              (workspace) => workspace.id === activeWorkspace.id,
-            );
-            if (!current) {
-              return;
-            }
-
-            dispatch({ type: "replace", workspace: updater(current) });
+            dispatch({
+              type: "update",
+              workspaceId: activeWorkspace.id,
+              updater,
+            });
           }}
           onExport={exportMarkdown}
         />

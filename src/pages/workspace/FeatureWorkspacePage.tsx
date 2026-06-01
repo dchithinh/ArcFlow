@@ -1,6 +1,12 @@
 import type { ChangeEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Field, TextArea, TextInput } from "../../components/form/FormControls";
+import {
+  Button,
+  Field,
+  SelectWithOther,
+  TextArea,
+  TextInput,
+} from "../../components/form/FormControls";
 import {
   EventListEditor,
   ObjectListEditor,
@@ -57,6 +63,65 @@ const SectionInputLabel = ({ children }: { children: string }) => (
   </span>
 );
 
+const INTERACTION_MECHANISM_OPTIONS = [
+  "queue",
+  "event",
+  "notification",
+  "callback",
+  "shared_memory",
+  "direct_call",
+  "other",
+] as const;
+
+const RUNTIME_NODE_TYPE_OPTIONS = [
+  "mcu",
+  "core",
+  "task",
+  "thread",
+  "isr",
+  "timer",
+  "queue",
+  "mutex",
+  "peripheral",
+  "device",
+  "service",
+  "store",
+  "other",
+] as const;
+
+const RUNTIME_BOUNDARY_HOST_OPTIONS = [
+  "mcu",
+  "core",
+  "device",
+  "peripheral",
+  "service",
+  "other",
+] as const;
+
+const RUNTIME_LINK_TYPE_OPTIONS = [
+  "interrupt",
+  "queue",
+  "notification",
+  "call",
+  "shared_memory",
+  "driver",
+  "timer",
+  "mutex",
+  "data",
+  "other",
+] as const;
+
+const CONTEXT_ENTITY_TYPE_OPTIONS = [
+  "user",
+  "device",
+  "system",
+  "service",
+  "timer",
+  "sensor",
+  "actuator",
+  "other",
+] as const;
+
 const StaticContextBlock = ({
   label,
   value,
@@ -80,6 +145,30 @@ const requirementsToText = (requirements: string[]): string =>
 
 const stripRequirementPrefix = (value: string): string =>
   value.replace(/^REQ-\d+\s*:\s*/i, "").trim();
+
+const appendUniqueOption = (
+  options: string[],
+  value: string,
+  reservedOptions: readonly string[] = [],
+): string[] => {
+  const nextValue = value.trim();
+  if (!nextValue) {
+    return options;
+  }
+
+  const normalized = nextValue.toLowerCase();
+  if (reservedOptions.some((option) => option.trim().toLowerCase() === normalized)) {
+    return options;
+  }
+  if (options.some((option) => option.trim().toLowerCase() === normalized)) {
+    return options;
+  }
+
+  return [...options, nextValue];
+};
+
+const removeOptionValue = (options: string[], value: string): string[] =>
+  options.filter((option) => option.trim().toLowerCase() !== value.trim().toLowerCase());
 
 const headingAliases = {
   summary: new Set(["summary", "feature summary"]),
@@ -1018,6 +1107,45 @@ export const FeatureWorkspacePage = ({
                   flows={workspace.discovery.contextFlows.filter(
                     (flow) => flow.entityId === selectedContextEntity.id,
                   )}
+                  customKinds={workspace.discovery.customOptions.contextEntityKinds}
+                  onAddCustomKind={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          customOptions: {
+                            ...current.discovery.customOptions,
+                            contextEntityKinds: appendUniqueOption(
+                              current.discovery.customOptions.contextEntityKinds,
+                              value,
+                              CONTEXT_ENTITY_TYPE_OPTIONS,
+                            ),
+                          },
+                        },
+                      }),
+                    )
+                  }
+                  onRemoveCustomKind={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          contextEntities: current.discovery.contextEntities.map((entity) =>
+                            entity.kind === value ? { ...entity, kind: "other" } : entity,
+                          ),
+                          customOptions: {
+                            ...current.discovery.customOptions,
+                            contextEntityKinds: removeOptionValue(
+                              current.discovery.customOptions.contextEntityKinds,
+                              value,
+                            ),
+                          },
+                        },
+                      }),
+                    )
+                  }
                   onChange={(nextEntity, nextFlows) =>
                     onChange((current) =>
                       updateTimestamp({
@@ -1147,6 +1275,47 @@ export const FeatureWorkspacePage = ({
                 <InteractionDetailEditor
                   interaction={selectedInteraction}
                   components={workspace.discovery.candidateComponents}
+                  customMechanisms={workspace.discovery.customOptions.interactionMechanisms}
+                  onAddCustomMechanism={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          customOptions: {
+                            ...current.discovery.customOptions,
+                            interactionMechanisms: appendUniqueOption(
+                              current.discovery.customOptions.interactionMechanisms,
+                              value,
+                              INTERACTION_MECHANISM_OPTIONS,
+                            ),
+                          },
+                        },
+                      }),
+                    )
+                  }
+                  onRemoveCustomMechanism={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          interactions: current.discovery.interactions.map((interaction) =>
+                            interaction.mechanism === value
+                              ? { ...interaction, mechanism: "other" }
+                              : interaction,
+                          ),
+                          customOptions: {
+                            ...current.discovery.customOptions,
+                            interactionMechanisms: removeOptionValue(
+                              current.discovery.customOptions.interactionMechanisms,
+                              value,
+                            ),
+                          },
+                        },
+                      }),
+                    )
+                  }
                   onChange={(nextInteraction) =>
                     onChange((current) =>
                       updateTimestamp({
@@ -1207,6 +1376,45 @@ export const FeatureWorkspacePage = ({
                 <RuntimeNodeDetailEditor
                   node={selectedRuntimeNode}
                   nodes={workspace.discovery.runtimeNodes}
+                  customKinds={workspace.discovery.customOptions.runtimeNodeKinds}
+                  onAddCustomKind={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          customOptions: {
+                            ...current.discovery.customOptions,
+                            runtimeNodeKinds: appendUniqueOption(
+                              current.discovery.customOptions.runtimeNodeKinds,
+                              value,
+                              RUNTIME_NODE_TYPE_OPTIONS,
+                            ),
+                          },
+                        },
+                      }),
+                    )
+                  }
+                  onRemoveCustomKind={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          runtimeNodes: current.discovery.runtimeNodes.map((node) =>
+                            node.kind === value ? { ...node, kind: "other" } : node,
+                          ),
+                          customOptions: {
+                            ...current.discovery.customOptions,
+                            runtimeNodeKinds: removeOptionValue(
+                              current.discovery.customOptions.runtimeNodeKinds,
+                              value,
+                            ),
+                          },
+                        },
+                      }),
+                    )
+                  }
                   onChange={(nextNode) =>
                     onChange((current) =>
                       updateTimestamp({
@@ -1267,6 +1475,45 @@ export const FeatureWorkspacePage = ({
                 <RuntimeLinkDetailEditor
                   link={selectedRuntimeLink}
                   nodes={workspace.discovery.runtimeNodes}
+                  customKinds={workspace.discovery.customOptions.runtimeLinkKinds}
+                  onAddCustomKind={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          customOptions: {
+                            ...current.discovery.customOptions,
+                            runtimeLinkKinds: appendUniqueOption(
+                              current.discovery.customOptions.runtimeLinkKinds,
+                              value,
+                              RUNTIME_LINK_TYPE_OPTIONS,
+                            ),
+                          },
+                        },
+                      }),
+                    )
+                  }
+                  onRemoveCustomKind={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          runtimeLinks: current.discovery.runtimeLinks.map((link) =>
+                            link.kind === value ? { ...link, kind: "other" } : link,
+                          ),
+                          customOptions: {
+                            ...current.discovery.customOptions,
+                            runtimeLinkKinds: removeOptionValue(
+                              current.discovery.customOptions.runtimeLinkKinds,
+                              value,
+                            ),
+                          },
+                        },
+                      }),
+                    )
+                  }
                   onChange={(nextLink) =>
                     onChange((current) =>
                       updateTimestamp({
@@ -1592,10 +1839,16 @@ const formatRuntimeLinkName = (
 const InteractionDetailEditor = ({
   interaction,
   components,
+  customMechanisms,
+  onAddCustomMechanism,
+  onRemoveCustomMechanism,
   onChange,
 }: {
   interaction: ComponentInteraction;
   components: ComponentCandidate[];
+  customMechanisms: string[];
+  onAddCustomMechanism: (value: string) => void;
+  onRemoveCustomMechanism: (value: string) => void;
   onChange: (nextInteraction: ComponentInteraction) => void;
 }) => (
   <div className="space-y-4">
@@ -1647,30 +1900,20 @@ const InteractionDetailEditor = ({
         </div>
         <div className="space-y-1.5">
           <SectionInputLabel>Mechanism</SectionInputLabel>
-          <select
-            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+          <SelectWithOther
             value={interaction.mechanism}
-            onChange={(event) =>
+            onChange={(value) =>
               onChange({
                 ...interaction,
-                mechanism: event.target.value as ComponentInteraction["mechanism"],
+                mechanism: value as ComponentInteraction["mechanism"],
               })
             }
-          >
-            {[
-              "queue",
-              "event",
-              "notification",
-              "callback",
-              "shared_memory",
-              "direct_call",
-              "other",
-            ].map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            options={[...INTERACTION_MECHANISM_OPTIONS]}
+            customOptions={customMechanisms}
+            onAddCustomOption={onAddCustomMechanism}
+            onRemoveCustomOption={onRemoveCustomMechanism}
+            customPlaceholder="Enter custom mechanism"
+          />
         </div>
         <div className="space-y-1.5">
           <SectionInputLabel>Data / Signal</SectionInputLabel>
@@ -1696,10 +1939,16 @@ const InteractionDetailEditor = ({
 const RuntimeNodeDetailEditor = ({
   node,
   nodes,
+  customKinds,
+  onAddCustomKind,
+  onRemoveCustomKind,
   onChange,
 }: {
   node: RuntimeNode;
   nodes: RuntimeNode[];
+  customKinds: string[];
+  onAddCustomKind: (value: string) => void;
+  onRemoveCustomKind: (value: string) => void;
   onChange: (nextNode: RuntimeNode) => void;
 }) => (
   <div className="space-y-4">
@@ -1718,33 +1967,15 @@ const RuntimeNodeDetailEditor = ({
         </div>
         <div className="space-y-1.5">
           <SectionInputLabel>Node Type</SectionInputLabel>
-          <select
-            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+          <SelectWithOther
             value={node.kind}
-            onChange={(event) =>
-              onChange({ ...node, kind: event.target.value as RuntimeNode["kind"] })
-            }
-          >
-            {[
-              "mcu",
-              "core",
-              "task",
-              "thread",
-              "isr",
-              "timer",
-              "queue",
-              "mutex",
-              "peripheral",
-              "device",
-              "service",
-              "store",
-              "other",
-            ].map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => onChange({ ...node, kind: value as RuntimeNode["kind"] })}
+            options={[...RUNTIME_NODE_TYPE_OPTIONS]}
+            customOptions={customKinds}
+            onAddCustomOption={onAddCustomKind}
+            onRemoveCustomOption={onRemoveCustomKind}
+            customPlaceholder="Enter custom runtime node type"
+          />
         </div>
         <div className="space-y-1.5">
           <SectionInputLabel>Host Runtime Boundary</SectionInputLabel>
@@ -1758,9 +1989,7 @@ const RuntimeNodeDetailEditor = ({
               .filter(
                 (candidate) =>
                   candidate.id !== node.id &&
-                  ["mcu", "core", "device", "peripheral", "service", "other"].includes(
-                    candidate.kind,
-                  ),
+                  RUNTIME_BOUNDARY_HOST_OPTIONS.includes(candidate.kind as (typeof RUNTIME_BOUNDARY_HOST_OPTIONS)[number]),
               )
               .map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>
@@ -1793,10 +2022,16 @@ const RuntimeNodeDetailEditor = ({
 const RuntimeLinkDetailEditor = ({
   link,
   nodes,
+  customKinds,
+  onAddCustomKind,
+  onRemoveCustomKind,
   onChange,
 }: {
   link: RuntimeLink;
   nodes: RuntimeNode[];
+  customKinds: string[];
+  onAddCustomKind: (value: string) => void;
+  onRemoveCustomKind: (value: string) => void;
   onChange: (nextLink: RuntimeLink) => void;
 }) => (
   <div className="space-y-4">
@@ -1844,30 +2079,15 @@ const RuntimeLinkDetailEditor = ({
         </div>
         <div className="space-y-1.5">
           <SectionInputLabel>Link Type</SectionInputLabel>
-          <select
-            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+          <SelectWithOther
             value={link.kind}
-            onChange={(event) =>
-              onChange({ ...link, kind: event.target.value as RuntimeLink["kind"] })
-            }
-          >
-            {[
-              "interrupt",
-              "queue",
-              "notification",
-              "call",
-              "shared_memory",
-              "driver",
-              "timer",
-              "mutex",
-              "data",
-              "other",
-            ].map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            onChange={(value) => onChange({ ...link, kind: value as RuntimeLink["kind"] })}
+            options={[...RUNTIME_LINK_TYPE_OPTIONS]}
+            customOptions={customKinds}
+            onAddCustomOption={onAddCustomKind}
+            onRemoveCustomOption={onRemoveCustomKind}
+            customPlaceholder="Enter custom runtime link type"
+          />
         </div>
         <div className="space-y-1.5">
           <SectionInputLabel>Label</SectionInputLabel>
@@ -1893,10 +2113,16 @@ const RuntimeLinkDetailEditor = ({
 const ContextEntityDetailEditor = ({
   entity,
   flows,
+  customKinds,
+  onAddCustomKind,
+  onRemoveCustomKind,
   onChange,
 }: {
   entity: ContextEntity;
   flows: ContextFlow[];
+  customKinds: string[];
+  onAddCustomKind: (value: string) => void;
+  onRemoveCustomKind: (value: string) => void;
   onChange: (nextEntity: ContextEntity, nextFlows: ContextFlow[]) => void;
 }) => {
   const updateFlow = (flowId: string, updates: Partial<ContextFlow>) => {
@@ -1923,22 +2149,15 @@ const ContextEntityDetailEditor = ({
           </div>
           <div className="space-y-1.5">
             <SectionInputLabel>Entity Type</SectionInputLabel>
-            <select
-              className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+            <SelectWithOther
               value={entity.kind}
-              onChange={(event) =>
-                onChange(
-                  { ...entity, kind: event.target.value as ContextEntity["kind"] },
-                  flows,
-                )
-              }
-            >
-              {["user", "device", "system", "service", "timer", "sensor", "actuator", "other"].map((option) => (
-                <option key={option} value={option}>
-                  {option}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => onChange({ ...entity, kind: value as ContextEntity["kind"] }, flows)}
+              options={[...CONTEXT_ENTITY_TYPE_OPTIONS]}
+              customOptions={customKinds}
+              onAddCustomOption={onAddCustomKind}
+              onRemoveCustomOption={onRemoveCustomKind}
+              customPlaceholder="Enter custom entity type"
+            />
           </div>
           <div className="space-y-1.5">
             <SectionInputLabel>Description</SectionInputLabel>

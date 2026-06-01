@@ -1,6 +1,8 @@
 export type DesignPriority = "high" | "medium" | "low";
 export type TaskType = "periodic" | "event-driven" | "background" | "worker";
-export type InteractionMechanism =
+type FlexibleString<T extends string> = T | (string & {});
+
+type KnownInteractionMechanism =
   | "queue"
   | "event"
   | "notification"
@@ -8,7 +10,8 @@ export type InteractionMechanism =
   | "shared_memory"
   | "direct_call"
   | "other";
-export type ContextEntityKind =
+export type InteractionMechanism = FlexibleString<KnownInteractionMechanism>;
+type KnownContextEntityKind =
   | "user"
   | "device"
   | "system"
@@ -17,10 +20,18 @@ export type ContextEntityKind =
   | "sensor"
   | "actuator"
   | "other";
+export type ContextEntityKind = FlexibleString<KnownContextEntityKind>;
 export type ContextFlowDirection = "inbound" | "outbound" | "bidirectional";
-export type SequenceParticipantKind = "actor" | "component" | "system" | "device" | "service";
+type KnownSequenceParticipantKind =
+  | "actor"
+  | "component"
+  | "system"
+  | "device"
+  | "service"
+  | "other";
+export type SequenceParticipantKind = FlexibleString<KnownSequenceParticipantKind>;
 export type SequenceStepType = "call" | "async" | "return" | "event";
-export type RuntimeNodeKind =
+type KnownRuntimeNodeKind =
   | "mcu"
   | "core"
   | "task"
@@ -34,7 +45,8 @@ export type RuntimeNodeKind =
   | "service"
   | "store"
   | "other";
-export type RuntimeLinkKind =
+export type RuntimeNodeKind = FlexibleString<KnownRuntimeNodeKind>;
+type KnownRuntimeLinkKind =
   | "interrupt"
   | "queue"
   | "notification"
@@ -45,6 +57,7 @@ export type RuntimeLinkKind =
   | "mutex"
   | "data"
   | "other";
+export type RuntimeLinkKind = FlexibleString<KnownRuntimeLinkKind>;
 
 export type WorkspaceSectionId =
   | "featureDefinition"
@@ -170,6 +183,13 @@ export type CandidateTask = {
   notes?: string;
 };
 
+export type WorkspaceCustomOptions = {
+  interactionMechanisms: string[];
+  runtimeNodeKinds: string[];
+  runtimeLinkKinds: string[];
+  contextEntityKinds: string[];
+};
+
 export type FeatureComponent = {
   id: string;
   name: string;
@@ -214,6 +234,7 @@ export type FeatureWorkspace = {
     runtimeLinks: RuntimeLink[];
     candidateTasks: CandidateTask[];
     systemRisks: string[];
+    customOptions: WorkspaceCustomOptions;
   };
   components: FeatureComponent[];
   implementationPlan: {
