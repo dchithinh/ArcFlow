@@ -5,6 +5,10 @@ type MermaidPreviewProps = {
   title: string;
   className?: string;
   svgMode?: "fit" | "natural";
+  resizable?: boolean;
+  defaultHeight?: number;
+  minHeight?: number;
+  maxHeight?: number;
 };
 
 const formatSvg = (svg: string, svgMode: "fit" | "natural"): string => {
@@ -31,6 +35,10 @@ export const MermaidPreview = ({
   title,
   className = "",
   svgMode = "natural",
+  resizable = false,
+  defaultHeight,
+  minHeight = 280,
+  maxHeight = 1100,
 }: MermaidPreviewProps) => {
   const [svg, setSvg] = useState<string>("");
   const [failed, setFailed] = useState(false);
@@ -160,7 +168,10 @@ export const MermaidPreview = ({
 
   if (failed) {
     return (
-      <div className={`space-y-3 ${className}`.trim()}>
+      <div
+        className={`${resizable ? "resize-y overflow-auto" : ""} space-y-3 ${className}`.trim()}
+        style={resizable ? { height: `${defaultHeight ?? minHeight}px`, minHeight: `${minHeight}px`, maxHeight: `${maxHeight}px` } : undefined}
+      >
         <p className="text-xs uppercase tracking-[0.2em] text-copper">Mermaid fallback</p>
         <pre className="overflow-x-auto rounded-2xl bg-ink p-4 text-xs text-white">{chart}</pre>
       </div>
@@ -168,7 +179,18 @@ export const MermaidPreview = ({
   }
 
   return (
-    <div className={`space-y-3 rounded-2xl bg-white p-3 ${className}`.trim()}>
+    <div
+      className={`${resizable ? "resize-y overflow-auto" : ""} flex min-h-0 flex-col gap-3 rounded-2xl bg-white p-3 ${className}`.trim()}
+      style={
+        resizable
+          ? {
+              height: `${defaultHeight ?? minHeight}px`,
+              minHeight: `${minHeight}px`,
+              maxHeight: `${maxHeight}px`,
+            }
+          : undefined
+      }
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="ml-auto flex flex-wrap gap-2">
           <button
@@ -209,7 +231,7 @@ export const MermaidPreview = ({
       </div>
       <div
         ref={viewportRef}
-        className={`overflow-auto rounded-2xl bg-white ${
+        className={`min-h-0 flex-1 overflow-auto rounded-2xl bg-white ${
           isDragging ? "cursor-grabbing" : zoom > 1 ? "cursor-grab" : "cursor-default"
         }`}
         onPointerDown={beginDrag}

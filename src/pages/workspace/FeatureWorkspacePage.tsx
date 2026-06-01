@@ -1570,7 +1570,7 @@ export const FeatureWorkspacePage = ({
               chart={outputs.contextDiagram}
               previewTitle="Context Diagram"
               expandedTitle="Context Diagram"
-              previewMinHeight="min-h-[360px]"
+              previewDefaultHeight={360}
               previewMinWidth="min-w-[860px]"
               expandedMinWidth="min-w-[1300px]"
             />
@@ -1579,7 +1579,7 @@ export const FeatureWorkspacePage = ({
               chart={outputs.architectureFlowchart}
               previewTitle="Architecture Flowchart"
               expandedTitle="Feature Architecture Flowchart"
-              previewMinHeight="min-h-[420px]"
+              previewDefaultHeight={420}
               previewMinWidth="min-w-[980px]"
               expandedMinWidth="min-w-[1400px]"
             />
@@ -1588,7 +1588,7 @@ export const FeatureWorkspacePage = ({
               chart={outputs.behavioralArchitectureDiagram}
               previewTitle="Behavioral Architecture Diagram"
               expandedTitle="Behavioral Architecture Diagram"
-              previewMinHeight="min-h-[460px]"
+              previewDefaultHeight={460}
               previewMinWidth="min-w-[1100px]"
               expandedMinWidth="min-w-[1600px]"
             />
@@ -1597,7 +1597,7 @@ export const FeatureWorkspacePage = ({
               chart={outputs.componentStateDiagram}
               previewTitle="Component State Diagram"
               expandedTitle="Selected Component State Diagram"
-              previewMinHeight="min-h-[360px]"
+              previewDefaultHeight={360}
               previewMinWidth="min-w-[820px]"
               expandedMinWidth="min-w-[1200px]"
             />
@@ -1606,7 +1606,7 @@ export const FeatureWorkspacePage = ({
               chart={outputs.sequenceDiagram}
               previewTitle="Sequence Diagram"
               expandedTitle={selectedScenario ? `Sequence Diagram: ${selectedScenario.name || "Selected Scenario"}` : "Sequence Diagram"}
-              previewMinHeight="min-h-[360px]"
+              previewDefaultHeight={360}
               previewMinWidth="min-w-[980px]"
               expandedMinWidth="min-w-[1400px]"
             />
@@ -1615,7 +1615,7 @@ export const FeatureWorkspacePage = ({
               chart={outputs.deploymentRuntimeDiagram}
               previewTitle="Deployment / Runtime Diagram"
               expandedTitle="Deployment / Runtime Diagram"
-              previewMinHeight="min-h-[380px]"
+              previewDefaultHeight={380}
               previewMinWidth="min-w-[980px]"
               expandedMinWidth="min-w-[1400px]"
             />
@@ -1691,7 +1691,7 @@ const DiagramPreviewCard = ({
   chart,
   previewTitle,
   expandedTitle,
-  previewMinHeight,
+  previewDefaultHeight,
   previewMinWidth,
   expandedMinWidth,
 }: {
@@ -1699,7 +1699,7 @@ const DiagramPreviewCard = ({
   chart: string;
   previewTitle: string;
   expandedTitle: string;
-  previewMinHeight: string;
+  previewDefaultHeight: number;
   previewMinWidth: string;
   expandedMinWidth: string;
 }) => {
@@ -1735,11 +1735,11 @@ const DiagramPreviewCard = ({
             title={previewTitle}
             chart={chart}
             svgMode={viewMode === "fit" ? "fit" : "natural"}
-            className={
-              viewMode === "fit"
-                ? previewMinHeight
-                : `${previewMinHeight} ${previewMinWidth}`
-            }
+            resizable
+            defaultHeight={previewDefaultHeight}
+            minHeight={Math.max(260, previewDefaultHeight - 120)}
+            maxHeight={1100}
+            className={viewMode === "fit" ? "h-full min-h-0" : `h-full min-h-0 ${previewMinWidth}`}
           />
         </div>
       </PreviewCard>
