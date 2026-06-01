@@ -139,9 +139,6 @@ export const App = () => {
               Local-first feature architecture discovery for embedded systems, with candidate component mapping, per-component detail editing, and generated firmware design artifacts.
             </p>
           </div>
-          <div className="rounded-2xl bg-mist px-4 py-3 text-sm text-slate">
-            Docker-first runtime, browser storage for persistence, hierarchical feature workspaces for outputs.
-          </div>
         </div>
       }
     >

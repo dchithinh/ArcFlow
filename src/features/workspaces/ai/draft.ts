@@ -104,6 +104,11 @@ export type AiImplementationDraft = {
   tests: string[];
 };
 
+export type AiDefinitionDraft = {
+  featureRequirements: string[];
+  featureResponsibilities: string[];
+};
+
 const createLocalId = (prefix: string): string =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -238,6 +243,9 @@ export const hasRequiredAiDraftInputs = (workspace: FeatureWorkspace): boolean =
 
 export const canGenerateDiscoveryDraft = hasRequiredAiDraftInputs;
 
+export const canGenerateDefinitionAssist = (workspace: FeatureWorkspace): boolean =>
+  workspace.title.trim().length > 0 && workspace.featureSummary.summary.trim().length > 0;
+
 export const canRefineComponentWithAi = (
   workspace: FeatureWorkspace,
   componentId?: string | null,
@@ -364,3 +372,33 @@ export const mergeAiImplementationIntoWorkspace = (
     tests: uniqueList(draft.tests),
   },
 });
+
+export const mergeAiDefinitionIntoWorkspace = (
+  workspace: FeatureWorkspace,
+  draft: AiDefinitionDraft,
+): FeatureWorkspace => {
+  const featureRequirements = uniqueList(draft.featureRequirements);
+  const featureResponsibilities = uniqueList(draft.featureResponsibilities);
+
+  return {
+    ...workspace,
+    requirement:
+      featureRequirements.length > 0
+        ? featureRequirements.join("\n")
+        : workspace.requirement,
+    featureSummary: {
+      ...workspace.featureSummary,
+      goals:
+        featureRequirements.length > 0
+          ? featureRequirements
+          : workspace.featureSummary.goals,
+    },
+    discovery: {
+      ...workspace.discovery,
+      responsibilities:
+        featureResponsibilities.length > 0
+          ? featureResponsibilities
+          : workspace.discovery.responsibilities,
+    },
+  };
+};

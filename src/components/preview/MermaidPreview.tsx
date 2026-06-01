@@ -198,7 +198,7 @@ export const MermaidPreview = ({
             onClick={() => setZoom((current) => clampZoom(Number((current - 0.15).toFixed(2))))}
             aria-label="Zoom out"
             title="Zoom out"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate/20 text-ink transition hover:bg-mist"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate/20 bg-white text-ink shadow-sm transition hover:border-copper/35 hover:bg-mist"
           >
             <span className="relative block h-3.5 w-3.5 rounded-full border-2 border-current">
               <span className="absolute left-1/2 top-1/2 h-0.5 w-1.5 -translate-x-1/2 -translate-y-1/2 bg-current" />
@@ -210,7 +210,7 @@ export const MermaidPreview = ({
             onClick={() => setZoom((current) => clampZoom(Number((current + 0.15).toFixed(2))))}
             aria-label="Zoom in"
             title="Zoom in"
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate/20 text-ink transition hover:bg-mist"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate/20 bg-white text-ink shadow-sm transition hover:border-copper/35 hover:bg-mist"
           >
             <span className="relative block h-3.5 w-3.5 rounded-full border-2 border-current">
               <span className="absolute left-1/2 top-1/2 h-0.5 w-1.5 -translate-x-1/2 -translate-y-1/2 bg-current" />
@@ -223,7 +223,7 @@ export const MermaidPreview = ({
             onClick={resetView}
             aria-label="Reset view"
             title="Reset view"
-            className="rounded-lg border border-slate/20 px-2.5 py-1 text-[11px] font-medium text-ink transition hover:bg-mist"
+            className="rounded-lg border border-slate/20 bg-white px-2.5 py-1 text-[11px] font-medium text-ink shadow-sm transition hover:border-copper/35 hover:bg-mist"
           >
             Reset
           </button>

@@ -272,12 +272,12 @@ export const Button = ({
 }: ButtonProps) => {
   const toneClass =
     tone === "primary"
-      ? "bg-ink text-white hover:bg-pine"
+      ? "border border-ink bg-ink text-white shadow-sm hover:border-pine hover:bg-pine"
       : tone === "danger"
-        ? "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200 hover:bg-rose-100"
+        ? "border border-rose-200 bg-rose-50 text-rose-700 shadow-sm hover:bg-rose-100"
       : tone === "ghost"
-        ? "bg-transparent text-slate hover:bg-white/60"
-        : "bg-white text-ink hover:bg-sand";
+        ? "border border-slate/20 bg-white/80 text-slate shadow-sm hover:bg-white"
+        : "border border-slate/20 bg-white text-ink shadow-sm hover:border-copper/35 hover:bg-sand";
   const sizeClass =
     size === "compact" ? "rounded-lg px-2.5 py-1.5 text-xs" : "rounded-xl px-4 py-2 text-sm";
 
@@ -286,7 +286,7 @@ export const Button = ({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`${sizeClass} ${className} font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`.trim()}
+      className={`${sizeClass} ${className} font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-copper/30 disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`.trim()}
     >
       {children}
     </button>

@@ -27,13 +27,16 @@ import {
   createEmptySequenceStep,
 } from "../../features/workspaces/schema/defaults";
 import {
+  canGenerateDefinitionAssist,
   canGenerateDiscoveryDraft,
+  mergeAiDefinitionIntoWorkspace,
   canGenerateImplementationPlanWithAi,
   canRefineComponentWithAi,
   mergeAiComponentIntoWorkspace,
   mergeAiDiscoveryIntoWorkspace,
   mergeAiImplementationIntoWorkspace,
   type AiComponentDraft,
+  type AiDefinitionDraft,
   type AiDiscoveryDraft,
   type AiImplementationDraft,
 } from "../../features/workspaces/ai/draft";
@@ -351,10 +354,10 @@ type FeatureWorkspacePageProps = {
   onExportWorkspaceJson: (workspace: FeatureWorkspace) => void;
 };
 
-type AiStage = "discovery" | "component" | "implementation";
+type AiStage = "definition" | "discovery" | "component" | "implementation";
 
 type AiStageSuccessResponse = {
-  draft: AiDiscoveryDraft | AiComponentDraft | AiImplementationDraft;
+  draft: AiDefinitionDraft | AiDiscoveryDraft | AiComponentDraft | AiImplementationDraft;
   model: string;
   provider: string;
   stage: AiStage;
@@ -579,6 +582,7 @@ export const FeatureWorkspacePage = ({
   }, [runtimeLinkDetailOpen, selectedRuntimeLink]);
 
   const canGenerateAiDraft = canGenerateDiscoveryDraft(workspace);
+  const canGenerateDefinitionDraft = canGenerateDefinitionAssist(workspace);
 
   const namedInteractions = workspace.discovery.interactions.map((interaction) => ({
     fromComponentName:
@@ -756,6 +760,43 @@ export const FeatureWorkspacePage = ({
       setAiStatus("error");
       setAiMessage(
         error instanceof Error ? error.message : "AI discovery draft generation failed.",
+      );
+    }
+  };
+
+  const generateDefinitionAssist = async () => {
+    if (!canGenerateDefinitionDraft || aiStatus === "loading") {
+      return;
+    }
+
+    startAiRequest(
+      "definition",
+      "Drafting feature requirements and responsibilities from the feature summary...",
+    );
+
+    try {
+      const data = await requestAiStage("definition", {
+        stage: "definition",
+        title: workspace.title,
+        summary: workspace.featureSummary.summary,
+        constraints: workspace.featureSummary.constraints,
+        assumptions: workspace.featureSummary.assumptions,
+        openQuestions: workspace.featureSummary.openQuestions,
+      });
+
+      const merged = updateTimestamp(
+        mergeAiDefinitionIntoWorkspace(workspace, data.draft as AiDefinitionDraft),
+      );
+      onChange(() => merged);
+      completeAiRequest(
+        `Feature requirements and responsibilities drafted with ${data.provider}/${data.model} in ${Math.max(1, Math.round(data.durationMs / 1000))}s. Review and edit them before generating discovery.`,
+      );
+    } catch (error) {
+      setAiStatus("error");
+      setAiMessage(
+        error instanceof Error
+          ? error.message
+          : "AI feature definition drafting failed.",
       );
     }
   };
@@ -955,6 +996,42 @@ export const FeatureWorkspacePage = ({
                   }
                 />
               </Field>
+              <div className="space-y-3 rounded-2xl border border-slate/10 bg-mist/50 px-4 py-4 text-sm text-slate">
+                <p className="font-medium text-ink">AI Feature Definition Assist</p>
+                <p>
+                  Use the current feature summary to draft a first pass of feature requirements and feature responsibilities that you can review and edit.
+                </p>
+                {aiStage === "definition" || aiStatus === "idle" ? (
+                  <p
+                    className={`text-xs ${
+                      aiStatus === "error"
+                        ? "text-red-700"
+                        : aiStatus === "success"
+                          ? "text-pine"
+                          : "text-slate"
+                    }`}
+                  >
+                    {aiMessage ||
+                      (canGenerateDefinitionDraft
+                        ? "Ready to draft feature requirements and responsibilities from the current feature summary."
+                        : "Add a feature name and feature summary to enable the assistant.")}
+                    {aiStatus === "loading" && aiStage === "definition"
+                      ? ` ${aiElapsedSeconds}s elapsed.`
+                      : ""}
+                  </p>
+                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={generateDefinitionAssist}
+                    tone="secondary"
+                    disabled={!canGenerateDefinitionDraft || aiStatus === "loading"}
+                  >
+                    {aiStatus === "loading" && aiStage === "definition"
+                      ? "Drafting Requirements..."
+                      : "Draft Requirements & Responsibilities"}
+                  </Button>
+                </div>
+              </div>
             </>
           ) : activeSection === "featureDesign" ? (
             <div className="flex flex-wrap gap-2">
@@ -2712,7 +2789,8 @@ const WorkspaceSectionForm = ({
                 discovery: { ...current.discovery, responsibilities: items },
               }))
             }
-            placeholder="Responsibility"
+            getItemLabel={(index) => `RESP-${index + 1}`}
+            getItemPlaceholder={(index) => `RESP-${index + 1}: Responsibility statement`}
           />
           <StringListEditor
             label="Constraints"

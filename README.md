@@ -48,6 +48,29 @@ OpenAI environment variables:
 
 ### Ollama
 
+Start or restart Ollama on the host machine first.
+
+On Windows PowerShell:
+
+```powershell
+ollama serve
+```
+
+Verify that Ollama is running:
+
+```powershell
+curl -UseBasicParsing http://localhost:11434/api/tags
+ollama list
+```
+
+If your preferred model is not installed yet:
+
+```powershell
+ollama pull qwen2.5-coder:7b
+```
+
+After a reboot, run `ollama serve` again if Ollama is not already running in the background.
+
 For Docker Desktop on Windows/macOS, this usually works directly:
 
 ```bash
@@ -58,7 +81,7 @@ docker run --rm -p 8080:80 \
   archflow-app
 ```
 
-On Linux, if `host.docker.internal` is not available, pass your host gateway explicitly:
+If `host.docker.internal` is not available inside the container, pass your host gateway explicitly:
 
 ```bash
 docker run --rm -p 8080:80 \
@@ -69,14 +92,39 @@ docker run --rm -p 8080:80 \
   archflow-app
 ```
 
+If Docker still cannot reach Ollama, use the host machine IP directly:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e AI_PROVIDER=ollama \
+  -e OLLAMA_BASE_URL=http://YOUR_HOST_IP:11434 \
+  -e OLLAMA_MODEL=qwen2.5-coder:7b \
+  archflow-app
+```
+
+On WSL, you can usually find the Windows host IP with:
+
+```bash
+ip route | awk '/default/ {print $3}'
+```
+
+Then test connectivity before starting ArchFlow:
+
+```bash
+curl http://YOUR_HOST_IP:11434/api/tags
+```
+
 General AI environment variables:
 
 - `AI_PROVIDER`
   `openai` or `ollama`
 - `OLLAMA_BASE_URL`
-  Defaults to `http://host.docker.internal:11434`
+  Base URL of the Ollama HTTP API as seen from inside the ArchFlow container.
+  Examples:
+  - `http://host.docker.internal:11434`
+  - `http://172.26.112.1:11434`
 - `OLLAMA_MODEL`
-  Defaults to `gpt-oss`
+  Name of the Ollama model to use, for example `qwen2.5-coder:7b`
 - `PORT`
   Defaults to `80`
 

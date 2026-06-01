@@ -123,6 +123,16 @@ const discoverySchema = {
   },
 };
 
+const definitionSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["featureRequirements", "featureResponsibilities"],
+  properties: {
+    featureRequirements: { type: "array", items: { type: "string" } },
+    featureResponsibilities: { type: "array", items: { type: "string" } },
+  },
+};
+
 const componentSchema = {
   type: "object",
   additionalProperties: false,
@@ -339,6 +349,36 @@ Return only the discovery-level design:
 - system risks
 
 Keep it implementation-oriented and sized for an embedded firmware team. Do not generate detailed component state machines yet.
+`.trim();
+
+const buildDefinitionPrompt = ({
+  title,
+  summary,
+  constraints,
+  assumptions,
+  openQuestions,
+}) => `
+Create a first-pass feature definition draft for a firmware feature workspace.
+
+Known user inputs:
+- Feature name: ${title}
+- Feature summary: ${summary}
+- Constraints:
+${asLines(constraints)}
+- Assumptions:
+${asLines(assumptions)}
+- Open questions:
+${asLines(openQuestions)}
+
+Return only:
+- feature requirements
+- feature responsibilities
+
+Guidance:
+- Requirements should be user-facing or acceptance-facing statements describing what the feature must do.
+- Responsibilities should be internal design jobs the system must own to satisfy those requirements.
+- Keep the requirements and responsibilities concise, specific, and editable by a firmware developer.
+- Do not generate components, interactions, tasks, diagrams, or implementation steps yet.
 `.trim();
 
 const buildComponentPrompt = ({
@@ -578,9 +618,41 @@ const validateBaseInputs = (body) => {
   return { title, requirement, constraints, responsibilities };
 };
 
+const validateDefinitionInputs = (body) => {
+  const title = String(body.title || "").trim();
+  const summary = String(body.summary || "").trim();
+  const constraints = Array.isArray(body.constraints)
+    ? body.constraints.map((item) => String(item).trim()).filter(Boolean)
+    : [];
+  const assumptions = Array.isArray(body.assumptions)
+    ? body.assumptions.map((item) => String(item).trim()).filter(Boolean)
+    : [];
+  const openQuestions = Array.isArray(body.openQuestions)
+    ? body.openQuestions.map((item) => String(item).trim()).filter(Boolean)
+    : [];
+
+  if (!title || !summary) {
+    throw new Error("Feature name and feature summary are required.");
+  }
+
+  return { title, summary, constraints, assumptions, openQuestions };
+};
+
 const buildStageRequest = (body) => {
-  const base = validateBaseInputs(body);
   const stage = String(body.stage || "").trim();
+
+  if (stage === "definition") {
+    const base = validateDefinitionInputs(body);
+    return {
+      stage,
+      schema: definitionSchema,
+      systemPrompt:
+        "Generate structured firmware feature requirements and feature responsibilities. Return only data that fits the provided schema.",
+      userPrompt: buildDefinitionPrompt(base),
+    };
+  }
+
+  const base = validateBaseInputs(body);
 
   if (stage === "discovery") {
     return {
@@ -638,7 +710,7 @@ const buildStageRequest = (body) => {
   }
 
   throw new Error(
-    'Invalid AI stage. Use "discovery", "component", or "implementation".',
+    'Invalid AI stage. Use "definition", "discovery", "component", or "implementation".',
   );
 };
 
