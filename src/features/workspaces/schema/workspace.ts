@@ -20,6 +20,31 @@ export type ContextEntityKind =
 export type ContextFlowDirection = "inbound" | "outbound" | "bidirectional";
 export type SequenceParticipantKind = "actor" | "component" | "system" | "device" | "service";
 export type SequenceStepType = "call" | "async" | "return" | "event";
+export type RuntimeNodeKind =
+  | "mcu"
+  | "core"
+  | "task"
+  | "thread"
+  | "isr"
+  | "timer"
+  | "queue"
+  | "mutex"
+  | "peripheral"
+  | "device"
+  | "service"
+  | "store"
+  | "other";
+export type RuntimeLinkKind =
+  | "interrupt"
+  | "queue"
+  | "notification"
+  | "call"
+  | "shared_memory"
+  | "driver"
+  | "timer"
+  | "mutex"
+  | "data"
+  | "other";
 
 export type WorkspaceSectionId =
   | "featureDefinition"
@@ -101,6 +126,24 @@ export type SequenceScenario = {
   steps: SequenceStep[];
 };
 
+export type RuntimeNode = {
+  id: string;
+  name: string;
+  kind: RuntimeNodeKind;
+  responsibility: string;
+  hostNodeId?: string;
+  notes?: string;
+};
+
+export type RuntimeLink = {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  kind: RuntimeLinkKind;
+  label: string;
+  notes?: string;
+};
+
 export type ComponentCandidate = {
   id: string;
   name: string;
@@ -167,6 +210,8 @@ export type FeatureWorkspace = {
     candidateComponents: ComponentCandidate[];
     interactions: ComponentInteraction[];
     sequenceScenarios: SequenceScenario[];
+    runtimeNodes: RuntimeNode[];
+    runtimeLinks: RuntimeLink[];
     candidateTasks: CandidateTask[];
     systemRisks: string[];
   };

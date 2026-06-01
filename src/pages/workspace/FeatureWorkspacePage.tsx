@@ -14,6 +14,8 @@ import {
   createEmptyComponent,
   createEmptyContextEntity,
   createEmptyContextFlow,
+  createEmptyRuntimeLink,
+  createEmptyRuntimeNode,
   createEmptySequenceParticipant,
   createEmptySequenceScenario,
   createEmptySequenceStep,
@@ -40,6 +42,8 @@ import {
   type FeatureComponent,
   type FeatureWorkspace,
   type OwnershipDefinition,
+  type RuntimeLink,
+  type RuntimeNode,
   type SequenceParticipant,
   type SequenceStep,
   type WorkspaceSectionId,
@@ -218,11 +222,19 @@ export const FeatureWorkspacePage = ({
   const [selectedInteractionIndex, setSelectedInteractionIndex] = useState<number | null>(
     workspace.discovery.interactions.length > 0 ? 0 : null,
   );
+  const [selectedRuntimeNodeId, setSelectedRuntimeNodeId] = useState<string | null>(
+    workspace.discovery.runtimeNodes[0]?.id ?? null,
+  );
+  const [selectedRuntimeLinkId, setSelectedRuntimeLinkId] = useState<string | null>(
+    workspace.discovery.runtimeLinks[0]?.id ?? null,
+  );
   const [componentDetailOpen, setComponentDetailOpen] = useState(false);
   const [componentDetailMode, setComponentDetailMode] = useState<ComponentDetailMode>("container");
   const [contextDetailOpen, setContextDetailOpen] = useState(false);
   const [scenarioDetailOpen, setScenarioDetailOpen] = useState(false);
   const [interactionDetailOpen, setInteractionDetailOpen] = useState(false);
+  const [runtimeNodeDetailOpen, setRuntimeNodeDetailOpen] = useState(false);
+  const [runtimeLinkDetailOpen, setRuntimeLinkDetailOpen] = useState(false);
   const [aiStatus, setAiStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [aiMessage, setAiMessage] = useState("");
   const [aiStage, setAiStage] = useState<AiStage>("discovery");
@@ -237,8 +249,17 @@ export const FeatureWorkspacePage = ({
         selectedComponentId ?? undefined,
         selectedContextEntityId ?? undefined,
         selectedScenarioId ?? undefined,
+        selectedRuntimeNodeId ?? undefined,
+        selectedRuntimeLinkId ?? undefined,
       ),
-    [selectedComponentId, selectedContextEntityId, selectedScenarioId, workspace],
+    [
+      selectedComponentId,
+      selectedContextEntityId,
+      selectedRuntimeLinkId,
+      selectedRuntimeNodeId,
+      selectedScenarioId,
+      workspace,
+    ],
   );
 
   const startedSections = WORKSPACE_SECTIONS.filter((section) =>
@@ -264,6 +285,14 @@ export const FeatureWorkspacePage = ({
     selectedInteractionIndex !== null
       ? workspace.discovery.interactions[selectedInteractionIndex] ?? null
       : workspace.discovery.interactions[0] ?? null;
+  const selectedRuntimeNode =
+    workspace.discovery.runtimeNodes.find((node) => node.id === selectedRuntimeNodeId) ??
+    workspace.discovery.runtimeNodes[0] ??
+    null;
+  const selectedRuntimeLink =
+    workspace.discovery.runtimeLinks.find((link) => link.id === selectedRuntimeLinkId) ??
+    workspace.discovery.runtimeLinks[0] ??
+    null;
 
   const updateTimestamp = (next: FeatureWorkspace): FeatureWorkspace => ({
     ...next,
@@ -317,6 +346,28 @@ export const FeatureWorkspacePage = ({
   }, [selectedInteractionIndex, workspace.discovery.interactions]);
 
   useEffect(() => {
+    if (
+      selectedRuntimeNodeId &&
+      workspace.discovery.runtimeNodes.some((node) => node.id === selectedRuntimeNodeId)
+    ) {
+      return;
+    }
+
+    setSelectedRuntimeNodeId(workspace.discovery.runtimeNodes[0]?.id ?? null);
+  }, [selectedRuntimeNodeId, workspace.discovery.runtimeNodes]);
+
+  useEffect(() => {
+    if (
+      selectedRuntimeLinkId &&
+      workspace.discovery.runtimeLinks.some((link) => link.id === selectedRuntimeLinkId)
+    ) {
+      return;
+    }
+
+    setSelectedRuntimeLinkId(workspace.discovery.runtimeLinks[0]?.id ?? null);
+  }, [selectedRuntimeLinkId, workspace.discovery.runtimeLinks]);
+
+  useEffect(() => {
     if (aiStatus !== "loading") {
       setAiElapsedSeconds(0);
       return;
@@ -353,6 +404,18 @@ export const FeatureWorkspacePage = ({
       setInteractionDetailOpen(false);
     }
   }, [interactionDetailOpen, selectedInteraction]);
+
+  useEffect(() => {
+    if (!selectedRuntimeNode && runtimeNodeDetailOpen) {
+      setRuntimeNodeDetailOpen(false);
+    }
+  }, [runtimeNodeDetailOpen, selectedRuntimeNode]);
+
+  useEffect(() => {
+    if (!selectedRuntimeLink && runtimeLinkDetailOpen) {
+      setRuntimeLinkDetailOpen(false);
+    }
+  }, [runtimeLinkDetailOpen, selectedRuntimeLink]);
 
   const canGenerateAiDraft = canGenerateDiscoveryDraft(workspace);
 
@@ -752,6 +815,8 @@ export const FeatureWorkspacePage = ({
             selectedScenario={selectedScenario}
             setSelectedScenarioId={setSelectedScenarioId}
             selectedInteractionIndex={selectedInteractionIndex}
+            selectedRuntimeNodeId={selectedRuntimeNodeId}
+            selectedRuntimeLinkId={selectedRuntimeLinkId}
             onOpenComponentDetail={(componentId, mode = "container") => {
               setSelectedComponentId(componentId);
               setComponentDetailMode(mode);
@@ -768,6 +833,14 @@ export const FeatureWorkspacePage = ({
             onOpenInteractionDetail={(interactionIndex) => {
               setSelectedInteractionIndex(interactionIndex);
               setInteractionDetailOpen(true);
+            }}
+            onOpenRuntimeNodeDetail={(nodeId) => {
+              setSelectedRuntimeNodeId(nodeId);
+              setRuntimeNodeDetailOpen(true);
+            }}
+            onOpenRuntimeLinkDetail={(linkId) => {
+              setSelectedRuntimeLinkId(linkId);
+              setRuntimeLinkDetailOpen(true);
             }}
             canGenerateAiDraft={canGenerateAiDraft}
             aiStatus={aiStatus}
@@ -1094,6 +1167,126 @@ export const FeatureWorkspacePage = ({
         </div>
       ) : null}
 
+      {runtimeNodeDetailOpen && selectedRuntimeNode ? (
+        <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[1200px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Runtime Node</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">
+                  {selectedRuntimeNode.name || "Unnamed runtime node"}
+                </h3>
+                <p className="mt-1 text-sm text-slate">
+                  Refine this runtime node in a focused page with more room for execution placement and ownership notes.
+                </p>
+              </div>
+              <Button onClick={() => setRuntimeNodeDetailOpen(false)} tone="ghost">
+                Close
+              </Button>
+            </div>
+            <div className="mt-4 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
+              <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <PreviewCard
+                  title="Deployment / Runtime Context"
+                  action={
+                    <ComponentOverlayDiagramButton
+                      title="Deployment / Runtime Diagram"
+                      chart={outputs.deploymentRuntimeDiagram}
+                    />
+                  }
+                >
+                  <MermaidPreview
+                    title={`${selectedRuntimeNode.name || "Runtime Node"} Context`}
+                    chart={outputs.deploymentRuntimeDiagram}
+                    svgMode="natural"
+                    className="min-h-[420px]"
+                  />
+                </PreviewCard>
+              </div>
+              <div className="overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <RuntimeNodeDetailEditor
+                  node={selectedRuntimeNode}
+                  nodes={workspace.discovery.runtimeNodes}
+                  onChange={(nextNode) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          runtimeNodes: current.discovery.runtimeNodes.map((node) =>
+                            node.id === nextNode.id ? nextNode : node,
+                          ),
+                        },
+                      }),
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {runtimeLinkDetailOpen && selectedRuntimeLink ? (
+        <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[1200px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Runtime Link</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">
+                  {formatRuntimeLinkName(workspace, selectedRuntimeLink)}
+                </h3>
+                <p className="mt-1 text-sm text-slate">
+                  Refine this runtime connection in a focused page with more room for link type, label, and scheduling notes.
+                </p>
+              </div>
+              <Button onClick={() => setRuntimeLinkDetailOpen(false)} tone="ghost">
+                Close
+              </Button>
+            </div>
+            <div className="mt-4 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
+              <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <PreviewCard
+                  title="Deployment / Runtime Context"
+                  action={
+                    <ComponentOverlayDiagramButton
+                      title="Deployment / Runtime Diagram"
+                      chart={outputs.deploymentRuntimeDiagram}
+                    />
+                  }
+                >
+                  <MermaidPreview
+                    title={`${formatRuntimeLinkName(workspace, selectedRuntimeLink)} Context`}
+                    chart={outputs.deploymentRuntimeDiagram}
+                    svgMode="natural"
+                    className="min-h-[420px]"
+                  />
+                </PreviewCard>
+              </div>
+              <div className="overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <RuntimeLinkDetailEditor
+                  link={selectedRuntimeLink}
+                  nodes={workspace.discovery.runtimeNodes}
+                  onChange={(nextLink) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          runtimeLinks: current.discovery.runtimeLinks.map((link) =>
+                            link.id === nextLink.id ? nextLink : link,
+                          ),
+                        },
+                      }),
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {activeSection === "featureDefinition" ? (
         <section className="rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel">
           <p className="text-xs uppercase tracking-[0.25em] text-copper">Generated Outputs</p>
@@ -1167,6 +1360,15 @@ export const FeatureWorkspacePage = ({
               previewTitle="Sequence Diagram"
               expandedTitle={selectedScenario ? `Sequence Diagram: ${selectedScenario.name || "Selected Scenario"}` : "Sequence Diagram"}
               previewMinHeight="min-h-[360px]"
+              previewMinWidth="min-w-[980px]"
+              expandedMinWidth="min-w-[1400px]"
+            />
+            <DiagramPreviewCard
+              title="Deployment / Runtime Diagram"
+              chart={outputs.deploymentRuntimeDiagram}
+              previewTitle="Deployment / Runtime Diagram"
+              expandedTitle="Deployment / Runtime Diagram"
+              previewMinHeight="min-h-[380px]"
               previewMinWidth="min-w-[980px]"
               expandedMinWidth="min-w-[1400px]"
             />
@@ -1358,12 +1560,6 @@ const ArchitectureViewPanel = ({
   </section>
 );
 
-const PlannedViewNotice = ({ message }: { message: string }) => (
-  <div className="rounded-2xl border border-dashed border-slate/20 bg-mist/50 px-4 py-4 text-sm text-slate">
-    {message}
-  </div>
-);
-
 const getComponentNameById = (
   components: ComponentCandidate[],
   componentId: string,
@@ -1377,6 +1573,20 @@ const formatInteractionName = (
   `${getComponentNameById(workspace.discovery.candidateComponents, interaction.fromComponentId)} -> ${getComponentNameById(
     workspace.discovery.candidateComponents,
     interaction.toComponentId,
+  )}`;
+
+const getRuntimeNodeNameById = (
+  nodes: RuntimeNode[],
+  nodeId: string,
+): string => nodes.find((node) => node.id === nodeId)?.name || "Unnamed runtime node";
+
+const formatRuntimeLinkName = (
+  workspace: FeatureWorkspace,
+  link: RuntimeLink,
+): string =>
+  `${getRuntimeNodeNameById(workspace.discovery.runtimeNodes, link.fromNodeId)} -> ${getRuntimeNodeNameById(
+    workspace.discovery.runtimeNodes,
+    link.toNodeId,
   )}`;
 
 const InteractionDetailEditor = ({
@@ -1476,6 +1686,203 @@ const InteractionDetailEditor = ({
             value={interaction.notes ?? ""}
             onChange={(value) => onChange({ ...interaction, notes: value })}
             placeholder="Any delivery rules, timing, buffering, or ownership notes."
+          />
+        </div>
+      </div>
+    </Field>
+  </div>
+);
+
+const RuntimeNodeDetailEditor = ({
+  node,
+  nodes,
+  onChange,
+}: {
+  node: RuntimeNode;
+  nodes: RuntimeNode[];
+  onChange: (nextNode: RuntimeNode) => void;
+}) => (
+  <div className="space-y-4">
+    <Field
+      label="Runtime Node Details"
+      hint="Describe what this runtime node is and what it owns in execution."
+    >
+      <div className="grid gap-3">
+        <div className="space-y-1.5">
+          <SectionInputLabel>Node Name</SectionInputLabel>
+          <TextInput
+            value={node.name}
+            onChange={(value) => onChange({ ...node, name: value })}
+            placeholder="Node name"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Node Type</SectionInputLabel>
+          <select
+            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+            value={node.kind}
+            onChange={(event) =>
+              onChange({ ...node, kind: event.target.value as RuntimeNode["kind"] })
+            }
+          >
+            {[
+              "mcu",
+              "core",
+              "task",
+              "thread",
+              "isr",
+              "timer",
+              "queue",
+              "mutex",
+              "peripheral",
+              "device",
+              "service",
+              "store",
+              "other",
+            ].map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Host Runtime Boundary</SectionInputLabel>
+          <select
+            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+            value={node.hostNodeId ?? ""}
+            onChange={(event) => onChange({ ...node, hostNodeId: event.target.value })}
+          >
+            <option value="">Top-level runtime boundary</option>
+            {nodes
+              .filter(
+                (candidate) =>
+                  candidate.id !== node.id &&
+                  ["mcu", "core", "device", "peripheral", "service", "other"].includes(
+                    candidate.kind,
+                  ),
+              )
+              .map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.name || "Unnamed runtime boundary"}
+                </option>
+              ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Responsibility</SectionInputLabel>
+          <TextArea
+            value={node.responsibility}
+            onChange={(value) => onChange({ ...node, responsibility: value })}
+            placeholder="What does this runtime node do?"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Notes</SectionInputLabel>
+          <TextArea
+            value={node.notes ?? ""}
+            onChange={(value) => onChange({ ...node, notes: value })}
+            placeholder="Any execution, priority, latency, or ownership notes."
+          />
+        </div>
+      </div>
+    </Field>
+  </div>
+);
+
+const RuntimeLinkDetailEditor = ({
+  link,
+  nodes,
+  onChange,
+}: {
+  link: RuntimeLink;
+  nodes: RuntimeNode[];
+  onChange: (nextLink: RuntimeLink) => void;
+}) => (
+  <div className="space-y-4">
+    <Field
+      label="Runtime Link Details"
+      hint="Describe how these runtime nodes are connected during execution."
+    >
+      <div className="grid gap-3">
+        <div className="space-y-1.5">
+          <SectionInputLabel>Link Name</SectionInputLabel>
+          <div className="rounded-2xl bg-white px-3 py-2 text-sm text-ink">
+            {`${getRuntimeNodeNameById(nodes, link.fromNodeId)} -> ${getRuntimeNodeNameById(
+              nodes,
+              link.toNodeId,
+            )}`}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>From Node</SectionInputLabel>
+          <select
+            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+            value={link.fromNodeId}
+            onChange={(event) => onChange({ ...link, fromNodeId: event.target.value })}
+          >
+            {nodes.map((node) => (
+              <option key={node.id} value={node.id}>
+                {node.name || "Unnamed node"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>To Node</SectionInputLabel>
+          <select
+            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+            value={link.toNodeId}
+            onChange={(event) => onChange({ ...link, toNodeId: event.target.value })}
+          >
+            {nodes.map((node) => (
+              <option key={node.id} value={node.id}>
+                {node.name || "Unnamed node"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Link Type</SectionInputLabel>
+          <select
+            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+            value={link.kind}
+            onChange={(event) =>
+              onChange({ ...link, kind: event.target.value as RuntimeLink["kind"] })
+            }
+          >
+            {[
+              "interrupt",
+              "queue",
+              "notification",
+              "call",
+              "shared_memory",
+              "driver",
+              "timer",
+              "mutex",
+              "data",
+              "other",
+            ].map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Label</SectionInputLabel>
+          <TextInput
+            value={link.label}
+            onChange={(value) => onChange({ ...link, label: value })}
+            placeholder="What crosses this runtime boundary?"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Notes</SectionInputLabel>
+          <TextArea
+            value={link.notes ?? ""}
+            onChange={(value) => onChange({ ...link, notes: value })}
+            placeholder="Optional delivery, scheduling, or ownership notes."
           />
         </div>
       </div>
@@ -1917,10 +2324,14 @@ const WorkspaceSectionForm = ({
   selectedScenario,
   setSelectedScenarioId,
   selectedInteractionIndex,
+  selectedRuntimeNodeId,
+  selectedRuntimeLinkId,
   onOpenComponentDetail,
   onOpenContextDetail,
   onOpenScenarioDetail,
   onOpenInteractionDetail,
+  onOpenRuntimeNodeDetail,
+  onOpenRuntimeLinkDetail,
   canGenerateAiDraft,
   aiStatus,
   aiStage,
@@ -1942,10 +2353,14 @@ const WorkspaceSectionForm = ({
   selectedScenario: FeatureWorkspace["discovery"]["sequenceScenarios"][number] | null;
   setSelectedScenarioId: (scenarioId: string | null) => void;
   selectedInteractionIndex: number | null;
+  selectedRuntimeNodeId: string | null;
+  selectedRuntimeLinkId: string | null;
   onOpenComponentDetail: (componentId: string, mode?: ComponentDetailMode) => void;
   onOpenContextDetail: (entityId: string) => void;
   onOpenScenarioDetail: (scenarioId: string) => void;
   onOpenInteractionDetail: (interactionIndex: number) => void;
+  onOpenRuntimeNodeDetail: (nodeId: string) => void;
+  onOpenRuntimeLinkDetail: (linkId: string) => void;
   canGenerateAiDraft: boolean;
   aiStatus: "idle" | "loading" | "success" | "error";
   aiStage: AiStage;
@@ -2531,7 +2946,190 @@ const WorkspaceSectionForm = ({
             title="Deployment / Runtime Diagram"
             description="Shows where execution runs: tasks, threads, cores, MCUs, devices, and other runtime boundaries."
           >
-            <PlannedViewNotice message="Not implemented yet. This will later connect implementation tasks, runtime boundaries, and deployment ownership into a dedicated execution view." />
+            <div className="space-y-4">
+              <Field
+                label="Runtime Nodes"
+                hint="Model the execution and hardware/runtime nodes that participate in this feature."
+              >
+                <div className="space-y-3">
+                  {workspace.discovery.runtimeNodes.map((node, index) => (
+                    <div
+                      key={node.id}
+                      className={`rounded-2xl border px-4 py-3 ${
+                        selectedRuntimeNodeId === node.id
+                          ? "border-copper bg-sand"
+                          : "border-slate/10 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onOpenRuntimeNodeDetail(node.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span className="block font-semibold">
+                            {node.name || "Unnamed runtime node"}
+                          </span>
+                          <p className="mt-1 text-sm text-slate">
+                            {node.kind}
+                            {node.responsibility ? ` | ${node.responsibility}` : ""}
+                          </p>
+                          {node.hostNodeId ? (
+                            <p className="mt-1 text-sm text-slate/85">
+                              Inside{" "}
+                              {getRuntimeNodeNameById(
+                                workspace.discovery.runtimeNodes,
+                                node.hostNodeId,
+                              )}
+                            </p>
+                          ) : null}
+                        </button>
+                        <Button
+                          onClick={() =>
+                            onChange((current) => ({
+                              ...current,
+                              discovery: {
+                                ...current.discovery,
+                                runtimeNodes: current.discovery.runtimeNodes
+                                  .filter((_, currentIndex) => currentIndex !== index)
+                                  .map((candidateNode) =>
+                                    candidateNode.hostNodeId === node.id
+                                      ? { ...candidateNode, hostNodeId: "" }
+                                      : candidateNode,
+                                  ),
+                                runtimeLinks: current.discovery.runtimeLinks.filter(
+                                  (link) =>
+                                    link.fromNodeId !== node.id && link.toNodeId !== node.id,
+                                ),
+                              },
+                            }))
+                          }
+                          tone="danger"
+                          size="compact"
+                        >
+                          Remove Runtime Node
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  <Button
+                    onClick={() => {
+                      const defaultHostId =
+                        workspace.discovery.runtimeNodes.find((candidate) =>
+                          ["mcu", "core", "device", "peripheral", "service", "other"].includes(
+                            candidate.kind,
+                          ),
+                        )?.id ?? "";
+                      const nextNode = createEmptyRuntimeNode(defaultHostId);
+                      onOpenRuntimeNodeDetail(nextNode.id);
+                      onChange((current) => {
+                        return {
+                          ...current,
+                          discovery: {
+                            ...current.discovery,
+                            runtimeNodes: [
+                              ...current.discovery.runtimeNodes,
+                              nextNode,
+                            ],
+                          },
+                        };
+                      });
+                    }}
+                  >
+                    Add Runtime Node
+                  </Button>
+                </div>
+              </Field>
+
+              <Field
+                label="Runtime Links"
+                hint="Describe how runtime nodes are connected through queues, interrupts, driver calls, timers, or shared resources."
+              >
+                <div className="space-y-3">
+                  {workspace.discovery.runtimeNodes.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-4 text-sm text-slate">
+                      Add at least one runtime node before defining runtime links.
+                    </div>
+                  ) : null}
+                  {workspace.discovery.runtimeLinks.map((link, index) => (
+                    <div
+                      key={link.id}
+                      className={`rounded-2xl border px-4 py-3 ${
+                        selectedRuntimeLinkId === link.id
+                          ? "border-copper bg-sand"
+                          : "border-slate/10 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onOpenRuntimeLinkDetail(link.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span className="block font-semibold">
+                            {formatRuntimeLinkName(workspace, link)}
+                          </span>
+                          <p className="mt-1 text-sm text-slate">
+                            {link.kind}
+                            {link.label ? ` | ${link.label}` : ""}
+                          </p>
+                        </button>
+                        <Button
+                          onClick={() =>
+                            onChange((current) => ({
+                              ...current,
+                              discovery: {
+                                ...current.discovery,
+                                runtimeLinks: current.discovery.runtimeLinks.filter(
+                                  (_, currentIndex) => currentIndex !== index,
+                                ),
+                              },
+                            }))
+                          }
+                          tone="danger"
+                          size="compact"
+                        >
+                          Remove Runtime Link
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  <Button
+                    onClick={() => {
+                      const nextLink = createEmptyRuntimeLink(
+                        workspace.discovery.runtimeNodes[0]?.id ?? "",
+                        workspace.discovery.runtimeNodes[1]?.id ??
+                          workspace.discovery.runtimeNodes[0]?.id ??
+                          "",
+                      );
+                      onOpenRuntimeLinkDetail(nextLink.id);
+                      onChange((current) => {
+                        const firstNodeId = current.discovery.runtimeNodes[0]?.id ?? "";
+                        const secondNodeId =
+                          current.discovery.runtimeNodes[1]?.id ?? firstNodeId;
+                        return {
+                          ...current,
+                          discovery: {
+                            ...current.discovery,
+                            runtimeLinks: [
+                              ...current.discovery.runtimeLinks,
+                              {
+                                ...nextLink,
+                                fromNodeId: firstNodeId,
+                                toNodeId: secondNodeId,
+                              },
+                            ],
+                          },
+                        };
+                      });
+                    }}
+                    disabled={workspace.discovery.runtimeNodes.length === 0}
+                  >
+                    Add Runtime Link
+                  </Button>
+                </div>
+              </Field>
+            </div>
           </ArchitectureViewPanel>
         </div>
       );

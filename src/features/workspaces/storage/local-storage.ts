@@ -187,6 +187,8 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
         notes: item.notes ?? "",
       })),
       sequenceScenarios: [],
+      runtimeNodes: [],
+      runtimeLinks: [],
       candidateTasks: (legacy.rtos?.tasks ?? []).map((task, index) => ({
         id: createTaskId(index),
         name: task.name ?? "",
@@ -241,6 +243,15 @@ const normalizeWorkspace = (workspace: FeatureWorkspace): FeatureWorkspace => {
         : [],
       sequenceScenarios: Array.isArray(workspace.discovery?.sequenceScenarios)
         ? workspace.discovery.sequenceScenarios
+        : [],
+      runtimeNodes: Array.isArray(workspace.discovery?.runtimeNodes)
+        ? workspace.discovery.runtimeNodes.map((node) => ({
+            ...node,
+            hostNodeId: typeof node.hostNodeId === "string" ? node.hostNodeId : "",
+          }))
+        : [],
+      runtimeLinks: Array.isArray(workspace.discovery?.runtimeLinks)
+        ? workspace.discovery.runtimeLinks
         : [],
       candidateTasks: Array.isArray(workspace.discovery?.candidateTasks)
         ? workspace.discovery.candidateTasks

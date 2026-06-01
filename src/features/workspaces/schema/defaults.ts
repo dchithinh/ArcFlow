@@ -5,6 +5,8 @@ import type {
   ContextFlow,
   FeatureComponent,
   FeatureWorkspace,
+  RuntimeLink,
+  RuntimeNode,
   SequenceParticipant,
   SequenceScenario,
   SequenceStep,
@@ -97,6 +99,27 @@ export const createEmptySequenceScenario = (): SequenceScenario => ({
   steps: [],
 });
 
+export const createEmptyRuntimeNode = (hostNodeId = ""): RuntimeNode => ({
+  id: createId("runtime-node"),
+  name: "",
+  kind: "task",
+  responsibility: "",
+  hostNodeId,
+  notes: "",
+});
+
+export const createEmptyRuntimeLink = (
+  fromNodeId = "",
+  toNodeId = "",
+): RuntimeLink => ({
+  id: createId("runtime-link"),
+  fromNodeId,
+  toNodeId,
+  kind: "queue",
+  label: "",
+  notes: "",
+});
+
 export const createEmptyWorkspace = (): FeatureWorkspace => ({
   id: createId("workspace"),
   title: "Untitled feature workspace",
@@ -118,6 +141,8 @@ export const createEmptyWorkspace = (): FeatureWorkspace => ({
     candidateComponents: [],
     interactions: [],
     sequenceScenarios: [],
+    runtimeNodes: [],
+    runtimeLinks: [],
     candidateTasks: [],
     systemRisks: [],
   },
@@ -201,6 +226,60 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
     name: "Response Reporter",
     kind: "component",
     description: "Produces user-visible success or error feedback.",
+  };
+  const mcuNode: RuntimeNode = {
+    id: createId("runtime-node"),
+    name: "STM32F4 MCU",
+    kind: "mcu",
+    responsibility: "Executes the firmware feature and hosts RTOS tasks, ISRs, and device drivers.",
+    notes: "Primary execution environment.",
+  };
+  const uartIsrNode: RuntimeNode = {
+    id: createId("runtime-node"),
+    name: "UART RX ISR",
+    kind: "isr",
+    responsibility: "Captures RX bytes and pushes framed data toward the command path.",
+    hostNodeId: mcuNode.id,
+    notes: "Must remain short and non-blocking.",
+  };
+  const commandTaskNode: RuntimeNode = {
+    id: createId("runtime-node"),
+    name: "Command Task",
+    kind: "task",
+    responsibility: "Validates packets and dispatches configuration work.",
+    hostNodeId: mcuNode.id,
+    notes: "High priority event-driven task.",
+  };
+  const responseTaskNode: RuntimeNode = {
+    id: createId("runtime-node"),
+    name: "Response / Logging Task",
+    kind: "task",
+    responsibility: "Flushes acknowledgements and diagnostic output.",
+    hostNodeId: mcuNode.id,
+    notes: "Low priority background work.",
+  };
+  const rxQueueNode: RuntimeNode = {
+    id: createId("runtime-node"),
+    name: "RX Packet Queue",
+    kind: "queue",
+    responsibility: "Carries framed command packets from ISR context into task context.",
+    hostNodeId: mcuNode.id,
+    notes: "Bounded queue depth.",
+  };
+  const configStoreNode: RuntimeNode = {
+    id: createId("runtime-node"),
+    name: "Runtime Configuration Store",
+    kind: "store",
+    responsibility: "Holds validated runtime configuration state.",
+    hostNodeId: mcuNode.id,
+    notes: "Single ownership path through Config Coordinator.",
+  };
+  const uartPeripheralNode: RuntimeNode = {
+    id: createId("runtime-node"),
+    name: "UART Peripheral",
+    kind: "device",
+    responsibility: "Physical serial hardware boundary that receives command bytes and transmits responses.",
+    notes: "External hardware module connected to the MCU UART driver path.",
   };
 
   return {
@@ -344,6 +423,65 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
               type: "return",
             },
           ],
+        },
+      ],
+      runtimeNodes: [
+        mcuNode,
+        uartPeripheralNode,
+        uartIsrNode,
+        rxQueueNode,
+        commandTaskNode,
+        responseTaskNode,
+        configStoreNode,
+      ],
+      runtimeLinks: [
+        {
+          id: createId("runtime-link"),
+          fromNodeId: uartPeripheralNode.id,
+          toNodeId: uartIsrNode.id,
+          kind: "driver",
+          label: "RX byte stream",
+          notes: "External UART hardware raises receive events into the MCU execution boundary.",
+        },
+        {
+          id: createId("runtime-link"),
+          fromNodeId: uartIsrNode.id,
+          toNodeId: rxQueueNode.id,
+          kind: "interrupt",
+          label: "UART RX bytes",
+          notes: "ISR pushes framed packet data into queue-safe handoff.",
+        },
+        {
+          id: createId("runtime-link"),
+          fromNodeId: rxQueueNode.id,
+          toNodeId: commandTaskNode.id,
+          kind: "queue",
+          label: "Framed command packets",
+          notes: "Command task drains packets and validates them.",
+        },
+        {
+          id: createId("runtime-link"),
+          fromNodeId: commandTaskNode.id,
+          toNodeId: configStoreNode.id,
+          kind: "call",
+          label: "Validated configuration updates",
+          notes: "Only validated commands write runtime state.",
+        },
+        {
+          id: createId("runtime-link"),
+          fromNodeId: commandTaskNode.id,
+          toNodeId: responseTaskNode.id,
+          kind: "notification",
+          label: "Apply result",
+          notes: "Response task reports success or failure asynchronously.",
+        },
+        {
+          id: createId("runtime-link"),
+          fromNodeId: responseTaskNode.id,
+          toNodeId: uartPeripheralNode.id,
+          kind: "driver",
+          label: "TX response bytes",
+          notes: "Response path leaves the MCU through the UART hardware boundary.",
         },
       ],
       candidateTasks: [

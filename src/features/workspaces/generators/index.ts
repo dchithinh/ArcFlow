@@ -7,6 +7,7 @@ export type WorkspaceOutputs = {
   behavioralArchitectureDiagram: string;
   componentStateDiagram: string;
   sequenceDiagram: string;
+  deploymentRuntimeDiagram: string;
   taskTable: string;
   riskReview: string[];
 };
@@ -326,6 +327,33 @@ ${scenario.steps.length > 0
         )
         .join("\n")
     : "- No sequence scenarios documented yet"}
+
+## Deployment / Runtime Nodes
+${workspace.discovery.runtimeNodes.length > 0
+    ? workspace.discovery.runtimeNodes
+        .map((node) => {
+          const hostName =
+            workspace.discovery.runtimeNodes.find((item) => item.id === node.hostNodeId)?.name ||
+            "";
+          return `- ${node.name || "Unnamed node"} (${node.kind})${hostName ? ` in ${hostName}` : ""}: ${node.responsibility || "No runtime responsibility yet"}${node.notes ? ` (${node.notes})` : ""}`;
+        })
+        .join("\n")
+    : "- No runtime nodes documented yet"}
+
+## Deployment / Runtime Links
+${workspace.discovery.runtimeLinks.length > 0
+    ? workspace.discovery.runtimeLinks
+        .map((link) => {
+          const fromName =
+            workspace.discovery.runtimeNodes.find((node) => node.id === link.fromNodeId)?.name ||
+            "Unknown source";
+          const toName =
+            workspace.discovery.runtimeNodes.find((node) => node.id === link.toNodeId)?.name ||
+            "Unknown target";
+          return `- ${fromName} -> ${toName} via ${link.kind}: ${link.label || "No label"}${link.notes ? ` (${link.notes})` : ""}`;
+        })
+        .join("\n")
+    : "- No runtime links documented yet"}
 
 ## Implementation Tasks
 ${workspace.discovery.candidateTasks.length > 0
@@ -904,6 +932,38 @@ const sequenceParticipantDeclaration = (
   }
 };
 
+const runtimeNodeShape = (
+  kind: FeatureWorkspace["discovery"]["runtimeNodes"][number]["kind"],
+): FlowchartShape => {
+  switch (kind) {
+    case "mcu":
+    case "device":
+      return "subroutine";
+    case "core":
+    case "task":
+    case "thread":
+    case "service":
+      return "rounded";
+    case "isr":
+    case "timer":
+      return "circle";
+    case "queue":
+    case "store":
+      return "database";
+    case "mutex":
+      return "hexagon";
+    case "peripheral":
+      return "stadium";
+    default:
+      return "rectangle";
+  }
+};
+
+const runtimeCanHostChildren = (
+  kind: FeatureWorkspace["discovery"]["runtimeNodes"][number]["kind"],
+): boolean =>
+  ["mcu", "core", "device", "peripheral", "service", "other"].includes(kind);
+
 const generateSequenceDiagram = (
   workspace: FeatureWorkspace,
   selectedScenarioId?: string,
@@ -979,6 +1039,145 @@ ${introNotes.length > 0 ? `${introNotes.join("\n")}\n` : ""}${stepLines.join("\n
 ${closingNotes.join("\n")}`;
 };
 
+const generateDeploymentRuntimeDiagram = (
+  workspace: FeatureWorkspace,
+  selectedRuntimeNodeId?: string,
+  selectedRuntimeLinkId?: string,
+): string => {
+  const nodes = workspace.discovery.runtimeNodes;
+  const links = workspace.discovery.runtimeLinks;
+
+  if (nodes.length === 0) {
+    return `flowchart LR
+    ${wrapFlowchartNode("Runtime", "Runtime topology not modeled yet", "subroutine")}
+    Runtime --> ${wrapFlowchartNode("Tasks", "Add runtime nodes and links", "rounded")}`;
+  }
+
+  const selectedRuntimeLink = links.find((link) => link.id === selectedRuntimeLinkId) ?? null;
+  const childrenByParent = new Map<string, FeatureWorkspace["discovery"]["runtimeNodes"]>();
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const rootNodes: FeatureWorkspace["discovery"]["runtimeNodes"] = [];
+
+  nodes.forEach((node) => {
+    const host = node.hostNodeId ? nodesById.get(node.hostNodeId) : null;
+    if (host && host.id !== node.id) {
+      const current = childrenByParent.get(host.id) ?? [];
+      childrenByParent.set(host.id, [...current, node]);
+      return;
+    }
+
+    rootNodes.push(node);
+  });
+
+  const selectedNodeIds = new Set<string>();
+  if (selectedRuntimeNodeId) {
+    selectedNodeIds.add(selectedRuntimeNodeId);
+  }
+  if (selectedRuntimeLink !== null) {
+    selectedNodeIds.add(selectedRuntimeLink.fromNodeId);
+    selectedNodeIds.add(selectedRuntimeLink.toNodeId);
+  }
+
+  const nodeIdMap = new Map(
+    nodes.map((node, index) => [
+      node.id,
+      `runtime_${cleanNode(node.id || node.name || `node_${index}`)}_${index}`,
+    ]),
+  );
+  const boundaryIdMap = new Map(
+    nodes.map((node, index) => [node.id, `runtime_boundary_${cleanNode(node.id || `node_${index}`)}_${index}`]),
+  );
+
+  const renderNodeTree = (
+    node: FeatureWorkspace["discovery"]["runtimeNodes"][number],
+    depth = 1,
+    ancestry = new Set<string>(),
+  ): string[] => {
+    const indent = "  ".repeat(depth);
+    const nodeId = nodeIdMap.get(node.id) ?? cleanNode(node.id);
+    const boundaryId = boundaryIdMap.get(node.id) ?? `${nodeId}_boundary`;
+    const children = (childrenByParent.get(node.id) ?? []).filter(
+      (child) => !ancestry.has(child.id),
+    );
+    const selected = selectedNodeIds.has(node.id);
+    const shouldRenderAsBoundary = runtimeCanHostChildren(node.kind) || children.length > 0;
+    const label = node.responsibility.trim()
+      ? wrapText(node.responsibility.trim(), 28)
+      : escapeLabel(node.kind);
+
+    if (!shouldRenderAsBoundary) {
+      return [
+        `${indent}${wrapFlowchartNode(nodeId, `${node.name || "Unnamed node"}<br/>${label}`, runtimeNodeShape(node.kind))}`,
+        `${indent}class ${nodeId} ${selected ? "runtimeNodeSelected" : "runtimeNode"}`,
+      ];
+    }
+
+    const nextAncestry = new Set(ancestry);
+    nextAncestry.add(node.id);
+
+    const lines = [
+      `${indent}subgraph ${boundaryId}["${escapeLabel(node.name || "Unnamed runtime boundary")}"]`,
+      `${indent}  direction TB`,
+      `${indent}  ${wrapFlowchartNode(nodeId, `${escapeLabel(node.kind)}<br/>${label}`, "rounded")}`,
+      `${indent}  class ${nodeId} ${selected ? "runtimeNodeSelected" : "runtimeBoundaryAnchor"}`,
+    ];
+
+    children.forEach((child) => {
+      lines.push(...renderNodeTree(child, depth + 1, nextAncestry));
+    });
+
+    lines.push(`${indent}end`);
+    lines.push(
+      `${indent}style ${boundaryId} fill:${selected ? "#f7e3bf" : "#f8f4ea"},stroke:${selected ? "#b5651d" : "#8e6b3f"},stroke-width:${selected ? "3px" : "2px"}`,
+    );
+    return lines;
+  };
+
+  const nodeLines = rootNodes.flatMap((node) => renderNodeTree(node));
+
+  const renderedLinks = links.flatMap((link) => {
+    const fromIndex = nodes.findIndex((node) => node.id === link.fromNodeId);
+    const toIndex = nodes.findIndex((node) => node.id === link.toNodeId);
+    if (fromIndex < 0 || toIndex < 0) {
+      return [];
+    }
+
+    const fromNode = nodes[fromIndex];
+    const toNode = nodes[toIndex];
+    const fromId =
+      nodeIdMap.get(fromNode.id) ??
+      `runtime_${cleanNode(fromNode.id || fromNode.name || `node_${fromIndex}`)}_${fromIndex}`;
+    const toId =
+      nodeIdMap.get(toNode.id) ??
+      `runtime_${cleanNode(toNode.id || toNode.name || `node_${toIndex}`)}_${toIndex}`;
+    return [
+      {
+        line: `    ${fromId} -->|"${escapeLabel(
+          interactionLabel(link.kind, link.label),
+        )}"| ${toId}`,
+        selected: selectedRuntimeLinkId === link.id,
+      },
+    ];
+  });
+
+  const linkLines = renderedLinks.map((item) => item.line);
+  const linkStyleLines = renderedLinks.flatMap((item, index) =>
+    item.selected
+      ? [
+          `    linkStyle ${index} stroke:#b5651d,stroke-width:3px,color:#081521`,
+        ]
+      : [],
+  );
+
+  return `flowchart LR
+    classDef runtimeNode fill:#eef4f7,stroke:#365166,stroke-width:2px,color:#081521;
+    classDef runtimeBoundaryAnchor fill:#fff7e4,stroke:#8e6b3f,stroke-width:2px,color:#081521;
+    classDef runtimeNodeSelected fill:#f7e3bf,stroke:#b5651d,stroke-width:3px,color:#081521;
+${nodeLines.join("\n")}
+${linkLines.join("\n")}
+${linkStyleLines.join("\n")}`;
+};
+
 const generateTaskTable = (workspace: FeatureWorkspace): string => {
   const header = `| Task | Responsibility | Priority | Type | Trigger | May Block |
 |---|---|---|---|---|---|`;
@@ -1034,6 +1233,8 @@ export const generateWorkspaceOutputs = (
   selectedComponentId?: string,
   selectedContextEntityId?: string,
   selectedScenarioId?: string,
+  selectedRuntimeNodeId?: string,
+  selectedRuntimeLinkId?: string,
 ): WorkspaceOutputs => ({
   markdown: generateMarkdown(workspace),
   contextDiagram: generateContextDiagram(workspace, selectedContextEntityId),
@@ -1044,6 +1245,11 @@ export const generateWorkspaceOutputs = (
   ),
   componentStateDiagram: generateComponentStateDiagram(workspace, selectedComponentId),
   sequenceDiagram: generateSequenceDiagram(workspace, selectedScenarioId),
+  deploymentRuntimeDiagram: generateDeploymentRuntimeDiagram(
+    workspace,
+    selectedRuntimeNodeId,
+    selectedRuntimeLinkId,
+  ),
   taskTable: generateTaskTable(workspace),
   riskReview: generateRiskReview(workspace),
 });

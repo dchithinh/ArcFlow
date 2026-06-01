@@ -43,6 +43,15 @@ export const isWorkspaceSectionStarted = (
       workspace.discovery.interactions.some(
         (interaction) => hasText(interaction.data) || hasText(interaction.notes),
       ) ||
+      workspace.discovery.runtimeNodes.some(
+        (node) =>
+          hasText(node.name) ||
+          hasText(node.responsibility) ||
+          hasText(node.notes),
+      ) ||
+      workspace.discovery.runtimeLinks.some(
+        (link) => hasText(link.label) || hasText(link.notes),
+      ) ||
       workspace.discovery.sequenceScenarios.some(
         (scenario) =>
           hasText(scenario.name) ||
