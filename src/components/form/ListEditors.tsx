@@ -21,12 +21,13 @@ const LabeledInput = ({
 );
 
 type StringListEditorProps = {
-  label: string;
+  label: ReactNode;
   hint?: string;
   items: string[];
   onChange: (items: string[]) => void;
   placeholder?: string;
   getItemLabel?: (index: number) => string;
+  getItemPlaceholder?: (index: number) => string;
 };
 
 export const StringListEditor = ({
@@ -36,6 +37,7 @@ export const StringListEditor = ({
   onChange,
   placeholder,
   getItemLabel,
+  getItemPlaceholder,
 }: StringListEditorProps) => {
   const updateItem = (index: number, value: string) => {
     const next = [...items];
@@ -50,13 +52,13 @@ export const StringListEditor = ({
       <div className="space-y-3">
         {items.length === 0 ? <p className="text-sm text-slate">No entries yet.</p> : null}
         {items.map((item, index) => (
-          <div key={`${label}-${index}`} className="flex items-start gap-2">
+          <div key={`string-list-item-${index}`} className="flex items-start gap-2">
             <div className="flex-1 space-y-1.5">
-              <InputLabel>{getItemLabel ? getItemLabel(index) : `${label} ${index + 1}`}</InputLabel>
+              <InputLabel>{getItemLabel ? getItemLabel(index) : `Item ${index + 1}`}</InputLabel>
               <TextArea
                 value={item}
                 onChange={(value) => updateItem(index, value)}
-                placeholder={placeholder}
+                placeholder={getItemPlaceholder ? getItemPlaceholder(index) : placeholder}
                 rows={1}
               />
             </div>

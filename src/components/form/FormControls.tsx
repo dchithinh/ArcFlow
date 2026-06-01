@@ -1,17 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 type FieldProps = {
-  label: string;
+  label: ReactNode;
   hint?: string;
   children: ReactNode;
 };
 
 export const Field = ({ label, hint, children }: FieldProps) => (
-  <label className="block space-y-2 rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm">
-    <span className="block text-sm font-semibold text-ink">{label}</span>
+  <div className="block space-y-2 rounded-2xl border border-white/60 bg-white/70 p-4 shadow-sm">
+    <div className="block text-sm font-semibold text-ink">{label}</div>
     {hint ? <span className="block text-xs text-slate">{hint}</span> : null}
     {children}
-  </label>
+  </div>
 );
 
 type TextInputProps = {

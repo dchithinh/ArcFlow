@@ -17,6 +17,9 @@ const listBlock = (items: string[]): string =>
     ? items.filter((item) => item.trim()).map((item) => `- ${item}`).join("\n")
     : "- None documented yet";
 
+const normalizeComparableText = (value: string): string =>
+  value.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim().toLowerCase();
+
 const getComponentById = (
   workspace: FeatureWorkspace,
   componentId?: string,
@@ -220,15 +223,24 @@ const findOutgoingStateSource = (
   return scoredStates[0].anchor;
 };
 
-const generateMarkdown = (workspace: FeatureWorkspace): string => `# ${workspace.title}
+const generateMarkdown = (workspace: FeatureWorkspace): string => {
+  const requirementListText = workspace.featureSummary.goals
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join("\n");
+  const showRequirementParagraph =
+    normalizeComparableText(workspace.requirement) !==
+    normalizeComparableText(requirementListText);
+
+  return `# ${workspace.title}
 
 ## Feature Summary
 ${workspace.featureSummary.summary || "Not documented yet."}
 
-## Feature Requirement
+${showRequirementParagraph ? `## Feature Requirement
 ${workspace.requirement || "Not documented yet."}
 
-## Feature Requirements
+` : ""}## Feature Requirements
 ${listBlock(workspace.featureSummary.goals)}
 
 ## Feature Responsibilities
@@ -243,6 +255,7 @@ ${listBlock(workspace.featureSummary.assumptions)}
 ## Open Questions
 ${listBlock(workspace.featureSummary.openQuestions)}
 `;
+};
 
 const generateContextDiagram = (
   workspace: FeatureWorkspace,

@@ -137,6 +137,76 @@ const StaticContextBlock = ({
   </div>
 );
 
+const RequirementResponsibilityHelpContent = () => (
+  <div className="space-y-3 text-sm text-slate">
+    <p>
+      <span className="font-semibold text-ink">Requirement</span>
+      {" = "}what the feature must do.
+    </p>
+    <p>
+      <span className="font-semibold text-ink">Responsibility</span>
+      {" = "}what the system must own internally to make that happen.
+    </p>
+    <div className="rounded-2xl bg-mist/55 p-3">
+      <p className="font-semibold text-ink">Use this test</p>
+      <p className="mt-1">
+        If it sounds like feature behavior or acceptance criteria, it is probably a
+        requirement.
+      </p>
+      <p className="mt-1">
+        If it sounds like an internal job you would assign to a subsystem or component,
+        it is probably a responsibility.
+      </p>
+    </div>
+    <div className="grid gap-3 md:grid-cols-2">
+      <div className="rounded-2xl bg-mist/55 p-3">
+        <p className="font-semibold text-ink">Requirement examples</p>
+        <ul className="mt-2 space-y-1">
+          <li>`Feature shall provide a UART terminal interface.`</li>
+          <li>`Feature shall reject unknown commands safely.`</li>
+        </ul>
+      </div>
+      <div className="rounded-2xl bg-mist/55 p-3">
+        <p className="font-semibold text-ink">Responsibility examples</p>
+        <ul className="mt-2 space-y-1">
+          <li>`Receive UART bytes and detect command boundaries.`</li>
+          <li>`Validate command syntax and dispatch valid commands.`</li>
+        </ul>
+      </div>
+    </div>
+    <div className="rounded-2xl bg-mist/55 p-3">
+      <p className="font-semibold text-ink">Quick template</p>
+      <p className="mt-2">Requirements:</p>
+      <p>`Feature shall ...`</p>
+      <p>`Feature shall ...`</p>
+      <p className="mt-2">Responsibilities:</p>
+      <p>`Receive ...`</p>
+      <p>`Parse ...`</p>
+      <p>`Validate ...`</p>
+      <p>`Dispatch ...`</p>
+      <p>`Respond ...`</p>
+    </div>
+  </div>
+);
+
+const InlineHelpTrigger = ({
+  onClick,
+  label,
+}: {
+  onClick: () => void;
+  label: string;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-label={label}
+    title={label}
+    className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-copper/35 bg-sand/80 text-[11px] font-semibold leading-none text-copper transition hover:border-copper hover:bg-sand"
+  >
+    ?
+  </button>
+);
+
 const requirementsToText = (requirements: string[]): string =>
   requirements
     .map((item) => item.trim())
@@ -2604,13 +2674,22 @@ const WorkspaceSectionForm = ({
     ...next,
     updatedAt: new Date().toISOString(),
   });
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
 
   switch (activeSection) {
     case "featureDefinition":
       return (
         <div className="grid gap-4">
           <StringListEditor
-            label="Feature Requirements"
+            label={
+              <div className="flex items-center justify-between gap-3">
+                <span>Feature Requirements</span>
+                <InlineHelpTrigger
+                  onClick={() => setHelpDialogOpen(true)}
+                  label="Open requirement versus responsibility help"
+                />
+              </div>
+            }
             hint="List the individual feature requirements as numbered requirement statements, for example REQ-1, REQ-2, and REQ-3."
             items={workspace.featureSummary.goals}
             onChange={(items) =>
@@ -2620,8 +2699,8 @@ const WorkspaceSectionForm = ({
                 featureSummary: { ...current.featureSummary, goals: items },
               }))
             }
-            placeholder="REQ-1: Requirement statement"
             getItemLabel={(index) => `REQ-${index + 1}`}
+            getItemPlaceholder={(index) => `REQ-${index + 1}: Requirement statement`}
           />
           <StringListEditor
             label="Feature Responsibilities"
@@ -2708,6 +2787,29 @@ const WorkspaceSectionForm = ({
                   : "Generate Discovery Draft"}
               </Button>
             </div>
+            {helpDialogOpen ? (
+              <div className="fixed inset-0 z-[70] bg-ink/70 p-4 backdrop-blur-sm">
+                <div className="mx-auto max-w-[720px] rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.25em] text-copper">Field Help</p>
+                      <h3 className="mt-2 text-2xl font-semibold text-ink">
+                        Requirement vs Responsibility
+                      </h3>
+                      <p className="mt-1 text-sm text-slate">
+                        Use this when you need to separate user-facing feature expectations from internal design jobs.
+                      </p>
+                    </div>
+                    <Button onClick={() => setHelpDialogOpen(false)} tone="ghost">
+                      Close
+                    </Button>
+                  </div>
+                  <div className="mt-4 max-h-[70vh] overflow-y-auto rounded-2xl bg-white">
+                    <RequirementResponsibilityHelpContent />
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       );

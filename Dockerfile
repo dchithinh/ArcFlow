@@ -1,6 +1,10 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
+ENV npm_config_audit=false \
+    npm_config_fund=false \
+    npm_config_update_notifier=false
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
