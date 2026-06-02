@@ -1,6 +1,8 @@
 import type {
   CandidateTask,
   ComponentCandidate,
+  DataFlow,
+  DataFlowNode,
   ContextEntity,
   ContextFlow,
   FeatureComponent,
@@ -99,6 +101,24 @@ export const createEmptySequenceScenario = (): SequenceScenario => ({
   steps: [],
 });
 
+export const createEmptyDataFlowNode = (): DataFlowNode => ({
+  id: createId("data-flow-node"),
+  name: "",
+  kind: "process",
+  description: "",
+});
+
+export const createEmptyDataFlow = (
+  fromNodeId = "",
+  toNodeId = "",
+): DataFlow => ({
+  id: createId("data-flow"),
+  fromNodeId,
+  toNodeId,
+  label: "",
+  notes: "",
+});
+
 export const createEmptyRuntimeNode = (hostNodeId = ""): RuntimeNode => ({
   id: createId("runtime-node"),
   name: "",
@@ -140,6 +160,8 @@ export const createEmptyWorkspace = (): FeatureWorkspace => ({
     responsibilities: [],
     candidateComponents: [],
     interactions: [],
+    dataFlowNodes: [],
+    dataFlows: [],
     sequenceScenarios: [],
     runtimeNodes: [],
     runtimeLinks: [],
@@ -147,6 +169,7 @@ export const createEmptyWorkspace = (): FeatureWorkspace => ({
     systemRisks: [],
     customOptions: {
       interactionMechanisms: [],
+      dataFlowNodeKinds: [],
       runtimeNodeKinds: [],
       runtimeLinkKinds: [],
       contextEntityKinds: [],
@@ -232,6 +255,36 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
     name: "Response Reporter",
     kind: "component",
     description: "Produces user-visible success or error feedback.",
+  };
+  const terminalDataFlowNode: DataFlowNode = {
+    id: createId("data-flow-node"),
+    name: "Operator Terminal",
+    kind: "external_entity",
+    description: "Outside actor that sends commands and receives status or acknowledgements.",
+  };
+  const ingressProcessNode: DataFlowNode = {
+    id: createId("data-flow-node"),
+    name: "Command Ingress",
+    kind: "process",
+    description: "Frames UART traffic into complete packets for the internal command path.",
+  };
+  const parserProcessNode: DataFlowNode = {
+    id: createId("data-flow-node"),
+    name: "Command Parser",
+    kind: "process",
+    description: "Validates packet structure and decodes commands into safe internal objects.",
+  };
+  const configDataStoreNode: DataFlowNode = {
+    id: createId("data-flow-node"),
+    name: "Runtime Config Store",
+    kind: "data_store",
+    description: "Persistent runtime configuration state updated through validated commands.",
+  };
+  const responseProcessNode: DataFlowNode = {
+    id: createId("data-flow-node"),
+    name: "Response Reporter",
+    kind: "process",
+    description: "Formats operator-facing success and failure responses.",
   };
   const mcuNode: RuntimeNode = {
     id: createId("runtime-node"),
@@ -375,6 +428,50 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
           data: "Apply result and status details",
         },
       ],
+      dataFlowNodes: [
+        terminalDataFlowNode,
+        ingressProcessNode,
+        parserProcessNode,
+        configDataStoreNode,
+        responseProcessNode,
+      ],
+      dataFlows: [
+        {
+          id: createId("data-flow"),
+          fromNodeId: terminalDataFlowNode.id,
+          toNodeId: ingressProcessNode.id,
+          label: "UART command packet",
+          notes: "Raw user command payload entering the feature boundary.",
+        },
+        {
+          id: createId("data-flow"),
+          fromNodeId: ingressProcessNode.id,
+          toNodeId: parserProcessNode.id,
+          label: "Framed command packet",
+          notes: "Delimited packet ready for validation and decode.",
+        },
+        {
+          id: createId("data-flow"),
+          fromNodeId: parserProcessNode.id,
+          toNodeId: configDataStoreNode.id,
+          label: "Validated configuration update",
+          notes: "Decoded command values that passed all validation rules.",
+        },
+        {
+          id: createId("data-flow"),
+          fromNodeId: configDataStoreNode.id,
+          toNodeId: responseProcessNode.id,
+          label: "Apply result",
+          notes: "Outcome information used to create operator feedback.",
+        },
+        {
+          id: createId("data-flow"),
+          fromNodeId: responseProcessNode.id,
+          toNodeId: terminalDataFlowNode.id,
+          label: "UART response message",
+          notes: "Acknowledgement or error text returned to the operator.",
+        },
+      ],
       sequenceScenarios: [
         {
           id: createId("sequence-scenario"),
@@ -492,6 +589,7 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
       ],
       customOptions: {
         interactionMechanisms: [],
+        dataFlowNodeKinds: [],
         runtimeNodeKinds: [],
         runtimeLinkKinds: [],
         contextEntityKinds: [],

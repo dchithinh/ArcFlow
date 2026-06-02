@@ -31,6 +31,12 @@ type KnownSequenceParticipantKind =
   | "other";
 export type SequenceParticipantKind = FlexibleString<KnownSequenceParticipantKind>;
 export type SequenceStepType = "call" | "async" | "return" | "event";
+type KnownDataFlowNodeKind =
+  | "external_entity"
+  | "process"
+  | "data_store"
+  | "other";
+export type DataFlowNodeKind = FlexibleString<KnownDataFlowNodeKind>;
 type KnownRuntimeNodeKind =
   | "mcu"
   | "core"
@@ -139,6 +145,21 @@ export type SequenceScenario = {
   steps: SequenceStep[];
 };
 
+export type DataFlowNode = {
+  id: string;
+  name: string;
+  kind: DataFlowNodeKind;
+  description?: string;
+};
+
+export type DataFlow = {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  label: string;
+  notes?: string;
+};
+
 export type RuntimeNode = {
   id: string;
   name: string;
@@ -185,6 +206,7 @@ export type CandidateTask = {
 
 export type WorkspaceCustomOptions = {
   interactionMechanisms: string[];
+  dataFlowNodeKinds: string[];
   runtimeNodeKinds: string[];
   runtimeLinkKinds: string[];
   contextEntityKinds: string[];
@@ -229,6 +251,8 @@ export type FeatureWorkspace = {
     responsibilities: string[];
     candidateComponents: ComponentCandidate[];
     interactions: ComponentInteraction[];
+    dataFlowNodes: DataFlowNode[];
+    dataFlows: DataFlow[];
     sequenceScenarios: SequenceScenario[];
     runtimeNodes: RuntimeNode[];
     runtimeLinks: RuntimeLink[];

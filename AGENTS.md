@@ -89,6 +89,7 @@ These are project roles and responsibility boundaries. They are architectural ow
 - Persistence runs at app boundaries and never mutates schema shape.
 - Feature-level discovery happens before component-level detail.
 - The detailed checklist belongs to a selected component, not the entire feature workspace.
+- Design-diagram generators should not truncate user-entered labels or descriptions with `...` by default; prefer wrapping full text unless a compact view is explicitly intended.
 - Each workflow block maps to:
   - workspace schema fragment
   - editor component

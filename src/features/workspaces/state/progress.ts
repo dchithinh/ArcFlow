@@ -43,6 +43,12 @@ export const isWorkspaceSectionStarted = (
       workspace.discovery.interactions.some(
         (interaction) => hasText(interaction.data) || hasText(interaction.notes),
       ) ||
+      workspace.discovery.dataFlowNodes.some(
+        (node) => hasText(node.name) || hasText(node.description),
+      ) ||
+      workspace.discovery.dataFlows.some(
+        (flow) => hasText(flow.label) || hasText(flow.notes),
+      ) ||
       workspace.discovery.runtimeNodes.some(
         (node) =>
           hasText(node.name) ||

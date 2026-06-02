@@ -20,6 +20,8 @@ import {
   createEmptyComponent,
   createEmptyContextEntity,
   createEmptyContextFlow,
+  createEmptyDataFlow,
+  createEmptyDataFlowNode,
   createEmptyRuntimeLink,
   createEmptyRuntimeNode,
   createEmptySequenceParticipant,
@@ -44,6 +46,8 @@ import {
   WORKSPACE_SECTIONS,
   type CandidateTask,
   type ComponentCandidate,
+  type DataFlow,
+  type DataFlowNode,
   type ContextEntity,
   type ContextFlow,
   type ComponentInteraction,
@@ -122,6 +126,13 @@ const CONTEXT_ENTITY_TYPE_OPTIONS = [
   "timer",
   "sensor",
   "actuator",
+  "other",
+] as const;
+
+const DATA_FLOW_NODE_TYPE_OPTIONS = [
+  "external_entity",
+  "process",
+  "data_store",
   "other",
 ] as const;
 
@@ -386,6 +397,12 @@ export const FeatureWorkspacePage = ({
   const [selectedInteractionIndex, setSelectedInteractionIndex] = useState<number | null>(
     workspace.discovery.interactions.length > 0 ? 0 : null,
   );
+  const [selectedDataFlowNodeId, setSelectedDataFlowNodeId] = useState<string | null>(
+    workspace.discovery.dataFlowNodes[0]?.id ?? null,
+  );
+  const [selectedDataFlowId, setSelectedDataFlowId] = useState<string | null>(
+    workspace.discovery.dataFlows[0]?.id ?? null,
+  );
   const [selectedRuntimeNodeId, setSelectedRuntimeNodeId] = useState<string | null>(
     workspace.discovery.runtimeNodes[0]?.id ?? null,
   );
@@ -397,6 +414,8 @@ export const FeatureWorkspacePage = ({
   const [contextDetailOpen, setContextDetailOpen] = useState(false);
   const [scenarioDetailOpen, setScenarioDetailOpen] = useState(false);
   const [interactionDetailOpen, setInteractionDetailOpen] = useState(false);
+  const [dataFlowNodeDetailOpen, setDataFlowNodeDetailOpen] = useState(false);
+  const [dataFlowDetailOpen, setDataFlowDetailOpen] = useState(false);
   const [runtimeNodeDetailOpen, setRuntimeNodeDetailOpen] = useState(false);
   const [runtimeLinkDetailOpen, setRuntimeLinkDetailOpen] = useState(false);
   const [aiStatus, setAiStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -413,12 +432,16 @@ export const FeatureWorkspacePage = ({
         selectedComponentId ?? undefined,
         selectedContextEntityId ?? undefined,
         selectedScenarioId ?? undefined,
+        selectedDataFlowNodeId ?? undefined,
+        selectedDataFlowId ?? undefined,
         selectedRuntimeNodeId ?? undefined,
         selectedRuntimeLinkId ?? undefined,
       ),
     [
       selectedComponentId,
       selectedContextEntityId,
+      selectedDataFlowId,
+      selectedDataFlowNodeId,
       selectedRuntimeLinkId,
       selectedRuntimeNodeId,
       selectedScenarioId,
@@ -449,6 +472,14 @@ export const FeatureWorkspacePage = ({
     selectedInteractionIndex !== null
       ? workspace.discovery.interactions[selectedInteractionIndex] ?? null
       : workspace.discovery.interactions[0] ?? null;
+  const selectedDataFlowNode =
+    workspace.discovery.dataFlowNodes.find((node) => node.id === selectedDataFlowNodeId) ??
+    workspace.discovery.dataFlowNodes[0] ??
+    null;
+  const selectedDataFlow =
+    workspace.discovery.dataFlows.find((flow) => flow.id === selectedDataFlowId) ??
+    workspace.discovery.dataFlows[0] ??
+    null;
   const selectedRuntimeNode =
     workspace.discovery.runtimeNodes.find((node) => node.id === selectedRuntimeNodeId) ??
     workspace.discovery.runtimeNodes[0] ??
@@ -511,6 +542,28 @@ export const FeatureWorkspacePage = ({
 
   useEffect(() => {
     if (
+      selectedDataFlowNodeId &&
+      workspace.discovery.dataFlowNodes.some((node) => node.id === selectedDataFlowNodeId)
+    ) {
+      return;
+    }
+
+    setSelectedDataFlowNodeId(workspace.discovery.dataFlowNodes[0]?.id ?? null);
+  }, [selectedDataFlowNodeId, workspace.discovery.dataFlowNodes]);
+
+  useEffect(() => {
+    if (
+      selectedDataFlowId &&
+      workspace.discovery.dataFlows.some((flow) => flow.id === selectedDataFlowId)
+    ) {
+      return;
+    }
+
+    setSelectedDataFlowId(workspace.discovery.dataFlows[0]?.id ?? null);
+  }, [selectedDataFlowId, workspace.discovery.dataFlows]);
+
+  useEffect(() => {
+    if (
       selectedRuntimeNodeId &&
       workspace.discovery.runtimeNodes.some((node) => node.id === selectedRuntimeNodeId)
     ) {
@@ -568,6 +621,18 @@ export const FeatureWorkspacePage = ({
       setInteractionDetailOpen(false);
     }
   }, [interactionDetailOpen, selectedInteraction]);
+
+  useEffect(() => {
+    if (!selectedDataFlowNode && dataFlowNodeDetailOpen) {
+      setDataFlowNodeDetailOpen(false);
+    }
+  }, [dataFlowNodeDetailOpen, selectedDataFlowNode]);
+
+  useEffect(() => {
+    if (!selectedDataFlow && dataFlowDetailOpen) {
+      setDataFlowDetailOpen(false);
+    }
+  }, [dataFlowDetailOpen, selectedDataFlow]);
 
   useEffect(() => {
     if (!selectedRuntimeNode && runtimeNodeDetailOpen) {
@@ -1059,6 +1124,10 @@ export const FeatureWorkspacePage = ({
             selectedScenario={selectedScenario}
             setSelectedScenarioId={setSelectedScenarioId}
             selectedInteractionIndex={selectedInteractionIndex}
+            selectedDataFlowNodeId={selectedDataFlowNodeId}
+            selectedDataFlowId={selectedDataFlowId}
+            setSelectedDataFlowNodeId={setSelectedDataFlowNodeId}
+            setSelectedDataFlowId={setSelectedDataFlowId}
             selectedRuntimeNodeId={selectedRuntimeNodeId}
             selectedRuntimeLinkId={selectedRuntimeLinkId}
             onOpenComponentDetail={(componentId, mode = "container") => {
@@ -1077,6 +1146,14 @@ export const FeatureWorkspacePage = ({
             onOpenInteractionDetail={(interactionIndex) => {
               setSelectedInteractionIndex(interactionIndex);
               setInteractionDetailOpen(true);
+            }}
+            onOpenDataFlowNodeDetail={(nodeId) => {
+              setSelectedDataFlowNodeId(nodeId);
+              setDataFlowNodeDetailOpen(true);
+            }}
+            onOpenDataFlowDetail={(flowId) => {
+              setSelectedDataFlowId(flowId);
+              setDataFlowDetailOpen(true);
             }}
             onOpenRuntimeNodeDetail={(nodeId) => {
               setSelectedRuntimeNodeId(nodeId);
@@ -1410,7 +1487,7 @@ export const FeatureWorkspacePage = ({
             <div className="mt-4 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
               <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
                 <PreviewCard
-                  title="Interaction / Data Flow Context"
+                  title="Interaction Diagram Context"
                   action={
                     <ComponentOverlayDiagramButton
                       title="Feature Architecture Flowchart"
@@ -1479,6 +1556,168 @@ export const FeatureWorkspacePage = ({
                           ...current.discovery,
                           interactions: current.discovery.interactions.map((interaction, index) =>
                             index === selectedInteractionIndex ? nextInteraction : interaction,
+                          ),
+                        },
+                      }),
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {dataFlowNodeDetailOpen && selectedDataFlowNode ? (
+        <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[1200px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Data Flow Node Detail</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">
+                  {selectedDataFlowNode.name || "Unnamed data flow node"}
+                </h3>
+                <p className="mt-1 text-sm text-slate">
+                  Refine this DFD node in a focused page with more room for its node type and descriptive role in the data path.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setDataFlowNodeDetailOpen(false)} tone="ghost">
+                  Close
+                </Button>
+              </div>
+            </div>
+            <div className="mt-4 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
+              <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <PreviewCard
+                  title="Data Flow Diagram"
+                  action={
+                    <ComponentOverlayDiagramButton
+                      title="Data Flow Diagram"
+                      chart={outputs.dataFlowDiagram}
+                    />
+                  }
+                >
+                  <MermaidPreview
+                    title={`${selectedDataFlowNode.name || "Data Flow Node"} Diagram`}
+                    chart={outputs.dataFlowDiagram}
+                    svgMode="natural"
+                    className="min-h-[420px]"
+                  />
+                </PreviewCard>
+              </div>
+              <div className="overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <DataFlowNodeDetailEditor
+                  node={selectedDataFlowNode}
+                  customKinds={workspace.discovery.customOptions.dataFlowNodeKinds}
+                  onAddCustomKind={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          customOptions: {
+                            ...current.discovery.customOptions,
+                            dataFlowNodeKinds: appendUniqueOption(
+                              current.discovery.customOptions.dataFlowNodeKinds,
+                              value,
+                              DATA_FLOW_NODE_TYPE_OPTIONS,
+                            ),
+                          },
+                        },
+                      }),
+                    )
+                  }
+                  onRemoveCustomKind={(value) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          dataFlowNodes: current.discovery.dataFlowNodes.map((node) =>
+                            node.kind === value ? { ...node, kind: "other" } : node,
+                          ),
+                          customOptions: {
+                            ...current.discovery.customOptions,
+                            dataFlowNodeKinds: removeOptionValue(
+                              current.discovery.customOptions.dataFlowNodeKinds,
+                              value,
+                            ),
+                          },
+                        },
+                      }),
+                    )
+                  }
+                  onChange={(nextNode) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          dataFlowNodes: current.discovery.dataFlowNodes.map((node) =>
+                            node.id === nextNode.id ? nextNode : node,
+                          ),
+                        },
+                      }),
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {dataFlowDetailOpen && selectedDataFlow ? (
+        <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[1200px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Data Flow Detail</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">
+                  {formatDataFlowName(workspace, selectedDataFlow)}
+                </h3>
+                <p className="mt-1 text-sm text-slate">
+                  Refine this data flow in a focused page with more room for its endpoints, payload label, and transformation notes.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setDataFlowDetailOpen(false)} tone="ghost">
+                  Close
+                </Button>
+              </div>
+            </div>
+            <div className="mt-4 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
+              <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <PreviewCard
+                  title="Data Flow Diagram"
+                  action={
+                    <ComponentOverlayDiagramButton
+                      title="Data Flow Diagram"
+                      chart={outputs.dataFlowDiagram}
+                    />
+                  }
+                >
+                  <MermaidPreview
+                    title={`${formatDataFlowName(workspace, selectedDataFlow)} Diagram`}
+                    chart={outputs.dataFlowDiagram}
+                    svgMode="natural"
+                    className="min-h-[420px]"
+                  />
+                </PreviewCard>
+              </div>
+              <div className="overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <DataFlowDetailEditor
+                  flow={selectedDataFlow}
+                  nodes={workspace.discovery.dataFlowNodes}
+                  onChange={(nextFlow) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          dataFlows: current.discovery.dataFlows.map((flow) =>
+                            flow.id === nextFlow.id ? nextFlow : flow,
                           ),
                         },
                       }),
@@ -1739,6 +1978,15 @@ export const FeatureWorkspacePage = ({
               expandedMinWidth="min-w-[1400px]"
             />
             <DiagramPreviewCard
+              title="Data Flow Diagram"
+              chart={outputs.dataFlowDiagram}
+              previewTitle="Data Flow Diagram"
+              expandedTitle="Data Flow Diagram"
+              previewDefaultHeight={400}
+              previewMinWidth="min-w-[980px]"
+              expandedMinWidth="min-w-[1400px]"
+            />
+            <DiagramPreviewCard
               title="Behavioral Architecture Diagram"
               chart={outputs.behavioralArchitectureDiagram}
               previewTitle="Behavioral Architecture Diagram"
@@ -1991,6 +2239,20 @@ const formatRuntimeLinkName = (
     link.toNodeId,
   )}`;
 
+const getDataFlowNodeNameById = (
+  nodes: DataFlowNode[],
+  nodeId: string,
+): string => nodes.find((node) => node.id === nodeId)?.name || "Unnamed data node";
+
+const formatDataFlowName = (
+  workspace: FeatureWorkspace,
+  flow: DataFlow,
+): string =>
+  `${getDataFlowNodeNameById(workspace.discovery.dataFlowNodes, flow.fromNodeId)} -> ${getDataFlowNodeNameById(
+    workspace.discovery.dataFlowNodes,
+    flow.toNodeId,
+  )}`;
+
 const InteractionDetailEditor = ({
   interaction,
   components,
@@ -2084,6 +2346,131 @@ const InteractionDetailEditor = ({
             value={interaction.notes ?? ""}
             onChange={(value) => onChange({ ...interaction, notes: value })}
             placeholder="Any delivery rules, timing, buffering, or ownership notes."
+          />
+        </div>
+      </div>
+    </Field>
+  </div>
+);
+
+const DataFlowNodeDetailEditor = ({
+  node,
+  customKinds,
+  onAddCustomKind,
+  onRemoveCustomKind,
+  onChange,
+}: {
+  node: DataFlowNode;
+  customKinds: string[];
+  onAddCustomKind: (value: string) => void;
+  onRemoveCustomKind: (value: string) => void;
+  onChange: (nextNode: DataFlowNode) => void;
+}) => (
+  <div className="space-y-4">
+    <Field
+      label="Data Flow Node Details"
+      hint="Describe the external entity, process, or data store that participates in this data flow view."
+    >
+      <div className="grid gap-3">
+        <div className="space-y-1.5">
+          <SectionInputLabel>Node Name</SectionInputLabel>
+          <TextInput
+            value={node.name}
+            onChange={(value) => onChange({ ...node, name: value })}
+            placeholder="Node name"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Node Type</SectionInputLabel>
+          <SelectWithOther
+            value={node.kind}
+            onChange={(value) => onChange({ ...node, kind: value as DataFlowNode["kind"] })}
+            options={[...DATA_FLOW_NODE_TYPE_OPTIONS]}
+            customOptions={customKinds}
+            onAddCustomOption={onAddCustomKind}
+            onRemoveCustomOption={onRemoveCustomKind}
+            customPlaceholder="Enter custom data flow node type"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Description</SectionInputLabel>
+          <TextArea
+            value={node.description ?? ""}
+            onChange={(value) => onChange({ ...node, description: value })}
+            placeholder="What role does this node play in the data path?"
+          />
+        </div>
+      </div>
+    </Field>
+  </div>
+);
+
+const DataFlowDetailEditor = ({
+  flow,
+  nodes,
+  onChange,
+}: {
+  flow: DataFlow;
+  nodes: DataFlowNode[];
+  onChange: (nextFlow: DataFlow) => void;
+}) => (
+  <div className="space-y-4">
+    <Field
+      label="Data Flow Details"
+      hint="Describe what information moves between the source and target nodes."
+    >
+      <div className="grid gap-3">
+        <div className="space-y-1.5">
+          <SectionInputLabel>Flow Name</SectionInputLabel>
+          <div className="rounded-2xl bg-white px-3 py-2 text-sm text-ink">
+            {`${getDataFlowNodeNameById(nodes, flow.fromNodeId)} -> ${getDataFlowNodeNameById(
+              nodes,
+              flow.toNodeId,
+            )}`}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>From Node</SectionInputLabel>
+          <select
+            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+            value={flow.fromNodeId}
+            onChange={(event) => onChange({ ...flow, fromNodeId: event.target.value })}
+          >
+            {nodes.map((node) => (
+              <option key={node.id} value={node.id}>
+                {node.name || "Unnamed node"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>To Node</SectionInputLabel>
+          <select
+            className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+            value={flow.toNodeId}
+            onChange={(event) => onChange({ ...flow, toNodeId: event.target.value })}
+          >
+            {nodes.map((node) => (
+              <option key={node.id} value={node.id}>
+                {node.name || "Unnamed node"}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Data Flow Label</SectionInputLabel>
+          <TextArea
+            value={flow.label}
+            onChange={(value) => onChange({ ...flow, label: value })}
+            placeholder="What data, message, or record moves along this path?"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Notes</SectionInputLabel>
+          <TextArea
+            value={flow.notes ?? ""}
+            onChange={(value) => onChange({ ...flow, notes: value })}
+            placeholder="Any transformation, validation, or storage notes for this flow."
           />
         </div>
       </div>
@@ -2384,7 +2771,7 @@ const ContextEntityDetailEditor = ({
                   tone="danger"
                   size="compact"
                 >
-                  Remove Boundary Flow
+                  Remove
                 </Button>
               </div>
             ))
@@ -2551,7 +2938,7 @@ const SequenceScenarioDetailEditor = ({
                   tone="danger"
                   size="compact"
                 >
-                  Remove Participant
+                  Remove
                 </Button>
               </div>
             ))
@@ -2660,7 +3047,7 @@ const SequenceScenarioDetailEditor = ({
                   tone="danger"
                   size="compact"
                 >
-                  Remove Step
+                  Remove
                 </Button>
               </div>
             ))
@@ -2698,12 +3085,18 @@ const WorkspaceSectionForm = ({
   selectedScenario,
   setSelectedScenarioId,
   selectedInteractionIndex,
+  selectedDataFlowNodeId,
+  selectedDataFlowId,
+  setSelectedDataFlowNodeId,
+  setSelectedDataFlowId,
   selectedRuntimeNodeId,
   selectedRuntimeLinkId,
   onOpenComponentDetail,
   onOpenContextDetail,
   onOpenScenarioDetail,
   onOpenInteractionDetail,
+  onOpenDataFlowNodeDetail,
+  onOpenDataFlowDetail,
   onOpenRuntimeNodeDetail,
   onOpenRuntimeLinkDetail,
   canGenerateAiDraft,
@@ -2727,12 +3120,18 @@ const WorkspaceSectionForm = ({
   selectedScenario: FeatureWorkspace["discovery"]["sequenceScenarios"][number] | null;
   setSelectedScenarioId: (scenarioId: string | null) => void;
   selectedInteractionIndex: number | null;
+  selectedDataFlowNodeId: string | null;
+  selectedDataFlowId: string | null;
+  setSelectedDataFlowNodeId: (nodeId: string | null) => void;
+  setSelectedDataFlowId: (flowId: string | null) => void;
   selectedRuntimeNodeId: string | null;
   selectedRuntimeLinkId: string | null;
   onOpenComponentDetail: (componentId: string, mode?: ComponentDetailMode) => void;
   onOpenContextDetail: (entityId: string) => void;
   onOpenScenarioDetail: (scenarioId: string) => void;
   onOpenInteractionDetail: (interactionIndex: number) => void;
+  onOpenDataFlowNodeDetail: (nodeId: string) => void;
+  onOpenDataFlowDetail: (flowId: string) => void;
   onOpenRuntimeNodeDetail: (nodeId: string) => void;
   onOpenRuntimeLinkDetail: (linkId: string) => void;
   canGenerateAiDraft: boolean;
@@ -3116,12 +3515,12 @@ const WorkspaceSectionForm = ({
           </ArchitectureViewPanel>
 
           <ArchitectureViewPanel
-            title="Interaction / Data Flow Diagram"
-            description="Shows how components communicate and what data, events, or signals move between them."
+            title="Interaction Diagram"
+            description="Shows which components communicate with each other and by what mechanism."
           >
             <Field
               label="Component Interactions"
-              hint="Describe how the candidate components interact before refining their internal state."
+              hint="Describe how the candidate components communicate before refining their internal state."
             >
               <div className="space-y-4">
                 {workspace.discovery.interactions.map((interaction, index) => (
@@ -3160,7 +3559,7 @@ const WorkspaceSectionForm = ({
                         tone="danger"
                         size="compact"
                       >
-                        Remove Interaction
+                        Remove
                       </Button>
                     </div>
                   </div>
@@ -3195,6 +3594,182 @@ const WorkspaceSectionForm = ({
                 </Button>
               </div>
             </Field>
+          </ArchitectureViewPanel>
+
+          <ArchitectureViewPanel
+            title="Data Flow Diagram"
+            description="Shows what information moves through the feature, where it is transformed, and where it is stored."
+          >
+            <div className="space-y-4">
+              <Field
+                label="Data Flow Nodes"
+                hint="Model external entities, internal processes, and data stores that participate in the information path."
+              >
+                <div className="space-y-3">
+                  {workspace.discovery.dataFlowNodes.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-6 text-sm text-slate">
+                      No data flow nodes yet. Add one to describe an external entity, process, or data store in this feature.
+                    </div>
+                  ) : (
+                    workspace.discovery.dataFlowNodes.map((node, index) => (
+                      <div
+                        key={node.id}
+                        className={`rounded-2xl border px-4 py-3 ${
+                          selectedDataFlowNodeId === node.id ? "border-copper bg-sand" : "border-slate/10 bg-white"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <button
+                            type="button"
+                            onClick={() => onOpenDataFlowNodeDetail(node.id)}
+                            className="min-w-0 flex-1 text-left"
+                          >
+                            <span className="block font-semibold">
+                              {node.name || "Unnamed data flow node"}
+                            </span>
+                            <p className="mt-1 text-sm text-slate">
+                              {node.kind}
+                              {node.description ? ` | ${node.description}` : ""}
+                            </p>
+                          </button>
+                          <Button
+                            onClick={() => {
+                              const fallbackId =
+                                workspace.discovery.dataFlowNodes[index + 1]?.id ??
+                                workspace.discovery.dataFlowNodes[index - 1]?.id ??
+                                null;
+                              setSelectedDataFlowNodeId(
+                                selectedDataFlowNodeId === node.id ? fallbackId : selectedDataFlowNodeId,
+                              );
+                              onChange((current) => ({
+                                ...current,
+                                discovery: {
+                                  ...current.discovery,
+                                  dataFlowNodes: current.discovery.dataFlowNodes.filter(
+                                    (item) => item.id !== node.id,
+                                  ),
+                                  dataFlows: current.discovery.dataFlows.filter(
+                                    (flow) =>
+                                      flow.fromNodeId !== node.id && flow.toNodeId !== node.id,
+                                  ),
+                                },
+                              }));
+                            }}
+                            tone="danger"
+                            size="compact"
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  <Button
+                    onClick={() => {
+                      const node = createEmptyDataFlowNode();
+                      setSelectedDataFlowNodeId(node.id);
+                      onChange((current) => ({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          dataFlowNodes: [...current.discovery.dataFlowNodes, node],
+                        },
+                      }));
+                      onOpenDataFlowNodeDetail(node.id);
+                    }}
+                  >
+                    Add Data Flow Node
+                  </Button>
+                </div>
+              </Field>
+
+              <Field
+                label="Data Flows"
+                hint="Describe the actual payloads or records that move between those nodes."
+              >
+                <div className="space-y-3">
+                  {workspace.discovery.dataFlowNodes.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-4 text-sm text-slate">
+                      Add at least one data flow node before defining data flows.
+                    </div>
+                  ) : null}
+                  {workspace.discovery.dataFlows.map((flow) => (
+                    <div
+                      key={flow.id}
+                      className={`rounded-2xl border px-4 py-3 ${
+                        selectedDataFlowId === flow.id ? "border-copper bg-sand" : "border-slate/10 bg-white"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onOpenDataFlowDetail(flow.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span className="block font-semibold">
+                            {formatDataFlowName(workspace, flow)}
+                          </span>
+                          <p className="mt-1 text-sm text-slate">
+                            {flow.label || "No data label yet."}
+                          </p>
+                        </button>
+                        <Button
+                          onClick={() =>
+                            onChange((current) => ({
+                              ...current,
+                              discovery: {
+                                ...current.discovery,
+                                dataFlows: current.discovery.dataFlows.filter(
+                                  (item) => item.id !== flow.id,
+                                ),
+                              },
+                            }))
+                          }
+                          tone="danger"
+                          size="compact"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  <Button
+                    onClick={() => {
+                      const nextFlow = createEmptyDataFlow(
+                        workspace.discovery.dataFlowNodes[0]?.id ?? "",
+                        workspace.discovery.dataFlowNodes[1]?.id ??
+                          workspace.discovery.dataFlowNodes[0]?.id ??
+                          "",
+                      );
+                      setSelectedDataFlowId(nextFlow.id);
+                      onChange((current) => {
+                        const firstNodeId = current.discovery.dataFlowNodes[0]?.id ?? "";
+                        const secondNodeId =
+                          current.discovery.dataFlowNodes[1]?.id ?? firstNodeId;
+                        return {
+                          ...current,
+                          discovery: {
+                            ...current.discovery,
+                            dataFlows: [
+                              ...current.discovery.dataFlows,
+                              {
+                                ...nextFlow,
+                                fromNodeId: firstNodeId,
+                                toNodeId: secondNodeId,
+                              },
+                            ],
+                          },
+                        };
+                      });
+                      onOpenDataFlowDetail(nextFlow.id);
+                    }}
+                    disabled={workspace.discovery.dataFlowNodes.length === 0}
+                  >
+                    Add Data Flow
+                  </Button>
+                </div>
+              </Field>
+            </div>
           </ArchitectureViewPanel>
 
           <ArchitectureViewPanel
@@ -3318,7 +3893,7 @@ const WorkspaceSectionForm = ({
                             tone="danger"
                             size="compact"
                           >
-                            Remove Scenario
+                            Remove
                           </Button>
                         </div>
                       </div>
@@ -3414,7 +3989,7 @@ const WorkspaceSectionForm = ({
                           tone="danger"
                           size="compact"
                         >
-                          Remove Runtime Node
+                          Remove
                         </Button>
                       </div>
                     </div>
@@ -3496,7 +4071,7 @@ const WorkspaceSectionForm = ({
                           tone="danger"
                           size="compact"
                         >
-                          Remove Runtime Link
+                          Remove
                         </Button>
                       </div>
                     </div>

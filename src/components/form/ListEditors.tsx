@@ -128,7 +128,7 @@ export const EventListEditor = ({
               tone="danger"
               size="compact"
             >
-              Remove Event
+              Remove
             </Button>
           </div>
         ))}
@@ -200,7 +200,7 @@ export const StateListEditor = ({ items, onChange }: StateListEditorProps) => {
                     tone="danger"
                     size="compact"
                   >
-                    Remove Transition
+                    Remove
                   </Button>
                 </div>
               ))}

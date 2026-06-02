@@ -4,6 +4,7 @@ export type WorkspaceOutputs = {
   markdown: string;
   contextDiagram: string;
   architectureFlowchart: string;
+  dataFlowDiagram: string;
   behavioralArchitectureDiagram: string;
   componentStateDiagram: string;
   sequenceDiagram: string;
@@ -116,6 +117,21 @@ const contextEntityShape = (
     case "timer":
       return "circle";
     case "system":
+      return "rectangle";
+    default:
+      return "rectangle";
+  }
+};
+
+const dataFlowNodeShape = (
+  kind: FeatureWorkspace["discovery"]["dataFlowNodes"][number]["kind"],
+): FlowchartShape => {
+  switch (kind) {
+    case "process":
+      return "rounded";
+    case "data_store":
+      return "database";
+    case "external_entity":
       return "rectangle";
     default:
       return "rectangle";
@@ -366,6 +382,92 @@ ${Array.from(nodes.values())
   .map((id) => `    class ${id} architectureNode`)
   .join("\n")}
 ${lines.join("\n")}`;
+};
+
+const generateDataFlowDiagram = (
+  workspace: FeatureWorkspace,
+  selectedDataFlowNodeId?: string,
+  selectedDataFlowId?: string,
+): string => {
+  const nodes = workspace.discovery.dataFlowNodes;
+  const flows = workspace.discovery.dataFlows;
+
+  if (nodes.length === 0) {
+    return `flowchart LR
+    ${wrapFlowchartNode("DataFlowStart", "Data flow not modeled yet", "subroutine")}
+    DataFlowStart --> ${wrapFlowchartNode("DataFlowNext", "Add data flow nodes and flows", "rounded")}`;
+  }
+
+  const selectedFlow = flows.find((flow) => flow.id === selectedDataFlowId) ?? null;
+  const selectedNodeIds = new Set<string>();
+  if (selectedDataFlowNodeId) {
+    selectedNodeIds.add(selectedDataFlowNodeId);
+  }
+  if (selectedFlow) {
+    selectedNodeIds.add(selectedFlow.fromNodeId);
+    selectedNodeIds.add(selectedFlow.toNodeId);
+  }
+
+  const nodeIdMap = new Map(
+    nodes.map((node, index) => [
+      node.id,
+      `dfd_${cleanNode(node.id || node.name || `node_${index}`)}_${index}`,
+    ]),
+  );
+
+  const nodeLines = nodes.flatMap((node, index) => {
+    const nodeId =
+      nodeIdMap.get(node.id) ??
+      `dfd_${cleanNode(node.id || node.name || `node_${index}`)}_${index}`;
+    const labelParts = [node.name || `Data Flow Node ${index + 1}`];
+    if (node.description?.trim()) {
+      labelParts.push(wrapText(node.description.trim(), 26));
+    }
+    const shape = dataFlowNodeShape(node.kind);
+    const className = selectedNodeIds.has(node.id)
+      ? "dataFlowNodeSelected"
+      : node.kind === "data_store"
+        ? "dataFlowStore"
+        : node.kind === "external_entity"
+          ? "dataFlowExternal"
+          : "dataFlowProcess";
+
+    return [
+      `    ${wrapFlowchartNode(nodeId, labelParts.join("<br/>"), shape)}`,
+      `    class ${nodeId} ${className}`,
+    ];
+  });
+
+  const flowLines = flows.flatMap((flow) => {
+    const fromId = nodeIdMap.get(flow.fromNodeId);
+    const toId = nodeIdMap.get(flow.toNodeId);
+    if (!fromId || !toId) {
+      return [];
+    }
+
+    return [
+      {
+        line: `    ${fromId} -->|"${escapeLabel(flow.label || "data flow")}"| ${toId}`,
+        selected: flow.id === selectedDataFlowId,
+      },
+    ];
+  });
+
+  const linkLines = flowLines.map((item) => item.line);
+  const linkStyleLines = flowLines.flatMap((item, index) =>
+    item.selected
+      ? [`    linkStyle ${index} stroke:#b5651d,stroke-width:3px,color:#081521`]
+      : [],
+  );
+
+  return `flowchart LR
+    classDef dataFlowProcess fill:#eef4f7,stroke:#365166,stroke-width:2px,color:#081521;
+    classDef dataFlowStore fill:#f2efe6,stroke:#6b5c3e,stroke-width:2px,color:#081521;
+    classDef dataFlowExternal fill:#fff7e4,stroke:#8e6b3f,stroke-width:2px,color:#081521;
+    classDef dataFlowNodeSelected fill:#f7e3bf,stroke:#b5651d,stroke-width:3px,color:#081521,font-weight:bold;
+${nodeLines.join("\n")}
+${linkLines.join("\n")}
+${linkStyleLines.join("\n")}`;
 };
 
 const generateBehavioralArchitectureDiagram = (
@@ -1036,12 +1138,19 @@ export const generateWorkspaceOutputs = (
   selectedComponentId?: string,
   selectedContextEntityId?: string,
   selectedScenarioId?: string,
+  selectedDataFlowNodeId?: string,
+  selectedDataFlowId?: string,
   selectedRuntimeNodeId?: string,
   selectedRuntimeLinkId?: string,
 ): WorkspaceOutputs => ({
   markdown: generateMarkdown(workspace),
   contextDiagram: generateContextDiagram(workspace, selectedContextEntityId),
   architectureFlowchart: generateArchitectureFlowchart(workspace),
+  dataFlowDiagram: generateDataFlowDiagram(
+    workspace,
+    selectedDataFlowNodeId,
+    selectedDataFlowId,
+  ),
   behavioralArchitectureDiagram: generateBehavioralArchitectureDiagram(
     workspace,
     selectedComponentId,

@@ -186,6 +186,24 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
         data: item.data ?? "",
         notes: item.notes ?? "",
       })),
+      dataFlowNodes: candidateComponents.map((candidate) => ({
+        id: `legacy-data-flow-node-${candidate.id}`,
+        name: candidate.name,
+        kind: "process" as const,
+        description: candidate.responsibility,
+      })),
+      dataFlows: (legacy.interactions ?? []).map((item, index) => ({
+        id: `legacy-data-flow-${index}-${Math.random().toString(36).slice(2, 7)}`,
+        fromNodeId: `legacy-data-flow-node-${
+          nameToId.get(item.from ?? "") ?? candidateComponents[0].id
+        }`,
+        toNodeId: `legacy-data-flow-node-${
+          nameToId.get(item.to ?? "") ??
+          candidateComponents[Math.min(index + 1, candidateComponents.length - 1)].id
+        }`,
+        label: item.data ?? "",
+        notes: item.notes ?? "",
+      })),
       sequenceScenarios: [],
       runtimeNodes: [],
       runtimeLinks: [],
@@ -205,6 +223,7 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
       ],
       customOptions: {
         interactionMechanisms: [],
+        dataFlowNodeKinds: [],
         runtimeNodeKinds: [],
         runtimeLinkKinds: [],
         contextEntityKinds: [],
@@ -247,6 +266,12 @@ export const normalizeImportedWorkspace = (workspace: FeatureWorkspace): Feature
       interactions: Array.isArray(workspace.discovery?.interactions)
         ? workspace.discovery.interactions
         : [],
+      dataFlowNodes: Array.isArray(workspace.discovery?.dataFlowNodes)
+        ? workspace.discovery.dataFlowNodes
+        : [],
+      dataFlows: Array.isArray(workspace.discovery?.dataFlows)
+        ? workspace.discovery.dataFlows
+        : [],
       sequenceScenarios: Array.isArray(workspace.discovery?.sequenceScenarios)
         ? workspace.discovery.sequenceScenarios
         : [],
@@ -272,6 +297,11 @@ export const normalizeImportedWorkspace = (workspace: FeatureWorkspace): Feature
           workspace.discovery?.customOptions?.interactionMechanisms,
         )
           ? workspace.discovery.customOptions.interactionMechanisms
+          : [],
+        dataFlowNodeKinds: Array.isArray(
+          workspace.discovery?.customOptions?.dataFlowNodeKinds,
+        )
+          ? workspace.discovery.customOptions.dataFlowNodeKinds
           : [],
         runtimeNodeKinds: Array.isArray(
           workspace.discovery?.customOptions?.runtimeNodeKinds,
