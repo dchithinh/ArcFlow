@@ -241,6 +241,28 @@ export const hasRequiredAiDraftInputs = (workspace: FeatureWorkspace): boolean =
   workspace.featureSummary.constraints.some((item) => item.trim()) &&
   workspace.discovery.responsibilities.some((item) => item.trim());
 
+export const getMissingDiscoveryDraftInputs = (workspace: FeatureWorkspace): string[] => {
+  const missing: string[] = [];
+
+  if (!workspace.title.trim()) {
+    missing.push("Feature name");
+  }
+
+  if (!workspace.requirement.trim()) {
+    missing.push("at least one feature requirement");
+  }
+
+  if (!workspace.featureSummary.constraints.some((item) => item.trim())) {
+    missing.push("at least one constraint");
+  }
+
+  if (!workspace.discovery.responsibilities.some((item) => item.trim())) {
+    missing.push("at least one responsibility");
+  }
+
+  return missing;
+};
+
 export const canGenerateDiscoveryDraft = hasRequiredAiDraftInputs;
 
 export const canGenerateDefinitionAssist = (workspace: FeatureWorkspace): boolean =>

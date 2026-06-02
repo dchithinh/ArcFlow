@@ -31,6 +31,7 @@ import {
 import {
   canGenerateDefinitionAssist,
   canGenerateDiscoveryDraft,
+  getMissingDiscoveryDraftInputs,
   mergeAiDefinitionIntoWorkspace,
   canGenerateImplementationPlanWithAi,
   canRefineComponentWithAi,
@@ -152,7 +153,7 @@ const StaticContextBlock = ({
 );
 
 const RequirementResponsibilityHelpContent = () => (
-  <div className="space-y-3 text-sm text-slate">
+  <div className="space-y-3 px-1 py-1 text-sm text-slate">
     <p>
       <span className="font-semibold text-ink">Requirement</span>
       {" = "}what the feature must do.
@@ -647,6 +648,7 @@ export const FeatureWorkspacePage = ({
   }, [runtimeLinkDetailOpen, selectedRuntimeLink]);
 
   const canGenerateAiDraft = canGenerateDiscoveryDraft(workspace);
+  const missingDiscoveryInputs = getMissingDiscoveryDraftInputs(workspace);
   const canGenerateDefinitionDraft = canGenerateDefinitionAssist(workspace);
 
   const namedInteractions = workspace.discovery.interactions.map((interaction) => ({
@@ -1164,6 +1166,7 @@ export const FeatureWorkspacePage = ({
               setRuntimeLinkDetailOpen(true);
             }}
             canGenerateAiDraft={canGenerateAiDraft}
+            missingDiscoveryInputs={missingDiscoveryInputs}
             aiStatus={aiStatus}
             aiStage={aiStage}
             aiMessage={aiMessage}
@@ -3100,6 +3103,7 @@ const WorkspaceSectionForm = ({
   onOpenRuntimeNodeDetail,
   onOpenRuntimeLinkDetail,
   canGenerateAiDraft,
+  missingDiscoveryInputs,
   aiStatus,
   aiStage,
   aiMessage,
@@ -3135,6 +3139,7 @@ const WorkspaceSectionForm = ({
   onOpenRuntimeNodeDetail: (nodeId: string) => void;
   onOpenRuntimeLinkDetail: (linkId: string) => void;
   canGenerateAiDraft: boolean;
+  missingDiscoveryInputs: string[];
   aiStatus: "idle" | "loading" | "success" | "error";
   aiStage: AiStage;
   aiMessage: string;
@@ -3250,7 +3255,7 @@ const WorkspaceSectionForm = ({
               {aiMessage ||
                 (canGenerateAiDraft
                   ? "Ready to generate the discovery draft from the current inputs."
-                  : "Add the required inputs to enable AI drafting.")}
+                  : `Add ${missingDiscoveryInputs.join(", ")} to enable AI drafting.`)}
               {aiStatus === "loading" ? ` ${aiElapsedSeconds}s elapsed.` : ""}
             </p>
             <div className="flex flex-wrap gap-2">
@@ -3273,15 +3278,12 @@ const WorkspaceSectionForm = ({
                       <h3 className="mt-2 text-2xl font-semibold text-ink">
                         Requirement vs Responsibility
                       </h3>
-                      <p className="mt-1 text-sm text-slate">
-                        Use this when you need to separate user-facing feature expectations from internal design jobs.
-                      </p>
                     </div>
                     <Button onClick={() => setHelpDialogOpen(false)} tone="ghost">
                       Close
                     </Button>
                   </div>
-                  <div className="mt-4 max-h-[70vh] overflow-y-auto rounded-2xl bg-white">
+                  <div className="mt-4 max-h-[70vh] overflow-y-auto rounded-2xl bg-white px-4 py-3">
                     <RequirementResponsibilityHelpContent />
                   </div>
                 </div>

@@ -375,10 +375,23 @@ Return only:
 - feature responsibilities
 
 Guidance:
-- Requirements should be user-facing or acceptance-facing statements describing what the feature must do.
-- Responsibilities should be internal design jobs the system must own to satisfy those requirements.
-- Keep the requirements and responsibilities concise, specific, and editable by a firmware developer.
-- Do not generate components, interactions, tasks, diagrams, or implementation steps yet.
+- Treat the summary as rough source material. Ignore meta authoring text such as requests for help, requests for lists, or conversational filler.
+- Requirements must describe externally visible feature behavior only.
+- Every requirement must use the form: "Feature shall ...".
+- Requirements must describe what the user, operator, or external system can do, receive, observe, or rely on from the feature.
+- Do not put internal design behavior into requirements.
+- Do not use internal implementation verbs in requirements such as "parse", "validate", "dispatch", "queue", "schedule", "store", "log", "signal", "notify", "call", or "handle malformed input".
+- Requirements should be specific enough to guide design, not vague restatements of the summary.
+- Responsibilities must describe internal system jobs needed to satisfy the requirements.
+- Responsibilities must start with direct action verbs such as "Receive", "Parse", "Validate", "Dispatch", "Store", "Update", "Generate", "Protect", or "Report".
+- Do not write project tasks or implementation directives such as "develop", "design", "implement", or "create".
+- Infer obvious embedded-firmware concerns when the summary implies them, such as input framing, validation, malformed input handling, response generation, handoff between execution contexts, and non-blocking behavior.
+- Keep the output clear, concise, and editable by a firmware developer.
+- Prefer 4 to 8 requirements and 4 to 8 responsibilities.
+- Avoid duplicates and near-duplicates.
+- The requirements and responsibilities must not be near-duplicates of each other.
+- Before returning, check that each requirement reads like an acceptance statement and each responsibility reads like an internal design job.
+- Do not generate components, interactions, tasks, diagrams, APIs, tests, or implementation plans yet.
 `.trim();
 
 const buildComponentPrompt = ({
@@ -647,7 +660,7 @@ const buildStageRequest = (body) => {
       stage,
       schema: definitionSchema,
       systemPrompt:
-        "Generate structured firmware feature requirements and feature responsibilities. Return only data that fits the provided schema.",
+        "Generate structured firmware feature requirements and feature responsibilities. Requirements must be externally visible 'Feature shall ...' acceptance statements about what the user, operator, or external system gets from the feature. Requirements must not describe internal behaviors like parse, validate, dispatch, queue, store, log, or signal. Responsibilities must be internal system jobs, not project tasks. Return only data that fits the provided schema.",
       userPrompt: buildDefinitionPrompt(base),
     };
   }
