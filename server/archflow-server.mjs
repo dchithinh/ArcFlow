@@ -482,6 +482,46 @@ Return only:
 Keep the plan practical for an embedded firmware project with staged bring-up and verification.
 `.trim();
 
+const buildChatPrompt = ({ scope, context, history, question }) => {
+  const historyText =
+    Array.isArray(history) && history.length > 0
+      ? history
+          .map((entry) => {
+            const role = String(entry.role || "").trim() || "user";
+            const text = String(entry.text || "").trim();
+            return text ? `- ${role}: ${text}` : "";
+          })
+          .filter(Boolean)
+          .join("\n")
+      : "- none";
+
+  return `
+You are answering a firmware design question inside ArchFlow.
+
+Scope:
+- Type: ${scope.type}
+- Label: ${scope.label}
+
+Rules:
+- Answer only the user's design question.
+- Use the provided workspace context; do not invent missing details.
+- If context is insufficient, say what is missing and make the smallest reasonable inference.
+- Keep the answer clear, concise, and practical for a firmware developer.
+- Focus on design reasoning, tradeoffs, risks, and clarification.
+- Do not rewrite the whole workspace.
+- Do not return JSON, markdown tables, or code unless the question directly needs it.
+
+Recent chat history:
+${historyText}
+
+Workspace context:
+${JSON.stringify(context, null, 2)}
+
+User question:
+${question}
+`.trim();
+};
+
 const requestOpenAiDraft = async ({ schema, systemPrompt, userPrompt }) => {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -522,6 +562,41 @@ const requestOpenAiDraft = async ({ schema, systemPrompt, userPrompt }) => {
   }
 
   return JSON.parse(data.output_text);
+};
+
+const requestOpenAiAnswer = async ({ systemPrompt, userPrompt }) => {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: openAiModel,
+      input: [
+        {
+          role: "system",
+          content: [{ type: "input_text", text: systemPrompt }],
+        },
+        {
+          role: "user",
+          content: [{ type: "input_text", text: userPrompt }],
+        },
+      ],
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error?.message || "OpenAI chat request failed.");
+  }
+
+  const answer = String(data.output_text || "").trim();
+  if (!answer) {
+    throw new Error("OpenAI returned no chat answer.");
+  }
+
+  return answer;
 };
 
 const extractJsonText = (value) => {
@@ -584,6 +659,52 @@ const requestOllamaDraft = async ({ schema, systemPrompt, userPrompt }) => {
   }
 };
 
+const requestOllamaAnswer = async ({ systemPrompt, userPrompt }) => {
+  let response;
+  try {
+    response = await fetch(`${ollamaBaseUrl.replace(/\/$/, "")}/api/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: ollamaModel,
+        stream: false,
+        options: {
+          temperature: 0.2,
+        },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    });
+  } catch {
+    throw new Error(
+      `Could not reach Ollama at ${ollamaBaseUrl}. Start Ollama, confirm the model is pulled, and ensure the container can reach the host service.`,
+    );
+  }
+
+  const rawText = await response.text();
+  let data;
+  try {
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    throw new Error(`Ollama returned non-JSON response: ${rawText.slice(0, 400)}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.error || `Ollama request failed with status ${response.status}.`);
+  }
+
+  const answer = String(data?.message?.content || "").trim();
+  if (!answer) {
+    throw new Error("Ollama returned no chat answer.");
+  }
+
+  return answer;
+};
+
 const resolveProvider = () => {
   if (aiProvider === "openai") {
     if (!process.env.OPENAI_API_KEY) {
@@ -596,6 +717,7 @@ const resolveProvider = () => {
       model: openAiModel,
       provider: "openai",
       requestDraft: requestOpenAiDraft,
+      requestAnswer: requestOpenAiAnswer,
     };
   }
 
@@ -604,6 +726,7 @@ const resolveProvider = () => {
       model: ollamaModel,
       provider: "ollama",
       requestDraft: requestOllamaDraft,
+      requestAnswer: requestOllamaAnswer,
     };
   }
 
@@ -649,6 +772,50 @@ const validateDefinitionInputs = (body) => {
   }
 
   return { title, summary, constraints, assumptions, openQuestions };
+};
+
+const validateChatInputs = (body) => {
+  const question = String(body.question || "").trim();
+  const scope = body.scope;
+  const context = body.context;
+  const history = Array.isArray(body.history)
+    ? body.history.map((entry) => ({
+        role: String(entry?.role || "").trim(),
+        text: String(entry?.text || "").trim(),
+      }))
+    : [];
+
+  if (!question) {
+    throw new Error("Chat question is required.");
+  }
+
+  if (!scope || typeof scope !== "object") {
+    throw new Error("Chat scope is required.");
+  }
+
+  if (!context || typeof context !== "object") {
+    throw new Error("Chat context is required.");
+  }
+
+  const scopeType = String(scope.type || "").trim();
+  const scopeLabel = String(scope.label || "").trim();
+  if (!scopeType || !scopeLabel) {
+    throw new Error("Chat scope must include type and label.");
+  }
+  if (!["workspace", "component"].includes(scopeType)) {
+    throw new Error('Chat scope type must be "workspace" or "component".');
+  }
+
+  return {
+    question,
+    scope: {
+      type: scopeType,
+      label: scopeLabel,
+      componentId: String(scope.componentId || "").trim(),
+    },
+    context,
+    history: history.filter((entry) => entry.role && entry.text).slice(-6),
+  };
 };
 
 const buildStageRequest = (body) => {
@@ -791,6 +958,76 @@ createServer(async (request, response) => {
           JSON.stringify({
             error:
               error instanceof Error ? error.message : "Unexpected AI drafting failure.",
+          }),
+        );
+      }
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/ai/workspace-chat") {
+      const body = await parseBody(request);
+
+      let provider;
+      try {
+        provider = resolveProvider();
+      } catch (error) {
+        response.writeHead(503, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(
+          JSON.stringify({
+            error: error instanceof Error ? error.message : "AI chat is disabled.",
+          }),
+        );
+        return;
+      }
+
+      let chatRequest;
+      try {
+        chatRequest = validateChatInputs(body);
+      } catch (error) {
+        response.writeHead(400, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(
+          JSON.stringify({
+            error: error instanceof Error ? error.message : "Invalid AI chat request.",
+          }),
+        );
+        return;
+      }
+
+      const startedAt = Date.now();
+      try {
+        const answer = await provider.requestAnswer({
+          systemPrompt:
+            "You are a firmware design assistant inside ArchFlow. Answer clearly and concisely using only the provided scoped workspace context. Focus on explanation and review; do not mutate the workspace or invent missing structure.",
+          userPrompt: buildChatPrompt(chatRequest),
+        });
+
+        response.writeHead(200, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(
+          JSON.stringify({
+            answer,
+            model: provider.model,
+            provider: provider.provider,
+            scope: chatRequest.scope.type,
+            durationMs: Date.now() - startedAt,
+          }),
+        );
+      } catch (error) {
+        console.error(
+          `[archflow-ai-chat] scope=${chatRequest.scope.type} provider=${provider.provider} model=${provider.model} failed:`,
+          error instanceof Error ? error.message : error,
+        );
+        response.writeHead(500, {
+          "Content-Type": "application/json; charset=utf-8",
+        });
+        response.end(
+          JSON.stringify({
+            error: error instanceof Error ? error.message : "Unexpected AI chat failure.",
           }),
         );
       }

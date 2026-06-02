@@ -44,6 +44,14 @@ import {
   type AiImplementationDraft,
 } from "../../features/workspaces/ai/draft";
 import {
+  buildWorkspaceChatPayload,
+  getWorkspaceChatScopeKey,
+  type WorkspaceChatMessage,
+  type WorkspaceChatPayload,
+  type WorkspaceChatScope,
+  type WorkspaceChatSuccessResponse,
+} from "../../features/workspaces/ai/chat";
+import {
   WORKSPACE_SECTIONS,
   type CandidateTask,
   type ComponentCandidate,
@@ -378,6 +386,20 @@ type AiStageSuccessResponse = {
 
 type ComponentDetailMode = "container" | "state";
 
+type ScopeChatState = {
+  draft: string;
+  messages: WorkspaceChatMessage[];
+  status: "idle" | "loading" | "error";
+  message: string;
+};
+
+const createEmptyScopeChatState = (): ScopeChatState => ({
+  draft: "",
+  messages: [],
+  status: "idle",
+  message: "",
+});
+
 export const FeatureWorkspacePage = ({
   workspace,
   onBack,
@@ -425,6 +447,7 @@ export const FeatureWorkspacePage = ({
   const [aiElapsedSeconds, setAiElapsedSeconds] = useState(0);
   const [importStatus, setImportStatus] = useState<"idle" | "success" | "error">("idle");
   const [importMessage, setImportMessage] = useState("");
+  const [chatByScope, setChatByScope] = useState<Record<string, ScopeChatState>>({});
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const outputs = useMemo(
     () =>
@@ -650,6 +673,23 @@ export const FeatureWorkspacePage = ({
   const canGenerateAiDraft = canGenerateDiscoveryDraft(workspace);
   const missingDiscoveryInputs = getMissingDiscoveryDraftInputs(workspace);
   const canGenerateDefinitionDraft = canGenerateDefinitionAssist(workspace);
+  const workspaceChatScope: WorkspaceChatScope = {
+    type: "workspace",
+    label: workspace.title.trim() || "this feature design",
+  };
+  const workspaceChatKey = getWorkspaceChatScopeKey(workspaceChatScope);
+  const workspaceChatState = chatByScope[workspaceChatKey] ?? createEmptyScopeChatState();
+  const componentChatScope: WorkspaceChatScope | null = selectedComponent
+    ? {
+        type: "component",
+        label: selectedComponent.name.trim() || "this component",
+        componentId: selectedComponent.id,
+      }
+    : null;
+  const componentChatState =
+    componentChatScope != null
+      ? chatByScope[getWorkspaceChatScopeKey(componentChatScope)] ?? createEmptyScopeChatState()
+      : createEmptyScopeChatState();
 
   const namedInteractions = workspace.discovery.interactions.map((interaction) => ({
     fromComponentName:
@@ -664,6 +704,101 @@ export const FeatureWorkspacePage = ({
     data: interaction.data,
     notes: interaction.notes ?? "",
   }));
+
+  const updateScopeChatState = (
+    scopeKey: string,
+    updater: (current: ScopeChatState) => ScopeChatState,
+  ) => {
+    setChatByScope((current) => ({
+      ...current,
+      [scopeKey]: updater(current[scopeKey] ?? createEmptyScopeChatState()),
+    }));
+  };
+
+  const requestWorkspaceChat = async (
+    payload: WorkspaceChatPayload,
+  ): Promise<WorkspaceChatSuccessResponse> => {
+    const response = await fetch("/api/ai/workspace-chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = (await response.json()) as WorkspaceChatSuccessResponse | { error?: string };
+    if (!response.ok || !("answer" in data)) {
+      const errorMessage =
+        "error" in data && typeof data.error === "string"
+          ? data.error
+          : "AI design chat failed.";
+      throw new Error(errorMessage);
+    }
+
+    return data;
+  };
+
+  const askAiAboutScope = async (scope: WorkspaceChatScope) => {
+    const scopeKey = getWorkspaceChatScopeKey(scope);
+    const currentState = chatByScope[scopeKey] ?? createEmptyScopeChatState();
+    const question = currentState.draft.trim();
+    if (!question) {
+      updateScopeChatState(scopeKey, (state) => ({
+        ...state,
+        status: "error",
+        message: "Enter a question before asking AI.",
+      }));
+      return;
+    }
+
+    const userMessage: WorkspaceChatMessage = {
+      id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      role: "user",
+      text: question,
+      createdAt: new Date().toISOString(),
+    };
+
+    updateScopeChatState(scopeKey, (state) => ({
+      ...state,
+      draft: "",
+      status: "loading",
+      message: `Asking AI about ${scope.label}...`,
+      messages: [...state.messages, userMessage],
+    }));
+
+    try {
+      const data = await requestWorkspaceChat(
+        buildWorkspaceChatPayload({
+          workspace,
+          scope,
+          question,
+          history: [...currentState.messages, userMessage],
+        }),
+      );
+
+      const assistantMessage: WorkspaceChatMessage = {
+        id: `assistant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        role: "assistant",
+        text: data.answer,
+        createdAt: new Date().toISOString(),
+      };
+
+      updateScopeChatState(scopeKey, (state) => ({
+        ...state,
+        status: "idle",
+        message: `Answered with ${data.provider}/${data.model} in ${Math.max(
+          1,
+          Math.round(data.durationMs / 1000),
+        )}s.`,
+        messages: [...state.messages, assistantMessage],
+      }));
+    } catch (error) {
+      updateScopeChatState(scopeKey, (state) => ({
+        ...state,
+        status: "error",
+        message: error instanceof Error ? error.message : "AI design chat failed.",
+      }));
+    }
+  };
 
   const requestAiStage = async (
     stage: AiStage,
@@ -1253,7 +1388,7 @@ export const FeatureWorkspacePage = ({
                   </PreviewCard>
                 ) : null}
               </div>
-              <div className="overflow-y-auto rounded-2xl bg-mist/60 p-4">
+              <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
                 {componentDetailMode === "state" ? (
                   <ComponentStateEditor
                     component={selectedComponent}
@@ -1292,6 +1427,27 @@ export const FeatureWorkspacePage = ({
                     }
                   />
                 )}
+                {componentChatScope ? (
+                  <DesignChatPanel
+                    title="Ask AI About This Component"
+                    description="Use the selected component, its states, interactions, and nearby design context to clarify or review this component."
+                    inputValue={componentChatState.draft}
+                    onInputChange={(value) =>
+                      updateScopeChatState(getWorkspaceChatScopeKey(componentChatScope), (state) => ({
+                        ...state,
+                        draft: value,
+                        status: state.status === "error" ? "idle" : state.status,
+                        message: state.status === "error" ? "" : state.message,
+                      }))
+                    }
+                    onAsk={() => {
+                      void askAiAboutScope(componentChatScope);
+                    }}
+                    status={componentChatState.status}
+                    statusMessage={componentChatState.message}
+                    messages={componentChatState.messages}
+                  />
+                ) : null}
               </div>
             </div>
           </div>
@@ -2025,6 +2181,25 @@ export const FeatureWorkspacePage = ({
               previewMinWidth="min-w-[980px]"
               expandedMinWidth="min-w-[1400px]"
             />
+            <DesignChatPanel
+              title="Ask AI About This Design"
+              description="Use the current workspace context to clarify architecture choices, tradeoffs, and missing design details."
+              inputValue={workspaceChatState.draft}
+              onInputChange={(value) =>
+                updateScopeChatState(workspaceChatKey, (state) => ({
+                  ...state,
+                  draft: value,
+                  status: state.status === "error" ? "idle" : state.status,
+                  message: state.status === "error" ? "" : state.message,
+                }))
+              }
+              onAsk={() => {
+                void askAiAboutScope(workspaceChatScope);
+              }}
+              status={workspaceChatState.status}
+              statusMessage={workspaceChatState.message}
+              messages={workspaceChatState.messages}
+            />
           </div>
         </section>
       ) : null}
@@ -2032,6 +2207,79 @@ export const FeatureWorkspacePage = ({
     </div>
   );
 };
+
+const DesignChatPanel = ({
+  title,
+  description,
+  inputValue,
+  onInputChange,
+  onAsk,
+  status,
+  statusMessage,
+  messages,
+  disabled,
+}: {
+  title: string;
+  description: string;
+  inputValue: string;
+  onInputChange: (value: string) => void;
+  onAsk: () => void;
+  status: "idle" | "loading" | "error";
+  statusMessage: string;
+  messages: WorkspaceChatMessage[];
+  disabled?: boolean;
+}) => (
+  <div className="space-y-4 rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <p className="text-xs uppercase tracking-[0.25em] text-copper">Design Chat</p>
+        <h3 className="mt-2 text-xl font-semibold text-ink">{title}</h3>
+        <p className="mt-1 text-sm text-slate">{description}</p>
+      </div>
+      <Button onClick={onAsk} tone="primary" disabled={disabled || status === "loading"}>
+        {status === "loading" ? "Thinking..." : "Ask AI"}
+      </Button>
+    </div>
+    <div className="rounded-2xl bg-mist/60 p-3">
+      <TextArea
+        value={inputValue}
+        onChange={onInputChange}
+        placeholder="Ask a design question, clarify a tradeoff, or request a review."
+        rows={2}
+      />
+    </div>
+    <p
+      className={`text-xs ${
+        status === "error" ? "text-red-700" : status === "loading" ? "text-slate" : "text-pine"
+      }`}
+    >
+      {statusMessage || "Ask about gaps, tradeoffs, state ownership, runtime split, or design clarity."}
+    </p>
+    <div className="max-h-[320px] space-y-3 overflow-auto rounded-2xl bg-mist/45 p-3">
+      {messages.length > 0 ? (
+        messages.map((message) => (
+          <div
+            key={message.id}
+            className={`rounded-2xl border px-3 py-2 text-sm ${
+              message.role === "user"
+                ? "ml-6 border-copper/20 bg-sand/80 text-ink"
+                : "mr-6 border-slate/10 bg-white text-ink"
+            }`}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate/70">
+              {message.role === "user" ? "You" : "AI"}
+            </p>
+            <p className="mt-1 whitespace-pre-wrap leading-6">{message.text}</p>
+          </div>
+        ))
+      ) : (
+        <p className="text-sm text-slate">
+          No chat yet. Start with a focused question about this design scope.
+        </p>
+      )}
+    </div>
+  </div>
+);
 
 const ComponentOverlayDiagramButton = ({
   title,
