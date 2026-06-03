@@ -68,7 +68,6 @@ export type AiDiscoveryDraft = {
   featureSummary: {
     summary: string;
     problem: string;
-    goals: string[];
     assumptions: string[];
     openQuestions: string[];
   };
@@ -238,7 +237,6 @@ const syncComponentsFromCandidates = (
 export const hasRequiredAiDraftInputs = (workspace: FeatureWorkspace): boolean =>
   workspace.title.trim().length > 0 &&
   workspace.requirement.trim().length > 0 &&
-  workspace.featureSummary.constraints.some((item) => item.trim()) &&
   workspace.discovery.responsibilities.some((item) => item.trim());
 
 export const getMissingDiscoveryDraftInputs = (workspace: FeatureWorkspace): string[] => {
@@ -250,10 +248,6 @@ export const getMissingDiscoveryDraftInputs = (workspace: FeatureWorkspace): str
 
   if (!workspace.requirement.trim()) {
     missing.push("at least one feature requirement");
-  }
-
-  if (!workspace.featureSummary.constraints.some((item) => item.trim())) {
-    missing.push("at least one constraint");
   }
 
   if (!workspace.discovery.responsibilities.some((item) => item.trim())) {
@@ -334,7 +328,6 @@ export const mergeAiDiscoveryIntoWorkspace = (
       ...workspace.featureSummary,
       summary: draft.featureSummary.summary.trim(),
       problem: draft.featureSummary.problem.trim(),
-      goals: uniqueList(draft.featureSummary.goals),
       assumptions: uniqueList(draft.featureSummary.assumptions),
       openQuestions: uniqueList(draft.featureSummary.openQuestions),
     },

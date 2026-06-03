@@ -29,11 +29,10 @@ const discoverySchema = {
     featureSummary: {
       type: "object",
       additionalProperties: false,
-      required: ["summary", "problem", "goals", "assumptions", "openQuestions"],
+      required: ["summary", "problem", "assumptions", "openQuestions"],
       properties: {
         summary: { type: "string" },
         problem: { type: "string" },
-        goals: { type: "array", items: { type: "string" } },
         assumptions: { type: "array", items: { type: "string" } },
         openQuestions: { type: "array", items: { type: "string" } },
       },
@@ -339,7 +338,6 @@ ${asLines(responsibilities)}
 Return only the discovery-level design:
 - feature summary
 - problem statement
-- goals
 - assumptions
 - open questions
 - external actors
@@ -348,7 +346,7 @@ Return only the discovery-level design:
 - candidate RTOS tasks
 - system risks
 
-Keep it implementation-oriented and sized for an embedded firmware team. Do not generate detailed component state machines yet.
+Keep it implementation-oriented and sized for an embedded firmware team. Use the provided feature requirements and responsibilities as fixed inputs; do not rewrite or replace them. Do not generate detailed component state machines yet.
 `.trim();
 
 const buildDefinitionPrompt = ({
