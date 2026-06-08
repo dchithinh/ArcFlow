@@ -1,6 +1,6 @@
 # ArchFlow
 
-ArchFlow is a local-first web app for firmware and embedded developers. It turns a rough feature request into a feature workspace where you can discover candidate components, define their relationships, refine one component at a time, and export a structured design draft.
+ArchFlow is a local-first web app for system and feature design. It turns a rough feature request into a feature workspace where you can discover candidate components, define their relationships, refine one component at a time, and export a structured design draft.
 
 ## Stack
 
@@ -28,6 +28,64 @@ docker run --rm -p 8080:80 archflow-app
 
 Open the app at [http://localhost:8080](http://localhost:8080).
 
+## Run With Docker Compose And Built-In Ollama
+
+If you want ArchFlow and a local Ollama model in one Docker stack, use the bundled [compose.yaml](/mnt/d/learn/ArchFlow/compose.yaml).
+
+Set the model you want, then start the stack:
+
+```bash
+OLLAMA_MODEL=qwen2.5-coder:7b docker compose up --build
+```
+
+Or use the bundled helper script:
+
+```bash
+bash run-local-ai.sh
+```
+
+Override the model if needed:
+
+```bash
+OLLAMA_MODEL=gpt-oss bash run-local-ai.sh
+```
+
+Open the app at [http://localhost:8080](http://localhost:8080).
+
+What this stack does:
+
+- starts `archflow`
+- starts `ollama`
+- automatically pulls the model named by `OLLAMA_MODEL`
+- wires ArchFlow to `http://ollama:11434` inside the Docker network
+
+Useful compose environment variables:
+
+- `OLLAMA_MODEL`
+  Model name to pull and use, for example `qwen2.5-coder:7b`
+- `ARCHFLOW_PORT`
+  Host port for the app, defaults to `8080`
+- `OLLAMA_PORT`
+  Host port exposed for the Ollama API, defaults to `11434`
+
+Examples:
+
+```bash
+OLLAMA_MODEL=qwen2.5-coder:7b docker compose up --build
+ARCHFLOW_PORT=8081 OLLAMA_MODEL=gpt-oss docker compose up --build
+```
+
+Notes:
+
+- the first run can take a while because the model must be downloaded
+- models are stored in the Docker volume `ollama-data`, so later runs reuse them
+- for CPU-only machines, choose a model size your system can handle comfortably
+- to stop the stack:
+
+```bash
+docker compose down
+```
+
 ## Enable AI Drafting
 
 AI drafting is optional. The app now supports `OpenAI` and local `Ollama`.
@@ -47,6 +105,11 @@ OpenAI environment variables:
   Defaults to `gpt-5-mini`
 
 ### Ollama
+
+You have two Ollama options:
+
+1. Use the built-in Docker Compose stack above.
+2. Run Ollama separately on the host and point ArchFlow to it.
 
 Start or restart Ollama on the host machine first.
 
@@ -135,14 +198,12 @@ The staged AI flow starts from:
 - at least one constraint
 - at least one responsibility
 
-Then the app uses three smaller AI actions:
+Then the app uses smaller AI actions:
 
 - `Generate Discovery Draft`
-  Fills summary, problem, goals, assumptions, open questions, actors, candidate components, interactions, candidate tasks, and system risks.
+  Fills summary, problem, assumptions, open questions, actors, candidate components, interactions, candidate tasks, and system risks.
 - `Refine Selected Component`
   Fills one component’s detailed design only.
-- `Generate Implementation Plan`
-  Fills milestones, APIs, and tests from the stabilized workspace.
 
 This keeps prompts smaller, improves local-model reliability, and preserves the same editable workspace model.
 
@@ -172,15 +233,14 @@ The markdown preview/export is now feature-definition-only and is intended for h
 - Sample UART command-handling workspace
 - Discovery-first editor flow
 - Candidate component list and interaction mapping
-- Candidate RTOS task modeling
+- Candidate task / execution-unit modeling
 - Per-component detail editor
-- AI-assisted staged drafting for discovery, component refinement, and implementation planning
+- AI-assisted staged drafting for definition, discovery, and component refinement
 - Markdown requirement import for AI input prefill
 - Live feature-requirement markdown preview
 - Mermaid feature architecture flowchart preview
 - Mermaid selected-component state diagram preview
-- RTOS task table generation
-- Risk review generation
+- Floating design chat with workspace and component scope
 - Requirement markdown export
 - Workspace JSON export/import
 - Browser `localStorage` persistence

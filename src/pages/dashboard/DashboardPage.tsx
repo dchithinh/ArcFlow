@@ -39,7 +39,7 @@ export const DashboardPage = ({
     <section className="rounded-[28px] border border-white/70 bg-ink p-6 text-white shadow-panel">
       <p className="text-xs uppercase tracking-[0.3em] text-sand/80">ArchFlow</p>
       <h1 className="mt-3 max-w-lg text-3xl font-semibold leading-tight">
-        Guided firmware feature discovery, from rough requirement to component architecture draft.
+        Guided feature discovery, from rough requirement to component architecture draft.
       </h1>
       <p className="mt-4 max-w-xl text-sm text-white/75">
         Capture a feature requirement, discover candidate components, define relationships, refine component state, and export a working design draft without forcing a backend.
@@ -74,7 +74,7 @@ export const DashboardPage = ({
       <div className="mt-6 grid gap-4">
         {designs.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/70 p-8 text-center text-slate">
-            No saved workspaces yet. Start with an empty feature workspace or the sample UART scenario.
+            No saved workspaces yet. Start with an empty feature workspace or the sample scenario.
           </div>
         ) : (
           designs.map((design) => (

@@ -4,7 +4,7 @@
 
 The initial prototype modeled one design entry as one component-like design record.
 
-That was too late in the firmware design process.
+That was too late in the design process.
 
 The real missing step is earlier:
 - starting from a feature requirement

@@ -314,7 +314,7 @@ const summarizeTasks = (tasks = []) =>
     : "- none yet";
 
 const buildDiscoveryPrompt = ({ title, requirement, constraints, responsibilities }) => `
-Create a firmware feature discovery draft.
+Create a feature discovery draft for a system design workspace.
 
 Fixed user inputs:
 - Feature name: ${title}
@@ -332,10 +332,10 @@ Return only the discovery-level design:
 - external actors
 - candidate components
 - component interactions
-- candidate RTOS tasks
+- candidate execution units
 - system risks
 
-Keep it implementation-oriented and sized for an embedded firmware team. Use the provided feature requirements and responsibilities as fixed inputs; do not rewrite or replace them. Do not generate detailed component state machines yet.
+Keep it practical for a software, embedded, or systems design team. Use the provided feature requirements and responsibilities as fixed inputs; do not rewrite or replace them. Do not generate detailed component state machines yet.
 `.trim();
 
 const buildDefinitionPrompt = ({
@@ -345,7 +345,7 @@ const buildDefinitionPrompt = ({
   assumptions,
   openQuestions,
 }) => `
-Create a first-pass feature definition draft for a firmware feature workspace.
+Create a first-pass feature definition draft for a feature design workspace.
 
 Known user inputs:
 - Feature name: ${title}
@@ -372,13 +372,13 @@ Guidance:
 - Responsibilities must describe internal system jobs needed to satisfy the requirements.
 - Responsibilities must start with direct action verbs such as "Receive", "Parse", "Validate", "Dispatch", "Store", "Update", "Generate", "Protect", or "Report".
 - Do not write project tasks or implementation directives such as "develop", "design", "implement", or "create".
-- Infer obvious embedded-firmware concerns when the summary implies them, such as input framing, validation, malformed input handling, response generation, handoff between execution contexts, and non-blocking behavior.
-- Keep the output clear, concise, and editable by a firmware developer.
+- Infer obvious domain concerns when the summary implies them, such as validation, malformed input handling, response generation, handoff between execution contexts, non-blocking behavior, or boundary ownership.
+- Keep the output clear, concise, and editable by a developer or system designer.
 - Prefer 4 to 8 requirements and 4 to 8 responsibilities.
 - Avoid duplicates and near-duplicates.
 - The requirements and responsibilities must not be near-duplicates of each other.
 - Before returning, check that each requirement reads like an acceptance statement and each responsibility reads like an internal design job.
-- Do not generate components, interactions, tasks, diagrams, APIs, tests, or implementation plans yet.
+- Do not generate components, interactions, tasks, diagrams, code, or downstream delivery plans yet.
 `.trim();
 
 const buildComponentPrompt = ({
@@ -392,7 +392,7 @@ const buildComponentPrompt = ({
   interactions,
   systemRisks,
 }) => `
-Refine one firmware component inside a larger feature workspace.
+Refine one component inside a larger feature workspace.
 
 Feature:
 - Name: ${title}
@@ -443,7 +443,7 @@ const buildChatPrompt = ({ scope, context, history, question }) => {
       : "- none";
 
   return `
-You are answering a firmware design question inside ArchFlow.
+You are answering a system design question inside ArchFlow.
 
 Scope:
 - Type: ${scope.type}
@@ -453,7 +453,7 @@ Rules:
 - Answer only the user's design question.
 - Use the provided workspace context; do not invent missing details.
 - If context is insufficient, say what is missing and make the smallest reasonable inference.
-- Keep the answer clear, concise, and practical for a firmware developer.
+- Keep the answer clear, concise, and practical for a developer or system designer.
 - Focus on design reasoning, tradeoffs, risks, and clarification.
 - Do not rewrite the whole workspace.
 - Do not return JSON, markdown tables, or code unless the question directly needs it.
@@ -774,7 +774,7 @@ const buildStageRequest = (body) => {
       stage,
       schema: definitionSchema,
       systemPrompt:
-        "Generate structured firmware feature requirements and feature responsibilities. Requirements must be externally visible 'Feature shall ...' acceptance statements about what the user, operator, or external system gets from the feature. Requirements must not describe internal behaviors like parse, validate, dispatch, queue, store, log, or signal. Responsibilities must be internal system jobs, not project tasks. Return only data that fits the provided schema.",
+        "Generate structured feature requirements and feature responsibilities. Requirements must be externally visible 'Feature shall ...' acceptance statements about what the user, operator, or external system gets from the feature. Requirements must not describe internal behaviors like parse, validate, dispatch, queue, store, log, or signal. Responsibilities must be internal system jobs, not project tasks. Return only data that fits the provided schema.",
       userPrompt: buildDefinitionPrompt(base),
     };
   }
@@ -786,7 +786,7 @@ const buildStageRequest = (body) => {
       stage,
       schema: discoverySchema,
       systemPrompt:
-        "Generate structured firmware feature discovery drafts. Return only data that fits the provided schema.",
+        "Generate structured feature discovery drafts. Return only data that fits the provided schema.",
       userPrompt: buildDiscoveryPrompt(base),
     };
   }
@@ -804,7 +804,7 @@ const buildStageRequest = (body) => {
       stage,
       schema: componentSchema,
       systemPrompt:
-        "Generate structured detailed component designs for embedded firmware workspaces. Return only data that fits the provided schema.",
+        "Generate structured detailed component designs for feature workspaces. Return only data that fits the provided schema.",
       userPrompt: buildComponentPrompt({
         ...base,
         selectedComponentName,
@@ -930,7 +930,7 @@ createServer(async (request, response) => {
       try {
         const answer = await provider.requestAnswer({
           systemPrompt:
-            "You are a firmware design assistant inside ArchFlow. Answer clearly and concisely using only the provided scoped workspace context. Focus on explanation and review; do not mutate the workspace or invent missing structure.",
+            "You are a system design assistant inside ArchFlow. Answer clearly and concisely using only the provided scoped workspace context. Focus on explanation and review; do not mutate the workspace or invent missing structure.",
           userPrompt: buildChatPrompt(chatRequest),
         });
 

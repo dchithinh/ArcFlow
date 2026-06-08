@@ -99,7 +99,7 @@ export const App = () => {
     const url = window.URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `${fileName.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "firmware-design"}.md`;
+    anchor.download = `${fileName.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "feature-design"}.md`;
     anchor.click();
     window.URL.revokeObjectURL(url);
   };
@@ -133,10 +133,10 @@ export const App = () => {
       header={
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-copper">Firmware System Design Assistant</p>
+            <p className="text-xs uppercase tracking-[0.35em] text-copper">System Design Assistant</p>
             <h1 className="mt-2 text-3xl font-semibold text-ink">ArchFlow</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate">
-              Local-first feature architecture discovery for embedded systems, with candidate component mapping, per-component detail editing, and generated firmware design artifacts.
+              Local-first feature architecture discovery for software, systems, and embedded work, with candidate component mapping, per-component detail editing, and structured design artifacts.
             </p>
           </div>
         </div>

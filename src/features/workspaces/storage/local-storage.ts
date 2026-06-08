@@ -111,7 +111,7 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
     candidateComponents.push({
       id: fallbackId,
       name: legacy.title || "Legacy Component",
-      responsibility: legacy.featureSummary?.summary || "Migrated from flat firmware design",
+      responsibility: legacy.featureSummary?.summary || "Migrated from legacy design",
       rationale: "Auto-created during workspace migration",
     });
     componentMap.set(

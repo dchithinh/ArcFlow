@@ -167,14 +167,14 @@ const RequirementResponsibilityHelpContent = () => (
       <div className="rounded-2xl bg-mist/55 p-3">
         <p className="font-semibold text-ink">Requirement examples</p>
         <ul className="mt-2 space-y-1">
-          <li>`Feature shall provide a UART terminal interface.`</li>
+          <li>`Feature shall provide a clear user command interface.`</li>
           <li>`Feature shall reject unknown commands safely.`</li>
         </ul>
       </div>
       <div className="rounded-2xl bg-mist/55 p-3">
         <p className="font-semibold text-ink">Responsibility examples</p>
         <ul className="mt-2 space-y-1">
-          <li>`Receive UART bytes and detect command boundaries.`</li>
+          <li>`Receive incoming input and detect complete requests.`</li>
           <li>`Validate command syntax and dispatch valid commands.`</li>
         </ul>
       </div>
@@ -4375,7 +4375,7 @@ const WorkspaceSectionForm = ({
 
           <ArchitectureViewPanel
             title="Deployment / Runtime Diagram"
-            description="Shows where execution runs: tasks, threads, cores, MCUs, devices, and other runtime boundaries."
+            description="Shows where execution runs: tasks, threads, processes, services, devices, and other runtime boundaries."
           >
             <div className="space-y-4">
               <Field
@@ -4563,7 +4563,7 @@ const WorkspaceSectionForm = ({
 
               <Field
                 label="Candidate Tasks"
-                hint="Capture the RTOS tasks or execution units that likely carry this feature as part of the design."
+                hint="Capture the execution units that likely carry this feature as part of the design."
               >
                 <div className="space-y-4">
                   {workspace.discovery.candidateTasks.map((task, index) => (

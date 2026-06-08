@@ -8,16 +8,16 @@ The intended product direction is:
 
 `rough feature requirement -> discover candidate components -> define relationships -> refine each component -> generate design outputs`
 
-This better matches real firmware design work, where the hard problem is not only documenting states and tasks, but first discovering what components, boundaries, and interactions should exist for the feature.
+This better matches real system design work, where the hard problem is not only documenting states and execution units, but first discovering what components, boundaries, and interactions should exist for the feature.
 
 ## Product Goal
 
-Build a local-first firmware feature design assistant that helps a developer start from an incomplete feature requirement and progressively shape it into:
+Build a local-first feature design assistant that helps a developer start from an incomplete feature requirement and progressively shape it into:
 
 - candidate components
 - responsibility boundaries
 - component relationships
-- concurrency and task proposals
+- concurrency and execution proposals
 - component-level detailed design
 - generated architecture outputs
 
@@ -45,7 +45,7 @@ The system should be organized around this pipeline:
 
 With AI assistance enabled, the assisted path becomes:
 
-`rough requirement + constraints + responsibilities -> AI discovery draft -> user review -> AI component refinement -> AI implementation plan -> derived outputs`
+`rough requirement + constraints + responsibilities -> AI discovery draft -> user review -> AI component refinement -> derived outputs`
 
 This means:
 - the requirement is the input, not the full design
@@ -125,12 +125,6 @@ type FeatureWorkspace = {
   };
 
   components: FeatureComponent[];
-
-  implementationPlan: {
-    milestones: string[];
-    apis: string[];
-    tests: string[];
-  };
 };
 
 type ComponentCandidate = {
@@ -185,7 +179,7 @@ type FeatureComponent = {
 - User identifies candidate responsibilities.
 - User proposes candidate components.
 - User maps component interactions.
-- User sketches candidate RTOS tasks or concurrency boundaries.
+- User sketches candidate execution units or concurrency boundaries.
 - User captures system-level risks.
 
 ### 2a. AI-Assisted Discovery
@@ -198,13 +192,6 @@ type FeatureComponent = {
 - User selects one component after discovery stabilizes.
 - AI generates detailed design only for that selected component.
 - This keeps request size bounded and avoids global redesign side effects.
-
-### 4a. AI-Assisted Implementation Planning
-- After discovery and component detail are reasonably stable, AI generates:
-  - milestones
-  - APIs
-  - tests
-- This stage must depend on current workspace state rather than the original raw requirement alone.
 
 ### 3. Component Refinement
 - User selects one component at a time.
@@ -219,7 +206,6 @@ type FeatureComponent = {
 ### 4. Output Generation
 - Generate feature-level architecture flow
 - Generate component-level state diagrams
-- Generate candidate RTOS task table
 - Generate markdown design draft
 - Generate risk review
 
@@ -313,7 +299,7 @@ Outputs should be separated into feature-level and component-level artifacts.
 - feature summary markdown
 - architecture flowchart
 - component relationship map
-- RTOS task proposal table
+- execution-unit proposal table
 - system-level risk review
 
 ### Component-Level Outputs
@@ -372,7 +358,7 @@ The current implementation should be treated as a prototype of the component-det
 
 ## Open Design Questions
 
-- Should candidate RTOS tasks remain feature-level only, or also allow per-component task ownership?
+- Should candidate execution units remain feature-level only, or also allow per-component ownership?
 - Should a component be allowed to own multiple state machines?
 - Should system-level states exist alongside component states?
 - Should interactions reference tasks, components, or both?

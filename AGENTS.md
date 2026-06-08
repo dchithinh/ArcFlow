@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This repository is for a local-first web app that helps firmware developers turn rough feature requirements into a structured system design.
+This repository is for a local-first web app that helps developers and system designers turn rough feature requirements into a structured system design.
 
 Before implementation, treat this file as the operating contract for how work should be split, reviewed, and evolved.
 
@@ -45,8 +45,7 @@ These are project roles and responsibility boundaries. They are architectural ow
   - Markdown design document
   - Mermaid architecture flowchart
   - Component state diagrams
-  - RTOS task table
-  - Risk review checklist
+  - Sequence and runtime views
 - Must be pure and deterministic from workspace input.
 
 ### 6. Persistence and Export Agent
