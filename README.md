@@ -1,3 +1,4 @@
+
 # ArchFlow
 
 ArchFlow is a local-first web app for turning rough ideas, requirements, and feature requests into structured design workspaces.
@@ -206,3 +207,6 @@ Use workspace JSON when you want full-fidelity round-trip of the design data bet
 - The workspace page is the main integration surface
 - Diagram rendering is intentionally derived from normalized workspace data
 
+<video width="800" controls>
+  <source src="[demo.mp4](https://github.com/dchithinh/ArcFlow/blob/master/docs/demo/ArcFlow.mp4)" type="video/mp4">
+</video>
