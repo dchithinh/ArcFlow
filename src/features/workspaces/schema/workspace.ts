@@ -67,8 +67,7 @@ export type RuntimeLinkKind = FlexibleString<KnownRuntimeLinkKind>;
 
 export type WorkspaceSectionId =
   | "featureDefinition"
-  | "featureDesign"
-  | "implementationPlan";
+  | "featureDesign";
 
 export type EventDefinition = {
   name: string;
@@ -261,22 +260,16 @@ export type FeatureWorkspace = {
     customOptions: WorkspaceCustomOptions;
   };
   components: FeatureComponent[];
-  implementationPlan: {
-    milestones: string[];
-    apis: string[];
-    tests: string[];
-  };
 };
 
 export type WorkspaceSectionDefinition = {
   id: WorkspaceSectionId;
   label: string;
   description: string;
-  stage: "definition" | "design" | "implementation";
+  stage: "definition" | "design";
 };
 
 export const WORKSPACE_SECTIONS: WorkspaceSectionDefinition[] = [
   { id: "featureDefinition", label: "Feature Definition", description: "Define the feature intent, scope, goals, constraints, and responsibilities.", stage: "definition" },
   { id: "featureDesign", label: "Feature Design", description: "Define candidate components, their interactions, and each component detail in one place.", stage: "design" },
-  { id: "implementationPlan", label: "Implementation Plan", description: "Plan tasks, milestones, APIs, and tests after the design stabilizes.", stage: "implementation" },
 ];

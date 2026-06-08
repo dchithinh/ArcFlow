@@ -236,17 +236,6 @@ const componentSchema = {
   },
 };
 
-const implementationSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["milestones", "apis", "tests"],
-  properties: {
-    milestones: { type: "array", items: { type: "string" } },
-    apis: { type: "array", items: { type: "string" } },
-    tests: { type: "array", items: { type: "string" } },
-  },
-};
-
 const parseBody = async (request) => {
   const chunks = [];
   for await (const chunk of request) {
@@ -438,46 +427,6 @@ Return only the detailed design for this single component:
 - debugging hooks
 
 Keep the output bounded to this component only. Do not redesign the whole workspace.
-`.trim();
-
-const buildImplementationPrompt = ({
-  title,
-  requirement,
-  constraints,
-  responsibilities,
-  candidateComponents,
-  interactions,
-  candidateTasks,
-  components,
-}) => `
-Create an implementation plan for a firmware feature workspace.
-
-Feature:
-- Name: ${title}
-- Requirement: ${requirement}
-- Constraints:
-${asLines(constraints)}
-- Responsibilities:
-${asLines(responsibilities)}
-
-Components:
-${summarizeComponents(candidateComponents)}
-
-Interactions:
-${summarizeInteractions(interactions)}
-
-Candidate RTOS tasks:
-${summarizeTasks(candidateTasks)}
-
-Refined component summaries:
-${summarizeComponents(components)}
-
-Return only:
-- milestones
-- APIs
-- tests
-
-Keep the plan practical for an embedded firmware project with staged bring-up and verification.
 `.trim();
 
 const buildChatPrompt = ({ scope, context, history, question }) => {
@@ -869,26 +818,8 @@ const buildStageRequest = (body) => {
     };
   }
 
-  if (stage === "implementation") {
-    return {
-      stage,
-      schema: implementationSchema,
-      systemPrompt:
-        "Generate practical embedded firmware implementation plans. Return only data that fits the provided schema.",
-      userPrompt: buildImplementationPrompt({
-        ...base,
-        candidateComponents: Array.isArray(body.candidateComponents)
-          ? body.candidateComponents
-          : [],
-        interactions: Array.isArray(body.interactions) ? body.interactions : [],
-        candidateTasks: Array.isArray(body.candidateTasks) ? body.candidateTasks : [],
-        components: Array.isArray(body.components) ? body.components : [],
-      }),
-    };
-  }
-
   throw new Error(
-    'Invalid AI stage. Use "definition", "discovery", "component", or "implementation".',
+    'Invalid AI stage. Use "definition", "discovery", or "component".',
   );
 };
 

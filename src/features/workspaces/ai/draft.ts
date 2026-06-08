@@ -97,12 +97,6 @@ export type AiComponentDraft = {
   };
 };
 
-export type AiImplementationDraft = {
-  milestones: string[];
-  apis: string[];
-  tests: string[];
-};
-
 export type AiDefinitionDraft = {
   featureRequirements: string[];
   featureResponsibilities: string[];
@@ -270,11 +264,6 @@ export const canRefineComponentWithAi = (
   Boolean(componentId) &&
   workspace.components.some((component) => component.id === componentId);
 
-export const canGenerateImplementationPlanWithAi = (workspace: FeatureWorkspace): boolean =>
-  hasRequiredAiDraftInputs(workspace) &&
-  workspace.discovery.candidateComponents.length > 0 &&
-  workspace.components.length > 0;
-
 export const mergeAiDiscoveryIntoWorkspace = (
   workspace: FeatureWorkspace,
   draft: AiDiscoveryDraft,
@@ -375,18 +364,6 @@ export const mergeAiComponentIntoWorkspace = (
     ),
   };
 };
-
-export const mergeAiImplementationIntoWorkspace = (
-  workspace: FeatureWorkspace,
-  draft: AiImplementationDraft,
-): FeatureWorkspace => ({
-  ...workspace,
-  implementationPlan: {
-    milestones: uniqueList(draft.milestones),
-    apis: uniqueList(draft.apis),
-    tests: uniqueList(draft.tests),
-  },
-});
 
 export const mergeAiDefinitionIntoWorkspace = (
   workspace: FeatureWorkspace,

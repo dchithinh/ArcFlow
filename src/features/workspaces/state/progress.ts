@@ -73,15 +73,6 @@ export const isWorkspaceSectionStarted = (
             (step) => hasText(step.message) || hasText(step.note),
           ),
       );
-    case "implementationPlan":
-      return (
-        workspace.discovery.candidateTasks.some(
-          (task) => hasText(task.name) || hasText(task.responsibility),
-        ) ||
-        hasList(workspace.implementationPlan.milestones) ||
-        hasList(workspace.implementationPlan.apis) ||
-        hasList(workspace.implementationPlan.tests)
-      );
     default:
       return false;
   }

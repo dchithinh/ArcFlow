@@ -176,11 +176,6 @@ export const createEmptyWorkspace = (): FeatureWorkspace => ({
     },
   },
   components: [],
-  implementationPlan: {
-    milestones: [],
-    apis: [],
-    tests: [],
-  },
 });
 
 export const createSampleWorkspace = (): FeatureWorkspace => {
@@ -763,10 +758,5 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
         },
       },
     ],
-    implementationPlan: {
-      milestones: ["Create feature discovery skeleton", "Implement parser and config coordinator boundaries", "Inject malformed-packet and burst-traffic tests"],
-      apis: ["enqueueFramedPacket()", "parseCommand()", "applyConfiguration()", "emitResponse()"],
-      tests: ["Malformed checksum rejection", "Queue overflow behavior", "Config ownership invariants", "End-to-end response latency budget"],
-    },
   };
 };

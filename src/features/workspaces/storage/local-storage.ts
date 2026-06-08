@@ -65,11 +65,6 @@ type LegacyFirmwareDesign = {
     traces?: string[];
     observability?: string[];
   };
-  implementationPlan?: {
-    milestones?: string[];
-    apis?: string[];
-    tests?: string[];
-  };
 };
 
 const isBrowser = typeof window !== "undefined";
@@ -230,11 +225,6 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
       },
     },
     components: Array.from(componentMap.values()),
-    implementationPlan: {
-      milestones: legacy.implementationPlan?.milestones ?? [],
-      apis: legacy.implementationPlan?.apis ?? [],
-      tests: legacy.implementationPlan?.tests ?? [],
-    },
   };
 };
 
@@ -321,10 +311,6 @@ export const normalizeImportedWorkspace = (workspace: FeatureWorkspace): Feature
       },
     },
     components: Array.isArray(workspace.components) ? workspace.components : [],
-    implementationPlan: {
-      ...base.implementationPlan,
-      ...workspace.implementationPlan,
-    },
   };
 };
 

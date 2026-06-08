@@ -33,15 +33,12 @@ import {
   canGenerateDiscoveryDraft,
   getMissingDiscoveryDraftInputs,
   mergeAiDefinitionIntoWorkspace,
-  canGenerateImplementationPlanWithAi,
   canRefineComponentWithAi,
   mergeAiComponentIntoWorkspace,
   mergeAiDiscoveryIntoWorkspace,
-  mergeAiImplementationIntoWorkspace,
   type AiComponentDraft,
   type AiDefinitionDraft,
   type AiDiscoveryDraft,
-  type AiImplementationDraft,
 } from "../../features/workspaces/ai/draft";
 import {
   buildWorkspaceChatPayload,
@@ -144,21 +141,6 @@ const DATA_FLOW_NODE_TYPE_OPTIONS = [
   "data_store",
   "other",
 ] as const;
-
-const StaticContextBlock = ({
-  label,
-  value,
-  emptyText,
-}: {
-  label: string;
-  value: string;
-  emptyText: string;
-}) => (
-  <div className="space-y-1.5">
-    <SectionInputLabel>{label}</SectionInputLabel>
-    <div className="text-sm text-ink">{value.trim() || <span className="text-slate">{emptyText}</span>}</div>
-  </div>
-);
 
 const RequirementResponsibilityHelpContent = () => (
   <div className="space-y-3 px-1 py-1 text-sm text-slate">
@@ -374,10 +356,10 @@ type FeatureWorkspacePageProps = {
   onExportWorkspaceJson: (workspace: FeatureWorkspace) => void;
 };
 
-type AiStage = "definition" | "discovery" | "component" | "implementation";
+type AiStage = "definition" | "discovery" | "component";
 
 type AiStageSuccessResponse = {
-  draft: AiDefinitionDraft | AiDiscoveryDraft | AiComponentDraft | AiImplementationDraft;
+  draft: AiDefinitionDraft | AiDiscoveryDraft | AiComponentDraft;
   model: string;
   provider: string;
   stage: AiStage;
@@ -1053,48 +1035,6 @@ export const FeatureWorkspacePage = ({
     }
   };
 
-  const generateImplementationPlanWithAi = async () => {
-    if (!canGenerateImplementationPlanWithAi(workspace)) {
-      return;
-    }
-
-    startAiRequest("implementation", "Generating implementation milestones, APIs, and tests...");
-
-    try {
-      const data = await requestAiStage("implementation", {
-        stage: "implementation",
-        title: workspace.title,
-        requirement: workspace.requirement,
-        constraints: workspace.featureSummary.constraints,
-        responsibilities: workspace.discovery.responsibilities,
-        candidateComponents: workspace.discovery.candidateComponents,
-        interactions: namedInteractions,
-        candidateTasks: workspace.discovery.candidateTasks,
-        components: workspace.components.map((component) => ({
-          name: component.name,
-          summary: component.summary,
-        })),
-      });
-
-      const merged = updateTimestamp(
-        mergeAiImplementationIntoWorkspace(
-          workspace,
-          data.draft as AiImplementationDraft,
-        ),
-      );
-      onChange(() => merged);
-      completeAiRequest(
-        `Implementation plan generated with ${data.provider}/${data.model} in ${Math.max(1, Math.round(data.durationMs / 1000))}s.`,
-      );
-      setActiveSection("implementationPlan");
-    } catch (error) {
-      setAiStatus("error");
-      setAiMessage(
-        error instanceof Error ? error.message : "AI implementation plan generation failed.",
-      );
-    }
-  };
-
   return (
     <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1.15fr)_minmax(360px,0.85fr)]">
       <aside className="rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel">
@@ -1241,15 +1181,7 @@ export const FeatureWorkspacePage = ({
                 Export Workspace JSON
               </Button>
             </div>
-          ) : (
-            <div className="space-y-3 rounded-2xl border border-slate/10 bg-mist/40 px-4 py-3">
-              <StaticContextBlock
-                label="Feature Name"
-                value={workspace.title}
-                emptyText="No feature name yet."
-              />
-            </div>
-          )}
+          ) : null}
 
           <WorkspaceSectionForm
             activeSection={activeSection}
@@ -1310,7 +1242,6 @@ export const FeatureWorkspacePage = ({
             importMessage={importMessage}
             onGenerateAiDraft={generateAiDraft}
             onRefineComponentWithAi={refineComponentWithAi}
-            onGenerateImplementationPlanWithAi={generateImplementationPlanWithAi}
             onChange={(updater) => onChange((current) => updateTimestamp(updater(current)))}
           />
         </div>
@@ -1428,7 +1359,7 @@ export const FeatureWorkspacePage = ({
                   />
                 )}
                 {componentChatScope ? (
-                  <DesignChatPanel
+                  <FloatingChatDock
                     title="Ask AI About This Component"
                     description="Use the selected component, its states, interactions, and nearby design context to clarify or review this component."
                     inputValue={componentChatState.draft}
@@ -1446,6 +1377,8 @@ export const FeatureWorkspacePage = ({
                     status={componentChatState.status}
                     statusMessage={componentChatState.message}
                     messages={componentChatState.messages}
+                    defaultOpen={false}
+                    zIndexClass="z-[55]"
                   />
                 ) : null}
               </div>
@@ -2181,7 +2114,7 @@ export const FeatureWorkspacePage = ({
               previewMinWidth="min-w-[980px]"
               expandedMinWidth="min-w-[1400px]"
             />
-            <DesignChatPanel
+            <FloatingChatDock
               title="Ask AI About This Design"
               description="Use the current workspace context to clarify architecture choices, tradeoffs, and missing design details."
               inputValue={workspaceChatState.draft}
@@ -2199,6 +2132,8 @@ export const FeatureWorkspacePage = ({
               status={workspaceChatState.status}
               statusMessage={workspaceChatState.message}
               messages={workspaceChatState.messages}
+              defaultOpen={false}
+              zIndexClass="z-30"
             />
           </div>
         </section>
@@ -2218,6 +2153,7 @@ const DesignChatPanel = ({
   statusMessage,
   messages,
   disabled,
+  showHeader = true,
 }: {
   title: string;
   description: string;
@@ -2228,58 +2164,323 @@ const DesignChatPanel = ({
   statusMessage: string;
   messages: WorkspaceChatMessage[];
   disabled?: boolean;
-}) => (
-  <div className="space-y-4 rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <p className="text-xs uppercase tracking-[0.25em] text-copper">Design Chat</p>
-        <h3 className="mt-2 text-xl font-semibold text-ink">{title}</h3>
-        <p className="mt-1 text-sm text-slate">{description}</p>
+  showHeader?: boolean;
+}) => {
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (!messagesRef.current) {
+      return;
+    }
+
+    messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+  }, [messages, status]);
+
+  useEffect(() => {
+    if (status !== "idle" || !composerRef.current) {
+      return;
+    }
+
+    composerRef.current.focus();
+  }, [status]);
+
+  const handleSubmit = () => {
+    if (disabled || status === "loading" || !inputValue.trim()) {
+      return;
+    }
+
+    onAsk();
+  };
+
+  return (
+    <div className="flex h-full min-h-0 flex-col rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel">
+      {showHeader ? (
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.25em] text-copper">Design Chat</p>
+            <h3 className="mt-2 text-xl font-semibold text-ink">{title}</h3>
+            <p className="mt-1 text-sm text-slate">{description}</p>
+          </div>
+        </div>
+      ) : null}
+      <div
+        ref={messagesRef}
+        className={`${showHeader ? "mt-4" : ""} min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden rounded-2xl bg-mist/45 p-3`}
+      >
+        {messages.length > 0 ? (
+          messages.map((message) => (
+            <div
+              key={message.id}
+              className={`rounded-2xl border px-3 py-2 text-sm ${
+                message.role === "user"
+                  ? "ml-6 border-copper/20 bg-sand/80 text-ink"
+                  : "mr-6 border-slate/10 bg-white text-ink"
+              }`}
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate/70">
+                {message.role === "user" ? "You" : "AI"}
+              </p>
+              <div className="mt-1">
+                <ChatMessageContent text={message.text} />
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-slate">
+            No chat yet. Start with a focused question about this design scope.
+          </p>
+        )}
+        {status === "loading" ? (
+          <div className="mr-6 rounded-2xl border border-slate/10 bg-white px-3 py-2 text-sm text-ink">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate/70">
+              AI
+            </p>
+            <p className="mt-1">Thinking...</p>
+          </div>
+        ) : null}
       </div>
-      <Button onClick={onAsk} tone="primary" disabled={disabled || status === "loading"}>
-        {status === "loading" ? "Thinking..." : "Ask AI"}
-      </Button>
-    </div>
-    <div className="rounded-2xl bg-mist/60 p-3">
-      <TextArea
-        value={inputValue}
-        onChange={onInputChange}
-        placeholder="Ask a design question, clarify a tradeoff, or request a review."
-        rows={2}
-      />
-    </div>
-    <p
-      className={`text-xs ${
-        status === "error" ? "text-red-700" : status === "loading" ? "text-slate" : "text-pine"
-      }`}
-    >
-      {statusMessage || "Ask about gaps, tradeoffs, state ownership, runtime split, or design clarity."}
-    </p>
-    <div className="max-h-[320px] space-y-3 overflow-auto rounded-2xl bg-mist/45 p-3">
-      {messages.length > 0 ? (
-        messages.map((message) => (
-          <div
-            key={message.id}
-            className={`rounded-2xl border px-3 py-2 text-sm ${
-              message.role === "user"
-                ? "ml-6 border-copper/20 bg-sand/80 text-ink"
-                : "mr-6 border-slate/10 bg-white text-ink"
+      <div className="mt-4 space-y-2 rounded-2xl border border-slate/10 bg-mist/60 p-3">
+        <textarea
+          ref={composerRef}
+          className="min-h-[44px] w-full resize-none overflow-hidden rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm leading-6 text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+          value={inputValue}
+          rows={2}
+          onChange={(event) => onInputChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              handleSubmit();
+            }
+          }}
+          placeholder="Ask a design question. Press Enter to send, Shift+Enter for a new line."
+        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p
+            className={`text-xs ${
+              status === "error"
+                ? "text-red-700"
+                : status === "loading"
+                  ? "text-slate"
+                  : "text-pine"
             }`}
           >
-            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate/70">
-              {message.role === "user" ? "You" : "AI"}
-            </p>
-            <p className="mt-1 whitespace-pre-wrap leading-6">{message.text}</p>
-          </div>
-        ))
-      ) : (
-        <p className="text-sm text-slate">
-          No chat yet. Start with a focused question about this design scope.
-        </p>
-      )}
+            {statusMessage ||
+              "Ask about gaps, tradeoffs, state ownership, runtime split, or design clarity."}
+          </p>
+          <Button
+            onClick={handleSubmit}
+            tone="primary"
+            disabled={disabled || status === "loading" || !inputValue.trim()}
+          >
+            Send
+          </Button>
+        </div>
+      </div>
     </div>
-  </div>
-);
+  );
+};
+
+const renderInlineCode = (text: string) => {
+  const parts = text.split(/(`[^`]+`)/g);
+  return parts.map((part, index) =>
+    part.startsWith("`") && part.endsWith("`") ? (
+      <code
+        key={`${part}-${index}`}
+        className="rounded bg-ink/6 px-1.5 py-0.5 font-mono text-[0.92em] text-ink"
+      >
+        {part.slice(1, -1)}
+      </code>
+    ) : (
+      <span key={`${part}-${index}`}>{part}</span>
+    ),
+  );
+};
+
+const ChatMarkdownBlock = ({ text }: { text: string }) => {
+  const lines = text.split("\n");
+  const elements: ReactNode[] = [];
+  let paragraph: string[] = [];
+  let listItems: string[] = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length === 0) {
+      return;
+    }
+
+    elements.push(
+      <p key={`p-${elements.length}`} className="whitespace-pre-wrap leading-6">
+        {renderInlineCode(paragraph.join(" "))}
+      </p>,
+    );
+    paragraph = [];
+  };
+
+  const flushList = () => {
+    if (listItems.length === 0) {
+      return;
+    }
+
+    elements.push(
+      <ul key={`ul-${elements.length}`} className="list-disc space-y-1 pl-5 leading-6">
+        {listItems.map((item, index) => (
+          <li key={`${item}-${index}`}>{renderInlineCode(item)}</li>
+        ))}
+      </ul>,
+    );
+    listItems = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+
+    if (/^#{1,3}\s+/.test(trimmed)) {
+      flushParagraph();
+      flushList();
+      const level = trimmed.match(/^#+/)?.[0].length ?? 1;
+      const headingClass =
+        level === 1
+          ? "text-base font-semibold text-ink"
+          : level === 2
+            ? "text-sm font-semibold text-ink"
+            : "text-sm font-medium text-ink";
+      elements.push(
+        <p key={`h-${elements.length}`} className={headingClass}>
+          {renderInlineCode(trimmed.replace(/^#{1,3}\s+/, ""))}
+        </p>,
+      );
+      return;
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      flushParagraph();
+      listItems.push(trimmed.replace(/^[-*]\s+/, ""));
+      return;
+    }
+
+    flushList();
+    paragraph.push(trimmed);
+  });
+
+  flushParagraph();
+  flushList();
+
+  return <div className="space-y-2">{elements}</div>;
+};
+
+const ChatMessageContent = ({ text }: { text: string }) => {
+  const segments = text.split(/```([\w-]+)?\n?([\s\S]*?)```/g);
+  if (segments.length === 1) {
+    return <ChatMarkdownBlock text={text} />;
+  }
+
+  const rendered: ReactNode[] = [];
+  for (let index = 0; index < segments.length; ) {
+    if (index % 3 === 0) {
+      const markdown = segments[index];
+      if (markdown.trim()) {
+        rendered.push(
+          <ChatMarkdownBlock key={`md-${index}`} text={markdown} />,
+        );
+      }
+      index += 1;
+      continue;
+    }
+
+    const language = segments[index] || "text";
+    const code = segments[index + 1] || "";
+    rendered.push(
+      <div key={`code-${index}`} className="space-y-1">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate/70">
+          {language}
+        </p>
+        <pre className="max-h-[280px] overflow-auto rounded-xl bg-ink p-3 text-xs leading-6 text-white">
+          <code>{code.trim()}</code>
+        </pre>
+      </div>,
+    );
+    index += 2;
+  }
+
+  return <div className="space-y-3">{rendered}</div>;
+};
+
+const FloatingChatDock = ({
+  title,
+  description,
+  inputValue,
+  onInputChange,
+  onAsk,
+  status,
+  statusMessage,
+  messages,
+  disabled,
+  defaultOpen = false,
+  zIndexClass = "z-40",
+}: {
+  title: string;
+  description: string;
+  inputValue: string;
+  onInputChange: (value: string) => void;
+  onAsk: () => void;
+  status: "idle" | "loading" | "error";
+  statusMessage: string;
+  messages: WorkspaceChatMessage[];
+  disabled?: boolean;
+  defaultOpen?: boolean;
+  zIndexClass?: string;
+}) => {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return open ? (
+    <div
+      className={`fixed bottom-5 right-5 ${zIndexClass} h-[min(720px,calc(100vh-2.5rem))] w-[min(440px,calc(100vw-1.5rem))]`}
+    >
+      <div className="flex h-full min-h-0 flex-col rounded-[32px] border border-white/80 bg-white/95 shadow-panel backdrop-blur">
+        <div className="flex items-center justify-between gap-3 border-b border-slate/10 px-4 py-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-copper">Design Chat</p>
+            <p className="mt-1 text-sm font-semibold text-ink">{title}</p>
+          </div>
+          <button
+            type="button"
+            aria-label="Minimize chat"
+            title="Minimize chat"
+            onClick={() => setOpen(false)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate/20 bg-white text-lg font-semibold leading-none text-slate transition hover:border-copper/35 hover:bg-sand"
+          >
+            -
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden p-3">
+          <DesignChatPanel
+            title={title}
+            description={description}
+            inputValue={inputValue}
+            onInputChange={onInputChange}
+            onAsk={onAsk}
+            status={status}
+            statusMessage={statusMessage}
+            messages={messages}
+            disabled={disabled}
+            showHeader={false}
+          />
+        </div>
+      </div>
+    </div>
+  ) : (
+    <div className={`fixed bottom-5 right-5 ${zIndexClass}`}>
+      <Button onClick={() => setOpen(true)} tone="primary">
+        Open Design Chat
+      </Button>
+    </div>
+  );
+};
 
 const ComponentOverlayDiagramButton = ({
   title,
@@ -3360,7 +3561,6 @@ const WorkspaceSectionForm = ({
   importMessage,
   onGenerateAiDraft,
   onRefineComponentWithAi,
-  onGenerateImplementationPlanWithAi,
   onChange,
 }: {
   activeSection: WorkspaceSectionId;
@@ -3396,7 +3596,6 @@ const WorkspaceSectionForm = ({
   importMessage: string;
   onGenerateAiDraft: () => void;
   onRefineComponentWithAi: (component: FeatureComponent | null) => Promise<void>;
-  onGenerateImplementationPlanWithAi: () => void;
   onChange: (updater: (current: FeatureWorkspace) => FeatureWorkspace) => void;
 }) => {
   const updateTimestamp = (next: FeatureWorkspace): FeatureWorkspace => ({
@@ -4361,121 +4560,89 @@ const WorkspaceSectionForm = ({
                   </Button>
                 </div>
               </Field>
-            </div>
-          </ArchitectureViewPanel>
-        </div>
-      );
-    case "implementationPlan":
-      return (
-        <div className="grid gap-4">
-          <div className="flex justify-start">
-            <Button
-              onClick={onGenerateImplementationPlanWithAi}
-              tone="primary"
-              disabled={
-                !canGenerateImplementationPlanWithAi(workspace) ||
-                (aiStatus === "loading" && aiStage === "implementation")
-              }
-            >
-              {aiStatus === "loading" && aiStage === "implementation"
-                ? "Generating Plan..."
-                : "Generate Implementation Plan"}
-            </Button>
-          </div>
-          <Field
-            label="Implementation Tasks"
-            hint="Capture the RTOS tasks or execution units that will carry this feature in implementation."
-          >
-            <div className="space-y-4">
-              {workspace.discovery.candidateTasks.map((task, index) => (
-                <div key={task.id} className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
-                  <ObjectListEditor<CandidateTask>
-                    label="Task"
-                    items={[task]}
-                    onChange={(items) =>
-                      onChange((current) => {
-                        const next = [...current.discovery.candidateTasks];
-                        next[index] = items[0];
-                        return { ...current, discovery: { ...current.discovery, candidateTasks: next } };
-                      })
-                    }
-                    template={createEmptyCandidateTask()}
-                    fields={[
-                      { key: "name", label: "Task Name" },
-                      { key: "responsibility", label: "Responsibility" },
-                      { key: "priority", label: "Priority", type: "select", options: ["high", "medium", "low"] },
-                      { key: "type", label: "Task Type", type: "select", options: ["periodic", "event-driven", "background", "worker"] },
-                      { key: "trigger", label: "Trigger" },
-                      { key: "mayBlock", label: "May Block", type: "toggle" },
-                      { key: "notes", label: "Notes", type: "textarea" },
-                    ]}
-                  />
+
+              <Field
+                label="Candidate Tasks"
+                hint="Capture the RTOS tasks or execution units that likely carry this feature as part of the design."
+              >
+                <div className="space-y-4">
+                  {workspace.discovery.candidateTasks.map((task, index) => (
+                    <div
+                      key={task.id}
+                      className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
+                    >
+                      <ObjectListEditor<CandidateTask>
+                        label="Task"
+                        items={[task]}
+                        onChange={(items) =>
+                          onChange((current) => {
+                            const next = [...current.discovery.candidateTasks];
+                            next[index] = items[0];
+                            return {
+                              ...current,
+                              discovery: { ...current.discovery, candidateTasks: next },
+                            };
+                          })
+                        }
+                        template={createEmptyCandidateTask()}
+                        fields={[
+                          { key: "name", label: "Task Name" },
+                          { key: "responsibility", label: "Responsibility" },
+                          {
+                            key: "priority",
+                            label: "Priority",
+                            type: "select",
+                            options: ["high", "medium", "low"],
+                          },
+                          {
+                            key: "type",
+                            label: "Task Type",
+                            type: "select",
+                            options: ["periodic", "event-driven", "background", "worker"],
+                          },
+                          { key: "trigger", label: "Trigger" },
+                          { key: "mayBlock", label: "May Block", type: "toggle" },
+                          { key: "notes", label: "Notes", type: "textarea" },
+                        ]}
+                      />
+                      <Button
+                        onClick={() =>
+                          onChange((current) => ({
+                            ...current,
+                            discovery: {
+                              ...current.discovery,
+                              candidateTasks: current.discovery.candidateTasks.filter(
+                                (_, currentIndex) => currentIndex !== index,
+                              ),
+                            },
+                          }))
+                        }
+                        tone="danger"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
                   <Button
                     onClick={() =>
                       onChange((current) => ({
                         ...current,
                         discovery: {
                           ...current.discovery,
-                          candidateTasks: current.discovery.candidateTasks.filter(
-                            (_, currentIndex) => currentIndex !== index,
-                          ),
+                          candidateTasks: [
+                            ...current.discovery.candidateTasks,
+                            createEmptyCandidateTask(),
+                          ],
                         },
                       }))
                     }
-                    tone="danger"
                   >
-                    Remove Task
+                    Add Candidate Task
                   </Button>
                 </div>
-              ))}
-              <Button
-                onClick={() =>
-                  onChange((current) => ({
-                    ...current,
-                    discovery: {
-                      ...current.discovery,
-                      candidateTasks: [...current.discovery.candidateTasks, createEmptyCandidateTask()],
-                    },
-                  }))
-                }
-              >
-                Add Implementation Task
-              </Button>
+              </Field>
             </div>
-          </Field>
-          <StringListEditor
-            label="Milestones"
-            items={workspace.implementationPlan.milestones}
-            onChange={(items) =>
-              onChange((current) => ({
-                ...current,
-                implementationPlan: { ...current.implementationPlan, milestones: items },
-              }))
-            }
-            placeholder="Milestone"
-          />
-          <StringListEditor
-            label="APIs"
-            items={workspace.implementationPlan.apis}
-            onChange={(items) =>
-              onChange((current) => ({
-                ...current,
-                implementationPlan: { ...current.implementationPlan, apis: items },
-              }))
-            }
-            placeholder="API"
-          />
-          <StringListEditor
-            label="Tests"
-            items={workspace.implementationPlan.tests}
-            onChange={(items) =>
-              onChange((current) => ({
-                ...current,
-                implementationPlan: { ...current.implementationPlan, tests: items },
-              }))
-            }
-            placeholder="Test"
-          />
+          </ArchitectureViewPanel>
         </div>
       );
     default:
