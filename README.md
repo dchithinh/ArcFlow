@@ -206,6 +206,3 @@ Use workspace JSON when you want full-fidelity round-trip of the design data bet
 - The workspace page is the main integration surface
 - Diagram rendering is intentionally derived from normalized workspace data
 
-## License
-
-MIT
