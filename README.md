@@ -18,7 +18,9 @@ It helps turn a rough feature request into a structured design workspace where y
 
 ArchFlow is designed so the workspace data is the source of truth and diagrams are derived views, not hand-maintained artifacts.
 
-[![ArcFlow View](https://github.com/dchithinh/ArcFlow/blob/master/docs/demo/Thumb.png)](https://youtu.be/dDsLkX8JQ_E)
+
+[![ArcFlow View](https://github.com/dchithinh/ArcFlow/blob/master/docs/demo/ArcFlow_Anim.gif)](https://youtu.be/dDsLkX8JQ_E)
+
 
 ## Why ArchFlow
 
