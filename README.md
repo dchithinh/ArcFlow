@@ -18,6 +18,8 @@ It helps turn a rough feature request into a structured design workspace where y
 
 ArchFlow is designed so the workspace data is the source of truth and diagrams are derived views, not hand-maintained artifacts.
 
+[![ArcFlow View](https://youtu.be/dDsLkX8JQ_E)](https://youtu.be/dDsLkX8JQ_E)
+
 ## Why ArchFlow
 
 Design work often starts from incomplete notes, chat messages, or requirement fragments. The hard part is usually not drawing a diagram. It is deciding:
@@ -207,5 +209,3 @@ Use workspace JSON when you want full-fidelity round-trip of the design data bet
 - The workspace page is the main integration surface
 - Diagram rendering is intentionally derived from normalized workspace data
 
-## Demo Video
-https://github.com/dchithinh/ArcFlow/blob/master/docs/demo/ArcFlow.mp4
