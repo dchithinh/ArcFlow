@@ -1,4 +1,8 @@
-import type { FeatureComponent, FeatureWorkspace } from "../schema/workspace";
+import type {
+  ComponentObject,
+  FeatureComponent,
+  FeatureWorkspace,
+} from "../schema/workspace";
 
 export type WorkspaceOutputs = {
   markdown: string;
@@ -6,6 +10,7 @@ export type WorkspaceOutputs = {
   architectureFlowchart: string;
   dataFlowDiagram: string;
   behavioralArchitectureDiagram: string;
+  componentObjectDiagram: string;
   componentStateDiagram: string;
   sequenceDiagram: string;
   deploymentRuntimeDiagram: string;
@@ -27,6 +32,14 @@ const getComponentById = (
 ): FeatureComponent | null =>
   workspace.components.find((component) => component.id === componentId) ??
   workspace.components[0] ??
+  null;
+
+const getSelectedObject = (
+  component: FeatureComponent | null,
+  selectedObjectId?: string,
+): ComponentObject | null =>
+  component?.objects.find((object) => object.id === selectedObjectId) ??
+  component?.objects[0] ??
   null;
 
 const cleanNode = (value: string): string =>
@@ -154,81 +167,103 @@ const formatTransitionEventLabel = (
   return `${prefix}: ${event || "event"}`;
 };
 
+const objectAnchorId = (
+  componentId: string,
+  objectId: string,
+  objectName: string,
+  objectIndex: number,
+): string =>
+  `${componentId}_object_${cleanNode(objectId || objectName || `object_${objectIndex}`)}_${objectIndex}`;
+
 const stateAnchorId = (
   componentId: string,
+  objectId: string,
   stateName: string,
   stateIndex: number,
-): string => `${componentId}_state_${cleanNode(stateName || `state_${stateIndex}`)}_${stateIndex}`;
+): string =>
+  `${componentId}_${cleanNode(objectId || "object")}_state_${cleanNode(
+    stateName || `state_${stateIndex}`,
+  )}_${stateIndex}`;
 
-const findIncomingStateTargets = (
+const findIncomingObjectTargets = (
   component: FeatureComponent,
   componentId: string,
 ): Map<string, string[]> => {
   const targets = new Map<string, string[]>();
 
-  component.states.forEach((state, stateIndex) => {
-    const sourceId = stateAnchorId(componentId, state.name, stateIndex);
-    state.transitions
-      .filter((transition) => transition.triggerKind === "incoming")
-      .forEach((transition) => {
-        const key = transition.event.trim().toLowerCase();
-        if (!key) {
-          return;
-        }
+  component.objects.forEach((object) => {
+    if (!object.needsState || object.states.length === 0) {
+      return;
+    }
 
-        const current = targets.get(key) ?? [];
-        if (!current.includes(sourceId)) {
-          current.push(sourceId);
-        }
-        targets.set(key, current);
-      });
+    const anchor =
+      stateAnchorId(componentId, object.id, object.states[0]?.name || object.name, 0);
+    object.states.forEach((state) => {
+      state.transitions
+        .filter((transition) => transition.triggerKind === "incoming")
+        .forEach((transition) => {
+          const key = transition.event.trim().toLowerCase();
+          if (!key) {
+            return;
+          }
+
+          const current = targets.get(key) ?? [];
+          if (!current.includes(anchor)) {
+            current.push(anchor);
+          }
+          targets.set(key, current);
+        });
+    });
   });
 
   return targets;
 };
 
-const scoreStateForOutgoingSignal = (
-  state: FeatureComponent["states"][number],
+const scoreObjectForOutgoingSignal = (
+  object: ComponentObject,
   signalName: string,
 ): number => {
   const signalTokens = tokenize(signalName);
-  const stateTokens = tokenize(`${state.name} ${state.description}`);
-  let score = signalTokens.filter((token) => stateTokens.includes(token)).length;
+  const objectTokens = tokenize(
+    `${object.name} ${object.responsibility} ${object.objectType}`,
+  );
+  let score = signalTokens.filter((token) => objectTokens.includes(token)).length;
 
-  state.transitions.forEach((transition) => {
-    if (transition.triggerKind !== "internal") {
-      return;
-    }
-
+  object.states.forEach((state) => {
     const transitionTokens = tokenize(
-      `${transition.event} ${transition.action || ""} ${transition.targetState}`,
+      `${state.name} ${state.description} ${state.transitions
+        .map((transition) => `${transition.event} ${transition.action || ""} ${transition.targetState}`)
+        .join(" ")}`,
     );
     score += signalTokens.filter((token) => transitionTokens.includes(token)).length;
   });
 
-  if (score === 0 && state.transitions.some((transition) => transition.triggerKind === "internal")) {
+  if (score === 0 && object.objectType === "active") {
     score += 1;
   }
 
   return score;
 };
 
-const findOutgoingStateSource = (
+const findOutgoingObjectSource = (
   component: FeatureComponent,
   componentId: string,
   signalName: string,
 ): string => {
-  if (component.states.length === 0) {
+  if (component.objects.length === 0) {
     return componentId;
   }
 
-  const scoredStates = component.states.map((state, stateIndex) => ({
-    anchor: stateAnchorId(componentId, state.name, stateIndex),
-    score: scoreStateForOutgoingSignal(state, signalName),
-    index: stateIndex,
+  const scoredObjects = component.objects.map((object, objectIndex) => ({
+    anchor:
+      object.needsState && object.states.length > 0
+        ? stateAnchorId(componentId, object.id, object.states[0].name, 0)
+        : objectAnchorId(componentId, object.id, object.name, objectIndex),
+    score: scoreObjectForOutgoingSignal(object, signalName),
+    index: objectIndex,
   }));
 
-  scoredStates.sort((left, right) => {
+  scoredObjects.sort((left, right) => {
     if (right.score !== left.score) {
       return right.score - left.score;
     }
@@ -236,7 +271,7 @@ const findOutgoingStateSource = (
     return right.index - left.index;
   });
 
-  return scoredStates[0].anchor;
+  return scoredObjects[0].anchor;
 };
 
 const generateMarkdown = (workspace: FeatureWorkspace): string => {
@@ -486,7 +521,8 @@ const generateBehavioralArchitectureDiagram = (
           incomingEvents: [],
           internalSignals: [],
           outgoingSignals: [],
-          states: [],
+          objects: [],
+          objectInteractions: [],
           ownership: [],
           failureModes: [],
           debugging: {
@@ -500,158 +536,137 @@ const generateBehavioralArchitectureDiagram = (
     return `flowchart LR
     ${wrapFlowchartNode("Requirement", workspace.title, "subroutine")} --> ${wrapFlowchartNode("Discovery", "Component discovery", "rounded")}
     Discovery --> ${wrapFlowchartNode("Refinement", "Component refinement", "rounded")}
-    Refinement --> ${wrapFlowchartNode("Behavior", "Behavioral architecture view", "rounded")}`;
+    Refinement --> ${wrapFlowchartNode("Behavior", "Internal object view", "rounded")}`;
   }
 
   const subgraphs = components.flatMap((component, index) => {
     const componentId = componentAnchorId(component.id || component.name || "component", index);
     const groupId = `${componentId}_group`;
-    const stateGroupId = `${componentId}_states`;
+    const objectsGroupId = `${componentId}_objects`;
     const roleNode = `${componentId}_role`;
     const summary = component.summary.trim() || "No responsibility summary yet";
     const selected = selectedComponentId === component.id;
 
-    const stateIds = new Map(
-      component.states.map((state, stateIndex) => [
-        state.name,
-        `${componentId}_state_${cleanNode(state.name || `state_${stateIndex}`)}_${stateIndex}`,
-      ]),
-    );
+    const objectNodes =
+      component.objects.length > 0
+        ? component.objects.flatMap((object, objectIndex) => {
+            const objectId = objectAnchorId(componentId, object.id, object.name, objectIndex);
+            const objectLabel = [
+              object.name || `Object ${objectIndex + 1}`,
+              object.objectType === "active" ? "Active object" : "Passive object",
+              object.responsibility ? shorten(object.responsibility, 46) : "",
+              object.needsState ? `${object.states.length} state(s)` : "No state modeled",
+            ]
+              .filter(Boolean)
+              .join("<br/>");
 
-    const stateNodes =
-      component.states.length > 0
-        ? component.states.flatMap((state, stateIndex) => {
-            const currentStateId =
-              stateIds.get(state.name) ||
-              `${componentId}_state_${cleanNode(state.name || `state_${stateIndex}`)}_${stateIndex}`;
-            const labelParts = [state.name || `State ${stateIndex + 1}`];
-            if (state.description.trim()) {
-              labelParts.push(shorten(state.description.trim(), 42));
-            }
-
-            const lines = [
-              `        ${wrapFlowchartNode(currentStateId, labelParts.join("<br/>"), "rounded")}`,
-              `        class ${currentStateId} componentState`,
+            return [
+              `        ${wrapFlowchartNode(objectId, objectLabel, "rounded")}`,
+              `        class ${objectId} ${object.objectType === "active" ? "componentObjectActive" : "componentObjectPassive"}`,
             ];
-
-            if (stateIndex === 0) {
-              lines.push(`        ${componentId} -. entry .-> ${currentStateId}`);
-            }
-
-            if (state.transitions.length === 0) {
-              return lines;
-            }
-
-            const transitionLines = state.transitions.map((transition, transitionIndex) => {
-              const matchedTarget = component.states.find(
-                (candidateState) => candidateState.name === transition.targetState,
-              );
-              const targetId = matchedTarget
-                ? stateIds.get(matchedTarget.name) ||
-                  `${componentId}_state_${cleanNode(matchedTarget.name)}_${component.states.indexOf(matchedTarget)}`
-                : `${currentStateId}_unknown_${transitionIndex}`;
-
-              const fallbackTargetNode = matchedTarget
-                ? []
-                : [
-                    `        ${wrapFlowchartNode(targetId, transition.targetState || "Unknown target", "rounded")}`,
-                    `        class ${targetId} componentStateGhost`,
-                  ];
-
-              return [
-                ...fallbackTargetNode,
-                `        ${currentStateId} -->|"${escapeLabel(
-                  formatTransitionEventLabel(transition.event, transition.triggerKind),
-                )}"| ${targetId}`,
-              ];
-            });
-
-            return [...lines, ...transitionLines.flat()];
           })
         : [
-            `        ${wrapFlowchartNode(`${componentId}_state_placeholder`, "No states yet", "rounded")}`,
-            `        class ${componentId}_state_placeholder componentStateGhost`,
-            `        ${componentId} -.-> ${componentId}_state_placeholder`,
+            `        ${wrapFlowchartNode(`${componentId}_object_placeholder`, "No internal objects yet", "rounded")}`,
+            `        class ${componentId}_object_placeholder componentStateGhost`,
           ];
+
+    const objectEdges = component.objectInteractions.flatMap((interaction) => {
+      const fromIndex = component.objects.findIndex((object) => object.id === interaction.fromObjectId);
+      const toIndex = component.objects.findIndex((object) => object.id === interaction.toObjectId);
+      if (fromIndex < 0 || toIndex < 0) {
+        return [];
+      }
+
+      const fromId = objectAnchorId(
+        componentId,
+        component.objects[fromIndex].id,
+        component.objects[fromIndex].name,
+        fromIndex,
+      );
+      const toId = objectAnchorId(
+        componentId,
+        component.objects[toIndex].id,
+        component.objects[toIndex].name,
+        toIndex,
+      );
+
+      return [
+        `        ${fromId} -->|"${escapeLabel(
+          [interaction.relationship, interaction.notes].filter(Boolean).join(": ") || "interaction",
+        )}"| ${toId}`,
+      ];
+    });
 
     return [
       `    subgraph ${groupId}["${escapeLabel(component.name || `Component ${index + 1}`)}"]`,
       "        direction TB",
       `        ${wrapFlowchartNode(componentId, component.name || `Component ${index + 1}`, "subroutine")}`,
-      `        subgraph ${stateGroupId}[" "]`,
+      `        subgraph ${objectsGroupId}[" "]`,
       "            direction TB",
-      ...stateNodes.map((line) => `    ${line}`),
+      ...objectNodes.map((line) => `    ${line}`),
+      ...objectEdges.map((line) => `    ${line}`),
       "        end",
       `        ${wrapFlowchartNode(roleNode, `Role<br/>${summary}`, "rectangle")}`,
       "    end",
       `    class ${componentId} componentCore`,
       `    class ${roleNode} componentMeta`,
       `    style ${groupId} fill:${selected ? "#fff2d7" : "#fff8ef"},stroke:${selected ? "#0f766e" : "#b85f2c"},stroke-width:${selected ? "5px" : "3px"},color:#081521`,
-      `    style ${stateGroupId} fill:transparent,stroke:transparent`,
-      ...(selected
-        ? [
-            `    style ${componentId} fill:#f5ecd8,stroke:#0f766e,stroke-width:3px,color:#081521,font-weight:bold`,
-            `    style ${roleNode} fill:#fff7eb,stroke:#0f766e,stroke-width:2px,color:#081521`,
-            ...Array.from(stateIds.values()).map(
-              (stateId) =>
-                `    style ${stateId} fill:#fffbeb,stroke:#0f766e,stroke-width:2.5px,color:#081521`,
-            ),
-          ]
-        : []),
+      `    style ${objectsGroupId} fill:transparent,stroke:transparent`,
     ];
   });
 
   const componentIds = new Set(components.map((component) => component.id));
   const edges =
     workspace.discovery.interactions.length > 0
-      ? workspace.discovery.interactions.map((interaction, index) => {
-          const fromComponent = components.find(
-            (component) => component.id === interaction.fromComponentId,
-          );
-          const toComponent = components.find(
-            (component) => component.id === interaction.toComponentId,
-          );
-          const fromIndex = fromComponent ? components.indexOf(fromComponent) : index;
-          const toIndex = toComponent ? components.indexOf(toComponent) : index + 1;
-          const fromId = componentAnchorId(
-            fromComponent?.id || interaction.fromComponentId || "from",
-            fromIndex,
-          );
-          const toId = componentAnchorId(
-            toComponent?.id || interaction.toComponentId || "to",
-            toIndex,
-          );
-          const sourceAnchor = fromComponent
-            ? findOutgoingStateSource(fromComponent, fromId, interaction.data || interaction.mechanism)
-            : fromId;
-          const incomingTargets = toComponent
-            ? findIncomingStateTargets(toComponent, toId)
-            : new Map<string, string[]>();
-          const targetAnchors =
-            incomingTargets.get((interaction.data || "").trim().toLowerCase()) ??
-            incomingTargets.get((interaction.notes || "").trim().toLowerCase()) ??
-            [
-              toComponent && toComponent.states.length > 0
-                ? stateAnchorId(toId, toComponent.states[0].name, 0)
-                : toId,
-            ];
-          const label =
-            [interaction.mechanism, interaction.data].filter(Boolean).join(": ") ||
-            "interaction";
-          return targetAnchors.map(
-            (targetAnchor) =>
-              `    ${sourceAnchor} -->|"${escapeLabel(label)}"| ${targetAnchor}`,
-          );
-        })
+      ? workspace.discovery.interactions
+          .map((interaction, index) => {
+            const fromComponent = components.find(
+              (component) => component.id === interaction.fromComponentId,
+            );
+            const toComponent = components.find(
+              (component) => component.id === interaction.toComponentId,
+            );
+            const fromIndex = fromComponent ? components.indexOf(fromComponent) : index;
+            const toIndex = toComponent ? components.indexOf(toComponent) : index + 1;
+            const fromId = componentAnchorId(
+              fromComponent?.id || interaction.fromComponentId || "from",
+              fromIndex,
+            );
+            const toId = componentAnchorId(
+              toComponent?.id || interaction.toComponentId || "to",
+              toIndex,
+            );
+            const sourceAnchor = fromComponent
+              ? findOutgoingObjectSource(fromComponent, fromId, interaction.data || interaction.mechanism)
+              : fromId;
+            const incomingTargets = toComponent
+              ? findIncomingObjectTargets(toComponent, toId)
+              : new Map<string, string[]>();
+            const targetAnchors =
+              incomingTargets.get((interaction.data || "").trim().toLowerCase()) ??
+              incomingTargets.get((interaction.notes || "").trim().toLowerCase()) ??
+              [
+                toComponent && toComponent.objects.length > 0
+                  ? objectAnchorId(toId, toComponent.objects[0].id, toComponent.objects[0].name, 0)
+                  : toId,
+              ];
+            const label =
+              [interaction.mechanism, interaction.data].filter(Boolean).join(": ") ||
+              "interaction";
+            return targetAnchors.map(
+              (targetAnchor) =>
+                `    ${sourceAnchor} -->|"${escapeLabel(label)}"| ${targetAnchor}`,
+            );
+          })
           .flat()
       : components.slice(0, -1).map((component, index) => {
           const nextComponent = components[index + 1];
           const fromId = componentAnchorId(component.id, index);
           const toId = componentAnchorId(nextComponent.id, index + 1);
-          const sourceAnchor = findOutgoingStateSource(component, fromId, "discovery relation");
+          const sourceAnchor = findOutgoingObjectSource(component, fromId, "discovery relation");
           const targetAnchor =
-            nextComponent.states.length > 0
-              ? stateAnchorId(toId, nextComponent.states[0].name, 0)
+            nextComponent.objects.length > 0
+              ? objectAnchorId(toId, nextComponent.objects[0].id, nextComponent.objects[0].name, 0)
               : toId;
           return `    ${sourceAnchor} -->|"discovery relation"| ${targetAnchor}`;
         });
@@ -681,113 +696,120 @@ const generateBehavioralArchitectureDiagram = (
       ];
     });
 
-  const externalIncomingEdges = components.flatMap((component, componentIndex) =>
-    component.incomingEvents
-      .filter((event) => {
-        const normalizedSource = event.source.trim().toLowerCase();
-        if (!normalizedSource) {
-          return true;
-        }
-
-        return !components.some(
-          (candidate) => candidate.name.trim().toLowerCase() === normalizedSource,
-        );
-      })
-      .map((event, eventIndex) => {
-        const incomingTargets = findIncomingStateTargets(
-          component,
-          componentAnchorId(component.id, componentIndex),
-        );
-        const targetAnchors =
-          incomingTargets.get(event.name.trim().toLowerCase()) ??
-          [
-            component.states.length > 0
-              ? stateAnchorId(
-                  componentAnchorId(component.id, componentIndex),
-                  component.states[0].name,
-                  0,
-                )
-              : componentAnchorId(component.id, componentIndex),
-          ];
-        const sourceNode = `${componentAnchorId(component.id, componentIndex)}_incoming_external_${eventIndex}`;
-        return [
-          `    ${wrapFlowchartNode(sourceNode, `${event.source || "Outside World"}<br/>${event.name || "incoming event"}`, "rectangle")}`,
-          ...targetAnchors.map(
-            (targetAnchor) =>
-              `    ${sourceNode} -->|"${escapeLabel(event.trigger || event.name || "incoming")}"| ${targetAnchor}`,
-          ),
-          `    class ${sourceNode} actorNode`,
-        ];
-      })
-      .flat(),
-  );
-
-  const externalOutgoingEdges = components.flatMap((component, componentIndex) =>
-    component.outgoingSignals
-      .filter((signal) => {
-        const normalizedTarget = signal.trigger.trim().toLowerCase();
-        const normalizedName = signal.name.trim().toLowerCase();
-        return !workspace.discovery.interactions.some((interaction) => {
-          if (interaction.fromComponentId !== component.id) {
-            return false;
-          }
-
-          const interactionLabel = [interaction.mechanism, interaction.data]
-            .join(" ")
-            .trim()
-            .toLowerCase();
-
-          return (
-            (normalizedName && interactionLabel.includes(normalizedName)) ||
-            (normalizedTarget && interactionLabel.includes(normalizedTarget))
-          );
-        });
-      })
-      .map((signal, signalIndex) => {
-        const sinkNode = `${componentAnchorId(component.id, componentIndex)}_outgoing_external_${signalIndex}`;
-        const sourceAnchor = findOutgoingStateSource(
-          component,
-          componentAnchorId(component.id, componentIndex),
-          signal.name,
-        );
-        return [
-          `    ${wrapFlowchartNode(sinkNode, `${signal.name || "outgoing signal"}<br/>${signal.trigger || "Outside World"}`, "rectangle")}`,
-          `    ${sourceAnchor} -->|"${escapeLabel(signal.name || "outgoing")}"| ${sinkNode}`,
-          `    class ${sinkNode} actorNode`,
-        ];
-      })
-      .flat(),
-  );
-
   return `flowchart LR
     classDef componentCore fill:#f4e7cf,stroke:#123a35,stroke-width:3px,color:#081521,font-weight:bold;
     classDef componentMeta fill:#ffffff,stroke:#365166,stroke-width:2px,color:#081521;
-    classDef componentState fill:#fffdf8,stroke:#365166,stroke-width:2px,color:#081521;
+    classDef componentObjectActive fill:#fffdf8,stroke:#365166,stroke-width:2px,color:#081521;
+    classDef componentObjectPassive fill:#f4f7fb,stroke:#7a8fa3,stroke-width:2px,color:#081521;
     classDef componentStateGhost fill:#f8f1e4,stroke:#8a9aa8,stroke-dasharray: 4 4,color:#4b6477;
     classDef actorNode fill:#eef4f7,stroke:#365166,stroke-width:2px,color:#081521;
 ${subgraphs.join("\n")}
 ${actorEdges.join("\n")}
-${externalIncomingEdges.join("\n")}
-${externalOutgoingEdges.join("\n")}
 ${edges.join("\n")}`;
+};
+
+const generateComponentObjectDiagram = (
+  workspace: FeatureWorkspace,
+  selectedComponentId?: string,
+  selectedObjectId?: string,
+): string => {
+  const component = getComponentById(workspace, selectedComponentId);
+  if (!component) {
+    return `flowchart TB
+    ${wrapFlowchartNode("NoComponent", "Select a component to model internal objects", "rounded")}`;
+  }
+
+  const componentId = componentAnchorId(component.id || component.name || "component", 0);
+  const objectGroupId = `${componentId}_objects`;
+
+  const objectNodes =
+    component.objects.length > 0
+      ? component.objects.flatMap((object, index) => {
+          const objectId = objectAnchorId(componentId, object.id, object.name, index);
+          const selected = selectedObjectId === object.id;
+          const label = [
+            object.name || `Object ${index + 1}`,
+            object.objectType === "active" ? "Active object" : "Passive object",
+            object.responsibility ? shorten(object.responsibility, 52) : "",
+            object.needsState ? `${object.states.length} state(s)` : "No state modeled",
+          ]
+            .filter(Boolean)
+            .join("<br/>");
+
+          return [
+            `    ${wrapFlowchartNode(objectId, label, "rounded")}`,
+            `    class ${objectId} ${selected ? "selectedObjectNode" : object.objectType === "active" ? "componentObjectActive" : "componentObjectPassive"}`,
+          ];
+        })
+      : [
+          `    ${wrapFlowchartNode("NoObjectsYet", "No internal objects yet", "rounded")}`,
+          `    class NoObjectsYet componentStateGhost`,
+        ];
+
+  const objectEdges = component.objectInteractions.flatMap((interaction) => {
+    const fromIndex = component.objects.findIndex((object) => object.id === interaction.fromObjectId);
+    const toIndex = component.objects.findIndex((object) => object.id === interaction.toObjectId);
+    if (fromIndex < 0 || toIndex < 0) {
+      return [];
+    }
+
+    const fromId = objectAnchorId(
+      componentId,
+      component.objects[fromIndex].id,
+      component.objects[fromIndex].name,
+      fromIndex,
+    );
+    const toId = objectAnchorId(
+      componentId,
+      component.objects[toIndex].id,
+      component.objects[toIndex].name,
+      toIndex,
+    );
+
+    return [
+      `    ${fromId} -->|"${escapeLabel(
+        [interaction.relationship, interaction.notes].filter(Boolean).join(": ") || "interaction",
+      )}"| ${toId}`,
+    ];
+  });
+
+  return `flowchart TB
+    classDef componentCore fill:#f4e7cf,stroke:#123a35,stroke-width:3px,color:#081521,font-weight:bold;
+    classDef componentObjectActive fill:#fffdf8,stroke:#365166,stroke-width:2px,color:#081521;
+    classDef componentObjectPassive fill:#f4f7fb,stroke:#7a8fa3,stroke-width:2px,color:#081521;
+    classDef selectedObjectNode fill:#fffbeb,stroke:#0f766e,stroke-width:3px,color:#081521,font-weight:bold;
+    classDef componentStateGhost fill:#f8f1e4,stroke:#8a9aa8,stroke-dasharray: 4 4,color:#4b6477;
+    subgraph ${componentId}["${escapeLabel(component.name || "Selected Component")}"]
+      direction TB
+      subgraph ${objectGroupId}[" "]
+        direction TB
+${objectNodes.join("\n")}
+${objectEdges.join("\n")}
+      end
+    end
+    style ${componentId} fill:#fff8ef,stroke:#b85f2c,stroke-width:3px,color:#081521`;
 };
 
 const generateComponentStateDiagram = (
   workspace: FeatureWorkspace,
   selectedComponentId?: string,
+  selectedObjectId?: string,
 ): string => {
   const component = getComponentById(workspace, selectedComponentId);
-  if (!component || component.states.length === 0) {
+  const object = getSelectedObject(component, selectedObjectId);
+  if (!component || !object || object.states.length === 0) {
     return `stateDiagram-v2
     [*] --> DISCOVERY
-    DISCOVERY --> REFINEMENT
-    REFINEMENT --> REVIEW`;
+    DISCOVERY --> OBJECTS
+    OBJECTS --> STATES`;
   }
 
-  const firstState = cleanNode(component.states[0].name || "INITIAL");
+  const firstState = cleanNode(object.states[0].name || "INITIAL");
   const lines: string[] = ["stateDiagram-v2", `    [*] --> ${firstState}`];
 
-  for (const state of component.states) {
+  lines.push(`    note right of ${firstState}: ${escapeLabel(object.name || "Selected object")}`);
+
+  for (const state of object.states) {
     const source = cleanNode(state.name || "STATE");
 
     if (state.transitions.length === 0) {
@@ -1136,6 +1158,7 @@ const generateRiskReview = (workspace: FeatureWorkspace): string[] => {
 export const generateWorkspaceOutputs = (
   workspace: FeatureWorkspace,
   selectedComponentId?: string,
+  selectedObjectId?: string,
   selectedContextEntityId?: string,
   selectedScenarioId?: string,
   selectedDataFlowNodeId?: string,
@@ -1155,7 +1178,16 @@ export const generateWorkspaceOutputs = (
     workspace,
     selectedComponentId,
   ),
-  componentStateDiagram: generateComponentStateDiagram(workspace, selectedComponentId),
+  componentObjectDiagram: generateComponentObjectDiagram(
+    workspace,
+    selectedComponentId,
+    selectedObjectId,
+  ),
+  componentStateDiagram: generateComponentStateDiagram(
+    workspace,
+    selectedComponentId,
+    selectedObjectId,
+  ),
   sequenceDiagram: generateSequenceDiagram(workspace, selectedScenarioId),
   deploymentRuntimeDiagram: generateDeploymentRuntimeDiagram(
     workspace,

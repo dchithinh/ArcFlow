@@ -1,6 +1,7 @@
 import type {
   CandidateTask,
   ComponentCandidate,
+  ComponentObject,
   DataFlow,
   DataFlowNode,
   ContextEntity,
@@ -19,6 +20,17 @@ const createId = (prefix: string): string =>
 
 const isoNow = (): string => new Date().toISOString();
 
+export const createEmptyComponentObject = (
+  overrides?: Partial<ComponentObject>,
+): ComponentObject => ({
+  id: overrides?.id ?? createId("component-object"),
+  name: overrides?.name ?? "",
+  responsibility: overrides?.responsibility ?? "",
+  objectType: overrides?.objectType ?? "passive",
+  needsState: overrides?.needsState ?? false,
+  states: overrides?.states ?? [],
+});
+
 export const createEmptyComponent = (candidate?: Partial<ComponentCandidate>): FeatureComponent => ({
   id: candidate?.id ?? createId("component"),
   name: candidate?.name ?? "New Component",
@@ -28,7 +40,8 @@ export const createEmptyComponent = (candidate?: Partial<ComponentCandidate>): F
   incomingEvents: [],
   internalSignals: [],
   outgoingSignals: [],
-  states: [],
+  objects: [],
+  objectInteractions: [],
   ownership: [],
   failureModes: [],
   debugging: {
@@ -633,18 +646,33 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
         outgoingSignals: [
           { name: "packet_ready", source: "Command Ingress", trigger: "Packet queued for parser", frequency: "Burst", latencySensitive: true },
         ],
-        states: [
-          {
-            name: "IDLE",
-            description: "Waiting for a new frame.",
-            transitions: [{ event: "uart_packet_received", triggerKind: "incoming", targetState: "DISPATCHING", action: "Queue packet" }],
-          },
-          {
-            name: "DISPATCHING",
-            description: "Handing a validated frame to downstream processing.",
-            transitions: [{ event: "frame_complete", triggerKind: "internal", targetState: "IDLE", action: "Reset ingress buffer state" }],
-          },
+        objects: [
+          createEmptyComponentObject({
+            name: "Frame Dispatcher",
+            responsibility: "Own the UART frame lifecycle from idle collection to downstream handoff.",
+            objectType: "active",
+            needsState: true,
+            states: [
+              {
+                name: "IDLE",
+                description: "Waiting for a new frame.",
+                transitions: [{ event: "uart_packet_received", triggerKind: "incoming", targetState: "DISPATCHING", action: "Queue packet" }],
+              },
+              {
+                name: "DISPATCHING",
+                description: "Handing a validated frame to downstream processing.",
+                transitions: [{ event: "frame_complete", triggerKind: "internal", targetState: "IDLE", action: "Reset ingress buffer state" }],
+              },
+            ],
+          }),
+          createEmptyComponentObject({
+            name: "Ingress Buffer",
+            responsibility: "Stores partial UART frame data until validation completes.",
+            objectType: "passive",
+            needsState: false,
+          }),
         ],
+        objectInteractions: [],
         ownership: [{ resource: "UART RX ring buffer", owner: "Command Ingress", accessRules: "ISR writes, task drains through framed packet API" }],
         failureModes: [{ scenario: "Queue overflow under burst traffic", impact: "Dropped command packets", recovery: "Count overflow, drop packet, raise health event" }],
         debugging: {
@@ -666,20 +694,34 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
         outgoingSignals: [
           { name: "apply_request", source: "Command Parser", trigger: "Validated command ready for config coordinator", frequency: "Burst", latencySensitive: true },
         ],
-        states: [
-          {
-            name: "VALIDATING",
-            description: "Checking frame integrity and command schema.",
-            transitions: [
-              { event: "packet_valid", triggerKind: "internal", targetState: "DONE", action: "Return decoded command" },
-              { event: "packet_invalid", triggerKind: "internal", targetState: "ERROR", action: "Generate rejection details" },
+        objects: [
+          createEmptyComponentObject({
+            name: "Parse Session",
+            responsibility: "Validates one framed command and drives the parser result lifecycle.",
+            objectType: "active",
+            needsState: true,
+            states: [
+              {
+                name: "VALIDATING",
+                description: "Checking frame integrity and command schema.",
+                transitions: [
+                  { event: "packet_valid", triggerKind: "internal", targetState: "DONE", action: "Return decoded command" },
+                  { event: "packet_invalid", triggerKind: "internal", targetState: "ERROR", action: "Generate rejection details" },
+                ],
+              },
+              {
+                name: "ERROR",
+                description: "Parser rejected the packet.",
+                transitions: [{ event: "packet_ready", triggerKind: "incoming", targetState: "VALIDATING", action: "Reset parser scratch state" }],
+              },
             ],
-          },
-          {
-            name: "ERROR",
-            description: "Parser rejected the packet.",
-            transitions: [{ event: "packet_ready", triggerKind: "incoming", targetState: "VALIDATING", action: "Reset parser scratch state" }],
-          },
+          }),
+          createEmptyComponentObject({
+            name: "Schema Rules",
+            responsibility: "Holds parsing and validation rules used by the active parse session.",
+            objectType: "passive",
+            needsState: false,
+          }),
         ],
         ownership: [{ resource: "Parser scratch buffer", owner: "Command Parser", accessRules: "Only parser logic mutates validation workspace" }],
         failureModes: [{ scenario: "Malformed payload", impact: "Rejected command", recovery: "Emit deterministic NACK and reset parser state" }],
@@ -702,20 +744,34 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
         outgoingSignals: [
           { name: "response_needed", source: "Config Coordinator", trigger: "Apply result ready for response path", frequency: "Burst", latencySensitive: false },
         ],
-        states: [
-          {
-            name: "READY",
-            description: "Waiting for configuration apply request.",
-            transitions: [{ event: "apply_request", triggerKind: "incoming", targetState: "APPLYING", action: "Lock config ownership and validate semantics" }],
-          },
-          {
-            name: "APPLYING",
-            description: "Writing runtime configuration.",
-            transitions: [
-              { event: "apply_complete", triggerKind: "internal", targetState: "READY", action: "Release ownership and notify reporter" },
-              { event: "apply_failed", triggerKind: "internal", targetState: "READY", action: "Report failure and rollback if needed" },
+        objects: [
+          createEmptyComponentObject({
+            name: "Apply Controller",
+            responsibility: "Coordinates configuration apply requests and their lifecycle.",
+            objectType: "active",
+            needsState: true,
+            states: [
+              {
+                name: "READY",
+                description: "Waiting for configuration apply request.",
+                transitions: [{ event: "apply_request", triggerKind: "incoming", targetState: "APPLYING", action: "Lock config ownership and validate semantics" }],
+              },
+              {
+                name: "APPLYING",
+                description: "Writing runtime configuration.",
+                transitions: [
+                  { event: "apply_complete", triggerKind: "internal", targetState: "READY", action: "Release ownership and notify reporter" },
+                  { event: "apply_failed", triggerKind: "internal", targetState: "READY", action: "Report failure and rollback if needed" },
+                ],
+              },
             ],
-          },
+          }),
+          createEmptyComponentObject({
+            name: "Config Snapshot",
+            responsibility: "Represents the current configuration data being validated or committed.",
+            objectType: "passive",
+            needsState: false,
+          }),
         ],
         ownership: [{ resource: "Runtime configuration", owner: "Config Coordinator", accessRules: "Mutate only through validated command API guarded by ownership rules" }],
         failureModes: [{ scenario: "Partial invalid update", impact: "Inconsistent runtime config", recovery: "Reject update atomically and preserve last known good config" }],
@@ -737,17 +793,31 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
         outgoingSignals: [
           { name: "ack_emitted", source: "Response Reporter", trigger: "ACK or NACK emitted to operator", frequency: "Burst", latencySensitive: false },
         ],
-        states: [
-          {
-            name: "WAITING",
-            description: "Idle until a response needs to be emitted.",
-            transitions: [{ event: "response_needed", triggerKind: "incoming", targetState: "SENDING", action: "Build response packet" }],
-          },
-          {
-            name: "SENDING",
-            description: "Sending response or health output.",
-            transitions: [{ event: "send_complete", triggerKind: "internal", targetState: "WAITING", action: "Flush output buffers" }],
-          },
+        objects: [
+          createEmptyComponentObject({
+            name: "Response Session",
+            responsibility: "Owns the response emission lifecycle for ACK, NACK, and health output.",
+            objectType: "active",
+            needsState: true,
+            states: [
+              {
+                name: "WAITING",
+                description: "Idle until a response needs to be emitted.",
+                transitions: [{ event: "response_needed", triggerKind: "incoming", targetState: "SENDING", action: "Build response packet" }],
+              },
+              {
+                name: "SENDING",
+                description: "Sending response or health output.",
+                transitions: [{ event: "send_complete", triggerKind: "internal", targetState: "WAITING", action: "Flush output buffers" }],
+              },
+            ],
+          }),
+          createEmptyComponentObject({
+            name: "Response Buffer",
+            responsibility: "Stores formatted response content before it is flushed to TX.",
+            objectType: "passive",
+            needsState: false,
+          }),
         ],
         ownership: [{ resource: "UART TX response buffer", owner: "Response Reporter", accessRules: "Only response path formats operator-facing packets" }],
         failureModes: [{ scenario: "Response backlog", impact: "Delayed acknowledgements", recovery: "Prioritize ACK/NACK over verbose diagnostics" }],

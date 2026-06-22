@@ -1,4 +1,4 @@
-import { createEmptyComponent } from "../schema/defaults";
+import { createEmptyComponent, createEmptyComponentObject } from "../schema/defaults";
 import type {
   CandidateTask,
   ComponentCandidate,
@@ -163,16 +163,29 @@ const toComponentShape = (
     frequency: signal.frequency.trim(),
     latencySensitive: signal.latencySensitive,
   })),
-  states: draft.states.map((state) => ({
-    name: state.name.trim(),
-    description: state.description.trim(),
-    transitions: state.transitions.map((transition) => ({
-      event: transition.event.trim(),
-      triggerKind: transition.triggerKind,
-      targetState: transition.targetState.trim(),
-      action: transition.action.trim(),
-    })),
-  })),
+  objects:
+    draft.states.length > 0
+      ? [
+          createEmptyComponentObject({
+            name: `${candidate.name.trim() || "Component"} Controller`,
+            responsibility:
+              "Primary active object drafted from AI-generated behavior and state flow.",
+            objectType: "active",
+            needsState: true,
+            states: draft.states.map((state) => ({
+              name: state.name.trim(),
+              description: state.description.trim(),
+              transitions: state.transitions.map((transition) => ({
+                event: transition.event.trim(),
+                triggerKind: transition.triggerKind,
+                targetState: transition.targetState.trim(),
+                action: transition.action.trim(),
+              })),
+            })),
+          }),
+        ]
+      : [],
+  objectInteractions: [],
   ownership: draft.ownership.map((item) => ({
     resource: item.resource.trim(),
     owner: item.owner.trim(),

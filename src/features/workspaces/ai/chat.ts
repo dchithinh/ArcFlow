@@ -61,7 +61,8 @@ export type WorkspaceChatPayload = {
         incomingEvents: string[];
         internalSignals: string[];
         outgoingSignals: string[];
-        states: string[];
+        objects: string[];
+        objectInteractions: string[];
         ownership: string[];
         failureModes: string[];
         relatedInteractions: string[];
@@ -249,18 +250,46 @@ const buildComponentSelectionContext = (
         ),
         10,
       ),
-      states: compactList(
-        component.states.map((state) => {
-          const transitions = state.transitions
-            .map((transition) =>
-              [transition.event, transition.targetState, transition.action]
-                .map((item) => String(item || "").trim())
+      objects: compactList(
+        component.objects.map((object) => {
+          const stateSummary = object.states
+            .map((state) => {
+              const transitions = state.transitions
+                .map((transition) =>
+                  [transition.event, transition.targetState, transition.action]
+                    .map((item) => String(item || "").trim())
+                    .filter(Boolean)
+                    .join(" -> "),
+                )
                 .filter(Boolean)
-                .join(" -> "),
-            )
+                .join("; ");
+              return [state.name, state.description, transitions].filter(Boolean).join(" | ");
+            })
             .filter(Boolean)
-            .join("; ");
-          return [state.name, state.description, transitions].filter(Boolean).join(" | ");
+            .join(" || ");
+          return [
+            object.name,
+            object.objectType,
+            object.responsibility,
+            object.needsState ? "needs state" : "no state",
+            stateSummary,
+          ]
+            .filter(Boolean)
+            .join(" | ");
+        }),
+        10,
+      ),
+      objectInteractions: compactList(
+        component.objectInteractions.map((interaction) => {
+          const fromName =
+            component.objects.find((object) => object.id === interaction.fromObjectId)?.name ||
+            "Unknown object";
+          const toName =
+            component.objects.find((object) => object.id === interaction.toObjectId)?.name ||
+            "Unknown object";
+          return [fromName, "->", toName, interaction.relationship, interaction.notes || ""]
+            .filter(Boolean)
+            .join(" ");
         }),
         10,
       ),

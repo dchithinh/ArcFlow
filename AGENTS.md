@@ -37,7 +37,7 @@ These are project roles and responsibility boundaries. They are architectural ow
 ### 4. Component Detail Agent
 - Owns per-component detailed design workflow.
 - Handles one selected component at a time.
-- Reuses checklist structure for inputs/outputs, events, states, ownership, failure modes, and debugging.
+- Reuses checklist structure for inputs/outputs, events, internal objects, object interactions, per-object states, ownership, failure modes, and debugging.
 - Must not own workspace-level discovery rules.
 
 ### 5. Output Generator Agent
@@ -88,6 +88,7 @@ These are project roles and responsibility boundaries. They are architectural ow
 - Persistence runs at app boundaries and never mutates schema shape.
 - Feature-level discovery happens before component-level detail.
 - The detailed checklist belongs to a selected component, not the entire feature workspace.
+- Inside component detail, users should identify internal objects before defining active objects or per-object state diagrams.
 - Design-diagram generators should not truncate user-entered labels or descriptions with `...` by default; prefer wrapping full text unless a compact view is explicitly intended.
 - Each workflow block maps to:
   - workspace schema fragment

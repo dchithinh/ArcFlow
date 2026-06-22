@@ -1,6 +1,12 @@
-import { createEmptyComponent, createEmptyWorkspace } from "../schema/defaults";
+import {
+  createEmptyComponent,
+  createEmptyComponentObject,
+  createEmptyWorkspace,
+} from "../schema/defaults";
 import type {
   ComponentCandidate,
+  ComponentObject,
+  ComponentObjectInteraction,
   ContextEntity,
   InteractionMechanism,
   EventDefinition,
@@ -73,6 +79,79 @@ const createComponentId = (index: number): string => `legacy-component-${index}-
 const createTaskId = (index: number): string => `legacy-task-${index}-${Math.random().toString(36).slice(2, 7)}`;
 const createContextEntityId = (index: number): string =>
   `legacy-context-entity-${index}-${Math.random().toString(36).slice(2, 7)}`;
+
+const migrateLegacyStatesToObjects = (
+  componentName: string,
+  states: StateDefinition[] | undefined,
+): ComponentObject[] =>
+  Array.isArray(states) && states.length > 0
+    ? [
+        createEmptyComponentObject({
+          name: componentName ? `${componentName} Controller` : "Primary Object",
+          responsibility: "Migrated from legacy component-level state modeling.",
+          objectType: "active",
+          needsState: true,
+          states,
+        }),
+      ]
+    : [];
+
+const normalizeComponentObjects = (
+  objects: unknown,
+  legacyStates: StateDefinition[] | undefined,
+  componentName: string,
+): ComponentObject[] => {
+  if (!Array.isArray(objects)) {
+    return migrateLegacyStatesToObjects(componentName, legacyStates);
+  }
+
+  const normalized = objects.map((item, index) => {
+    const candidate = typeof item === "object" && item !== null ? item as Partial<ComponentObject> : {};
+    return createEmptyComponentObject({
+      id:
+        typeof candidate.id === "string" && candidate.id.trim()
+          ? candidate.id
+          : `component-object-${index}-${Math.random().toString(36).slice(2, 7)}`,
+      name: typeof candidate.name === "string" ? candidate.name : "",
+      responsibility:
+        typeof candidate.responsibility === "string" ? candidate.responsibility : "",
+      objectType: candidate.objectType === "active" ? "active" : "passive",
+      needsState: Boolean(candidate.needsState),
+      states: Array.isArray(candidate.states) ? candidate.states : [],
+    });
+  });
+
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  return migrateLegacyStatesToObjects(componentName, legacyStates);
+};
+
+const normalizeObjectInteractions = (
+  interactions: unknown,
+): ComponentObjectInteraction[] => {
+  if (!Array.isArray(interactions)) {
+    return [];
+  }
+
+  return interactions.reduce<ComponentObjectInteraction[]>((result, item) => {
+    if (typeof item !== "object" || item === null) {
+      return result;
+    }
+
+    const candidate = item as Partial<ComponentObjectInteraction>;
+    result.push({
+      fromObjectId: typeof candidate.fromObjectId === "string" ? candidate.fromObjectId : "",
+      toObjectId: typeof candidate.toObjectId === "string" ? candidate.toObjectId : "",
+      relationship:
+        typeof candidate.relationship === "string" ? candidate.relationship : "",
+      notes: typeof candidate.notes === "string" ? candidate.notes : undefined,
+    });
+    return result;
+  }, []);
+};
+
 const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => {
   const candidateComponents: ComponentCandidate[] =
     legacy.responsibilities?.map((item, index) => ({
@@ -94,7 +173,8 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
         incomingEvents: legacy.events ?? [],
         internalSignals: [],
         outgoingSignals: [],
-        states: legacy.states ?? [],
+        objects: migrateLegacyStatesToObjects(candidate.name, legacy.states),
+        objectInteractions: [],
         ownership: legacy.ownership ?? [],
         failureModes: legacy.failureModes ?? [],
         debugging: {
@@ -124,7 +204,8 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
         incomingEvents: legacy.events ?? [],
         internalSignals: [],
         outgoingSignals: [],
-        states: legacy.states ?? [],
+        objects: migrateLegacyStatesToObjects(legacy.title || "Legacy Component", legacy.states),
+        objectInteractions: [],
         ownership: legacy.ownership ?? [],
         failureModes: legacy.failureModes ?? [],
         debugging: {
@@ -310,7 +391,20 @@ export const normalizeImportedWorkspace = (workspace: FeatureWorkspace): Feature
           : [],
       },
     },
-    components: Array.isArray(workspace.components) ? workspace.components : [],
+    components: Array.isArray(workspace.components)
+      ? workspace.components.map((component) => ({
+          ...createEmptyComponent(component),
+          ...component,
+          objects: normalizeComponentObjects(
+            (component as FeatureComponent & { objects?: unknown }).objects,
+            (component as FeatureComponent & { states?: StateDefinition[] }).states,
+            component.name,
+          ),
+          objectInteractions: normalizeObjectInteractions(
+            (component as FeatureComponent & { objectInteractions?: unknown }).objectInteractions,
+          ),
+        }))
+      : [],
   };
 };
 

@@ -19,6 +19,7 @@ Build a local-first feature design assistant that helps a developer start from a
 - component relationships
 - concurrency and execution proposals
 - component-level detailed design
+- object-first internal design inside each component
 - generated architecture outputs
 
 The product should support design discovery first, then design refinement.
@@ -88,7 +89,7 @@ These views answer different questions:
 - Functional / Feature Breakdown: what the feature is required to do
 - Component / Container Diagram: what the major internal building blocks are
 - Interaction / Data Flow Diagram: how components communicate and what moves between them
-- State Diagram: how important components change behavior over time
+- State Diagram: how selected internal objects change behavior over time
 - Sequence Diagram: how one scenario unfolds step by step
 - Deployment / Runtime Diagram: where the system runs and how execution is partitioned
 
@@ -157,7 +158,8 @@ type FeatureComponent = {
   inputs: string[];
   outputs: string[];
   events: EventDefinition[];
-  states: StateDefinition[];
+  objects: ComponentObject[];
+  objectInteractions: ComponentObjectInteraction[];
   ownership: OwnershipDefinition[];
   failureModes: FailureModeDefinition[];
   debugging: {
@@ -195,10 +197,14 @@ type FeatureComponent = {
 
 ### 3. Component Refinement
 - User selects one component at a time.
+- User first identifies the internal objects inside that component.
+- User marks which objects are active vs passive.
+- User decides which objects need state.
 - User fills detailed component fields:
   - inputs and outputs
   - events
-  - states and transitions
+  - internal objects and object interactions
+  - per-object states and transitions
   - ownership
   - failure modes
   - debugging hooks
@@ -226,7 +232,7 @@ type FeatureComponent = {
 
 ### 4. Component Design Module
 - Owns per-component detailed design.
-- Reuses the existing checklist patterns, but scoped to a selected component.
+- Reuses the existing checklist patterns, but scoped to a selected component and its internal objects.
 
 ### 5. Workspace State
 - Owns in-memory editing state.
@@ -286,10 +292,12 @@ Within `Component Detail`, the user then chooses one component and fills:
 
 1. Inputs / Outputs
 2. Events
-3. States
-4. Ownership
-5. Failure Modes
-6. Debugging
+3. Internal Objects
+4. Object Interactions
+5. Selected Object States
+6. Ownership
+7. Failure Modes
+8. Debugging
 
 ## Output Model
 
@@ -304,7 +312,8 @@ Outputs should be separated into feature-level and component-level artifacts.
 
 ### Component-Level Outputs
 - per-component design notes
-- per-component state diagram
+- per-component internal object notes
+- per-object state diagram
 - component-specific failure and ownership sections
 
 ## Recommended Source Layout
@@ -359,7 +368,7 @@ The current implementation should be treated as a prototype of the component-det
 ## Open Design Questions
 
 - Should candidate execution units remain feature-level only, or also allow per-component ownership?
-- Should a component be allowed to own multiple state machines?
+- Should passive objects with meaningful lifecycle be modeled the same way as active objects, or separately?
 - Should system-level states exist alongside component states?
 - Should interactions reference tasks, components, or both?
 

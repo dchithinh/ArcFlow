@@ -90,6 +90,24 @@ export type StateDefinition = {
   transitions: StateTransition[];
 };
 
+export type ComponentObjectType = "active" | "passive";
+
+export type ComponentObject = {
+  id: string;
+  name: string;
+  responsibility: string;
+  objectType: ComponentObjectType;
+  needsState: boolean;
+  states: StateDefinition[];
+};
+
+export type ComponentObjectInteraction = {
+  fromObjectId: string;
+  toObjectId: string;
+  relationship: string;
+  notes?: string;
+};
+
 export type OwnershipDefinition = {
   resource: string;
   owner: string;
@@ -220,7 +238,8 @@ export type FeatureComponent = {
   incomingEvents: EventDefinition[];
   internalSignals: EventDefinition[];
   outgoingSignals: EventDefinition[];
-  states: StateDefinition[];
+  objects: ComponentObject[];
+  objectInteractions: ComponentObjectInteraction[];
   ownership: OwnershipDefinition[];
   failureModes: FailureModeDefinition[];
   debugging: {

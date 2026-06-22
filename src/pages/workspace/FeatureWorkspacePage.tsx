@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
   Field,
+  Select,
   SelectWithOther,
   TextArea,
   TextInput,
@@ -18,6 +19,7 @@ import {
   createEmptyCandidateComponent,
   createEmptyCandidateTask,
   createEmptyComponent,
+  createEmptyComponentObject,
   createEmptyContextEntity,
   createEmptyContextFlow,
   createEmptyDataFlow,
@@ -52,6 +54,7 @@ import {
   WORKSPACE_SECTIONS,
   type CandidateTask,
   type ComponentCandidate,
+  type ComponentObject,
   type DataFlow,
   type DataFlowNode,
   type ContextEntity,
@@ -167,29 +170,72 @@ const RequirementResponsibilityHelpContent = () => (
       <div className="rounded-2xl bg-mist/55 p-3">
         <p className="font-semibold text-ink">Requirement examples</p>
         <ul className="mt-2 space-y-1">
-          <li>`Feature shall provide a clear user command interface.`</li>
-          <li>`Feature shall reject unknown commands safely.`</li>
+          <li>Feature shall provide a clear user command interface.</li>
+          <li>Feature shall reject unknown commands safely.</li>
         </ul>
       </div>
       <div className="rounded-2xl bg-mist/55 p-3">
         <p className="font-semibold text-ink">Responsibility examples</p>
         <ul className="mt-2 space-y-1">
-          <li>`Receive incoming input and detect complete requests.`</li>
-          <li>`Validate command syntax and dispatch valid commands.`</li>
+          <li>Receive incoming input and detect complete requests.</li>
+          <li>Validate command syntax and dispatch valid commands.</li>
         </ul>
       </div>
     </div>
     <div className="rounded-2xl bg-mist/55 p-3">
       <p className="font-semibold text-ink">Quick template</p>
       <p className="mt-2">Requirements:</p>
-      <p>`Feature shall ...`</p>
-      <p>`Feature shall ...`</p>
+      <p>Feature shall ...</p>
+      <p>Feature shall ...</p>
       <p className="mt-2">Responsibilities:</p>
-      <p>`Receive ...`</p>
-      <p>`Parse ...`</p>
-      <p>`Validate ...`</p>
-      <p>`Dispatch ...`</p>
-      <p>`Respond ...`</p>
+      <p>Receive ...</p>
+      <p>Parse ...</p>
+      <p>Validate ...</p>
+      <p>Dispatch ...</p>
+      <p>Respond ...</p>
+    </div>
+  </div>
+);
+
+const ActiveObjectStateHelpContent = () => (
+  <div className="space-y-3 px-1 py-1 text-sm text-slate">
+    <div className="rounded-2xl bg-mist/55 p-3">
+      <p className="font-semibold text-ink">Short version</p>
+      <p className="mt-1">Define the component first, then brainstorm the objects inside it, then decide which objects are active, and only then model states where needed.</p>
+    </div>
+    <div className="rounded-2xl bg-mist/55 p-3">
+      <p className="font-semibold text-ink">Recommended flow</p>
+      <ol className="mt-2 list-decimal space-y-1 pl-5">
+        <li>Name the internal objects inside the component.</li>
+        <li>Mark each object as active or passive.</li>
+        <li>Decide whether each object needs state.</li>
+        <li>Only define a state diagram for the selected object that needs one.</li>
+      </ol>
+    </div>
+    <div className="rounded-2xl bg-mist/55 p-3">
+      <p className="font-semibold text-ink">Questions to find an active object</p>
+      <ul className="mt-2 space-y-1">
+        <li>What inside this component actually reacts to events?</li>
+        <li>What inside this component waits, starts, sends, retries, or completes?</li>
+        <li>What thing inside this component would I say is currently doing work?</li>
+      </ul>
+    </div>
+    <div className="rounded-2xl bg-mist/55 p-3">
+      <p className="font-semibold text-ink">Questions to decide if state is needed</p>
+      <ul className="mt-2 space-y-1">
+        <li>Does this thing behave differently over time?</li>
+        <li>Can it be idle, waiting, processing, retrying, completed, or failed?</li>
+        <li>Do some events only make sense in certain conditions?</li>
+      </ul>
+    </div>
+    <div className="rounded-2xl bg-mist/55 p-3">
+      <p className="font-semibold text-ink">Quick decision</p>
+      <p className="mt-1">
+        If the component mostly transforms input to output, it may only contain passive objects and no state machine at all.
+      </p>
+      <p className="mt-1">
+        If something inside it manages a lifecycle or reacts asynchronously, model that thing as an active object and start with three to five states.
+      </p>
     </div>
   </div>
 );
@@ -393,6 +439,7 @@ export const FeatureWorkspacePage = ({
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(
     workspace.components[0]?.id ?? null,
   );
+  const [selectedComponentObjectId, setSelectedComponentObjectId] = useState<string | null>(null);
   const [selectedContextEntityId, setSelectedContextEntityId] = useState<string | null>(
     workspace.discovery.contextEntities[0]?.id ?? null,
   );
@@ -436,6 +483,7 @@ export const FeatureWorkspacePage = ({
       generateWorkspaceOutputs(
         workspace,
         selectedComponentId ?? undefined,
+        selectedComponentObjectId ?? undefined,
         selectedContextEntityId ?? undefined,
         selectedScenarioId ?? undefined,
         selectedDataFlowNodeId ?? undefined,
@@ -445,6 +493,7 @@ export const FeatureWorkspacePage = ({
       ),
     [
       selectedComponentId,
+      selectedComponentObjectId,
       selectedContextEntityId,
       selectedDataFlowId,
       selectedDataFlowNodeId,
@@ -466,6 +515,10 @@ export const FeatureWorkspacePage = ({
     workspace.discovery.candidateComponents.find(
       (component) => component.id === selectedComponentId,
     ) ?? null;
+  const selectedComponentObject =
+    selectedComponent?.objects.find((object) => object.id === selectedComponentObjectId) ??
+    selectedComponent?.objects[0] ??
+    null;
   const selectedScenario =
     workspace.discovery.sequenceScenarios.find((scenario) => scenario.id === selectedScenarioId) ??
     workspace.discovery.sequenceScenarios[0] ??
@@ -510,6 +563,22 @@ export const FeatureWorkspacePage = ({
 
     setSelectedComponentId(workspace.components[0]?.id ?? null);
   }, [selectedComponentId, workspace.components]);
+
+  useEffect(() => {
+    if (!selectedComponent) {
+      setSelectedComponentObjectId(null);
+      return;
+    }
+
+    if (
+      selectedComponentObjectId &&
+      selectedComponent.objects.some((object) => object.id === selectedComponentObjectId)
+    ) {
+      return;
+    }
+
+    setSelectedComponentObjectId(selectedComponent.objects[0]?.id ?? null);
+  }, [selectedComponent, selectedComponentObjectId]);
 
   useEffect(() => {
     if (
@@ -1201,6 +1270,9 @@ export const FeatureWorkspacePage = ({
             selectedRuntimeLinkId={selectedRuntimeLinkId}
             onOpenComponentDetail={(componentId, mode = "container") => {
               setSelectedComponentId(componentId);
+              const component =
+                workspace.components.find((item) => item.id === componentId) ?? null;
+              setSelectedComponentObjectId(component?.objects[0]?.id ?? null);
               setComponentDetailMode(mode);
               setComponentDetailOpen(true);
             }}
@@ -1302,16 +1374,34 @@ export const FeatureWorkspacePage = ({
                 ) : null}
                 {componentDetailMode === "state" ? (
                   <PreviewCard
-                    title="Selected Component State Diagram"
+                    title="Internal Object Diagram"
                     action={
                       <ComponentOverlayDiagramButton
-                        title="Selected Component State Diagram"
+                        title="Internal Object Diagram"
+                        chart={outputs.componentObjectDiagram}
+                      />
+                    }
+                  >
+                    <MermaidPreview
+                      title={`${selectedComponent.name || "Component"} Internal Objects`}
+                      chart={outputs.componentObjectDiagram}
+                      svgMode="natural"
+                      className="min-h-[360px]"
+                    />
+                  </PreviewCard>
+                ) : null}
+                {componentDetailMode === "state" ? (
+                  <PreviewCard
+                    title="Selected Object State Diagram"
+                    action={
+                      <ComponentOverlayDiagramButton
+                        title="Selected Object State Diagram"
                         chart={outputs.componentStateDiagram}
                       />
                     }
                   >
                     <MermaidPreview
-                      title={`${selectedComponent.name || "Component"} State Diagram`}
+                      title={`${selectedComponentObject?.name || selectedComponent.name || "Object"} State Diagram`}
                       chart={outputs.componentStateDiagram}
                       svgMode="natural"
                       className="min-h-[420px]"
@@ -1323,6 +1413,8 @@ export const FeatureWorkspacePage = ({
                 {componentDetailMode === "state" ? (
                   <ComponentStateEditor
                     component={selectedComponent}
+                    selectedObjectId={selectedComponentObjectId}
+                    onSelectObject={setSelectedComponentObjectId}
                     onChange={(nextComponent) =>
                       onChange((current) =>
                         updateTimestamp({
@@ -2088,10 +2180,19 @@ export const FeatureWorkspacePage = ({
               expandedMinWidth="min-w-[1600px]"
             />
             <DiagramPreviewCard
-              title="Selected Component State Diagram"
+              title="Selected Component Internal Object Diagram"
+              chart={outputs.componentObjectDiagram}
+              previewTitle="Internal Object Diagram"
+              expandedTitle="Selected Component Internal Object Diagram"
+              previewDefaultHeight={360}
+              previewMinWidth="min-w-[900px]"
+              expandedMinWidth="min-w-[1300px]"
+            />
+            <DiagramPreviewCard
+              title="Selected Object State Diagram"
               chart={outputs.componentStateDiagram}
-              previewTitle="Component State Diagram"
-              expandedTitle="Selected Component State Diagram"
+              previewTitle="Object State Diagram"
+              expandedTitle="Selected Object State Diagram"
               previewDefaultHeight={360}
               previewMinWidth="min-w-[820px]"
               expandedMinWidth="min-w-[1200px]"
@@ -2661,6 +2762,13 @@ const ArchitectureViewPanel = ({
     {children}
   </section>
 );
+
+const designSelectionCardClass = (selected: boolean): string =>
+  `rounded-2xl border px-4 py-3 shadow-sm transition ${
+    selected
+      ? "border-copper bg-sand shadow-[0_10px_24px_rgba(184,95,44,0.16)]"
+      : "border-slate/20 bg-white/95 hover:border-slate/35 hover:bg-slate-50/40"
+  }`;
 
 const getComponentNameById = (
   components: ComponentCandidate[],
@@ -3603,6 +3711,7 @@ const WorkspaceSectionForm = ({
     updatedAt: new Date().toISOString(),
   });
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [activeObjectHelpDialogOpen, setActiveObjectHelpDialogOpen] = useState(false);
 
   switch (activeSection) {
     case "featureDefinition":
@@ -3806,9 +3915,7 @@ const WorkspaceSectionForm = ({
                     return (
                       <div
                         key={entity.id}
-                        className={`rounded-2xl border px-4 py-3 ${
-                          selectedContextEntityId === entity.id ? "border-copper bg-sand" : "border-slate/10 bg-white"
-                        }`}
+                        className={designSelectionCardClass(selectedContextEntityId === entity.id)}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <button
@@ -3888,9 +3995,7 @@ const WorkspaceSectionForm = ({
                   workspace.discovery.candidateComponents.map((candidate, index) => (
                     <div
                       key={candidate.id}
-                      className={`rounded-2xl border px-4 py-3 ${
-                        selectedComponentId === candidate.id ? "border-copper bg-sand" : "border-slate/10 bg-white"
-                      }`}
+                      className={designSelectionCardClass(selectedComponentId === candidate.id)}
                     >
                       <div className="flex items-start justify-between gap-3">
                           <button
@@ -3975,9 +4080,7 @@ const WorkspaceSectionForm = ({
                 {workspace.discovery.interactions.map((interaction, index) => (
                   <div
                     key={`${interaction.fromComponentId}-${interaction.toComponentId}-${index}`}
-                    className={`rounded-2xl border px-4 py-3 ${
-                      selectedInteractionIndex === index ? "border-copper bg-sand" : "border-slate/10 bg-white"
-                    }`}
+                    className={designSelectionCardClass(selectedInteractionIndex === index)}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <button
@@ -4063,9 +4166,7 @@ const WorkspaceSectionForm = ({
                     workspace.discovery.dataFlowNodes.map((node, index) => (
                       <div
                         key={node.id}
-                        className={`rounded-2xl border px-4 py-3 ${
-                          selectedDataFlowNodeId === node.id ? "border-copper bg-sand" : "border-slate/10 bg-white"
-                        }`}
+                        className={designSelectionCardClass(selectedDataFlowNodeId === node.id)}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <button
@@ -4145,9 +4246,7 @@ const WorkspaceSectionForm = ({
                   {workspace.discovery.dataFlows.map((flow) => (
                     <div
                       key={flow.id}
-                      className={`rounded-2xl border px-4 py-3 ${
-                        selectedDataFlowId === flow.id ? "border-copper bg-sand" : "border-slate/10 bg-white"
-                      }`}
+                      className={designSelectionCardClass(selectedDataFlowId === flow.id)}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <button
@@ -4223,11 +4322,19 @@ const WorkspaceSectionForm = ({
 
           <ArchitectureViewPanel
             title="State Diagram"
-            description="Captures the behavior of important components over time, including their internal states and transitions."
+            description="Brainstorm internal objects first, then model state only for the objects that actually behave over time."
           >
             <Field
-              label="Component Details"
-              hint="Each feature workspace can hold multiple components. Refine one component at a time."
+              label={
+                <div className="flex items-center justify-between gap-3">
+                  <span>Component Details</span>
+                  <InlineHelpTrigger
+                    onClick={() => setActiveObjectHelpDialogOpen(true)}
+                    label="Open active object and state help"
+                  />
+                </div>
+              }
+              hint="Each feature workspace can hold multiple components. Refine one component at a time, then define its internal objects before modeling states."
             >
               <div className="space-y-3">
                 {workspace.components.length === 0 ? (
@@ -4240,9 +4347,7 @@ const WorkspaceSectionForm = ({
                     return (
                       <div
                         key={component.id}
-                        className={`rounded-2xl border px-4 py-3 ${
-                          active ? "border-copper bg-sand" : "border-slate/10 bg-white"
-                        }`}
+                        className={designSelectionCardClass(active)}
                       >
                         <div className="flex items-center justify-between gap-3">
                             <button
@@ -4255,6 +4360,10 @@ const WorkspaceSectionForm = ({
                             </span>
                             <p className="mt-1 text-sm text-slate">
                               {component.summary || "No component summary yet."}
+                            </p>
+                            <p className="mt-2 text-xs text-slate/80">
+                              {component.objects.length} object{component.objects.length === 1 ? "" : "s"} |{" "}
+                              {component.objects.filter((object) => object.needsState).length} with state
                             </p>
                           </button>
                           <div className="group relative shrink-0">
@@ -4287,6 +4396,26 @@ const WorkspaceSectionForm = ({
                 )}
               </div>
             </Field>
+            {activeObjectHelpDialogOpen ? (
+              <div className="fixed inset-0 z-[70] bg-ink/70 p-4 backdrop-blur-sm">
+                <div className="mx-auto max-w-[720px] rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.25em] text-copper">Field Help</p>
+                      <h3 className="mt-2 text-2xl font-semibold text-ink">
+                        Active Object And State
+                      </h3>
+                    </div>
+                    <Button onClick={() => setActiveObjectHelpDialogOpen(false)} tone="ghost">
+                      Close
+                    </Button>
+                  </div>
+                  <div className="mt-4 max-h-[70vh] overflow-y-auto rounded-2xl bg-white px-4 py-3">
+                    <ActiveObjectStateHelpContent />
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </ArchitectureViewPanel>
 
           <ArchitectureViewPanel
@@ -4308,9 +4437,7 @@ const WorkspaceSectionForm = ({
                     return (
                       <div
                         key={scenario.id}
-                        className={`rounded-2xl border px-4 py-3 ${
-                          active ? "border-copper bg-sand" : "border-slate/10 bg-white"
-                        }`}
+                        className={designSelectionCardClass(active)}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <button
@@ -4386,11 +4513,7 @@ const WorkspaceSectionForm = ({
                   {workspace.discovery.runtimeNodes.map((node, index) => (
                     <div
                       key={node.id}
-                      className={`rounded-2xl border px-4 py-3 ${
-                        selectedRuntimeNodeId === node.id
-                          ? "border-copper bg-sand"
-                          : "border-slate/10 bg-white"
-                      }`}
+                      className={designSelectionCardClass(selectedRuntimeNodeId === node.id)}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <button
@@ -4485,11 +4608,7 @@ const WorkspaceSectionForm = ({
                   {workspace.discovery.runtimeLinks.map((link, index) => (
                     <div
                       key={link.id}
-                      className={`rounded-2xl border px-4 py-3 ${
-                        selectedRuntimeLinkId === link.id
-                          ? "border-copper bg-sand"
-                          : "border-slate/10 bg-white"
-                      }`}
+                      className={designSelectionCardClass(selectedRuntimeLinkId === link.id)}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <button
@@ -4827,26 +4946,296 @@ const ComponentContainerEditor = ({
 
 const ComponentStateEditor = ({
   component,
+  selectedObjectId,
+  onSelectObject,
   onChange,
 }: {
   component: FeatureComponent;
+  selectedObjectId: string | null;
+  onSelectObject: (objectId: string | null) => void;
   onChange: (component: FeatureComponent) => void;
-}) => (
-  <div className="space-y-4">
-    <Field
-      label="Component States"
-      hint="Focus this view on the internal states and transitions for the selected component."
-    >
-      <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate">
-        <p className="font-semibold text-ink">{component.name || "Unnamed component"}</p>
-        <p className="mt-1">
-          {component.summary || "No component summary yet."}
-        </p>
-      </div>
-    </Field>
-    <StateListEditor
-      items={component.states}
-      onChange={(items) => onChange({ ...component, states: items })}
-    />
-  </div>
-);
+}) => {
+  const selectedObject =
+    component.objects.find((object) => object.id === selectedObjectId) ??
+    component.objects[0] ??
+    null;
+
+  const updateObject = (objectId: string, updater: (object: ComponentObject) => ComponentObject) =>
+    onChange({
+      ...component,
+      objects: component.objects.map((object) =>
+        object.id === objectId ? updater(object) : object,
+      ),
+    });
+
+  return (
+    <div className="space-y-4">
+      <Field
+        label="Internal Objects"
+        hint="Brainstorm the objects inside this component first. Then decide which objects are active and which ones need state."
+      >
+        <div className="space-y-3">
+          <div className="rounded-2xl bg-white px-4 py-3 text-sm text-slate">
+            <p className="font-semibold text-ink">{component.name || "Unnamed component"}</p>
+            <p className="mt-1">{component.summary || "No component summary yet."}</p>
+          </div>
+          {component.objects.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate/20 bg-mist/45 p-4 text-sm text-slate">
+              No internal objects yet. Add one to capture what exists inside this component before modeling state.
+            </div>
+          ) : null}
+          {component.objects.map((object) => {
+            const active = selectedObject?.id === object.id;
+            return (
+              <div key={object.id} className={designSelectionCardClass(active)}>
+                <div className="flex items-start justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onSelectObject(object.id)}
+                    className="min-w-0 flex-1 text-left"
+                  >
+                    <span className="block font-semibold">
+                      {object.name || "Unnamed object"}
+                    </span>
+                    <p className="mt-1 text-sm text-slate">
+                      {object.objectType === "active" ? "Active object" : "Passive object"}
+                      {object.responsibility ? ` | ${object.responsibility}` : ""}
+                    </p>
+                    <p className="mt-2 text-xs text-slate/80">
+                      {object.needsState
+                        ? `${object.states.length} state(s) modeled`
+                        : "No state modeled"}
+                    </p>
+                  </button>
+                  <Button
+                    onClick={() => {
+                      const remaining = component.objects.filter((item) => item.id !== object.id);
+                      onChange({
+                        ...component,
+                        objects: remaining,
+                        objectInteractions: component.objectInteractions.filter(
+                          (interaction) =>
+                            interaction.fromObjectId !== object.id &&
+                            interaction.toObjectId !== object.id,
+                        ),
+                      });
+                      onSelectObject(remaining[0]?.id ?? null);
+                    }}
+                    tone="danger"
+                    size="compact"
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+          <Button
+            onClick={() => {
+              const nextObject = createEmptyComponentObject();
+              onChange({
+                ...component,
+                objects: [...component.objects, nextObject],
+              });
+              onSelectObject(nextObject.id);
+            }}
+          >
+            Add Internal Object
+          </Button>
+        </div>
+      </Field>
+
+      {selectedObject ? (
+        <Field
+          label="Selected Object"
+          hint="Describe this object, decide whether it is active or passive, and only then model its states if needed."
+        >
+          <div className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4">
+            <div className="space-y-1.5">
+              <SectionInputLabel>Object Name</SectionInputLabel>
+              <TextInput
+                value={selectedObject.name}
+                onChange={(value) =>
+                  updateObject(selectedObject.id, (object) => ({ ...object, name: value }))
+                }
+                placeholder="Object name"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <SectionInputLabel>Responsibility</SectionInputLabel>
+              <TextArea
+                value={selectedObject.responsibility}
+                onChange={(value) =>
+                  updateObject(selectedObject.id, (object) => ({
+                    ...object,
+                    responsibility: value,
+                  }))
+                }
+                rows={3}
+                placeholder="What does this object do inside the component?"
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <SectionInputLabel>Object Type</SectionInputLabel>
+                <Select
+                  value={selectedObject.objectType}
+                  onChange={(value) =>
+                    updateObject(selectedObject.id, (object) => ({
+                      ...object,
+                      objectType: value === "active" ? "active" : "passive",
+                    }))
+                  }
+                  options={["active", "passive"]}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <SectionInputLabel>Needs State</SectionInputLabel>
+                <Select
+                  value={selectedObject.needsState ? "yes" : "no"}
+                  onChange={(value) =>
+                    updateObject(selectedObject.id, (object) => ({
+                      ...object,
+                      needsState: value === "yes",
+                      states: value === "yes" ? object.states : [],
+                    }))
+                  }
+                  options={["yes", "no"]}
+                />
+              </div>
+            </div>
+          </div>
+        </Field>
+      ) : null}
+
+      <Field
+        label="Object Interactions"
+        hint="Capture how objects inside this component collaborate with each other."
+      >
+        <div className="space-y-4">
+          {component.objectInteractions.length === 0 ? (
+            <p className="text-sm text-slate">No object interactions yet.</p>
+          ) : null}
+          {component.objectInteractions.map((interaction, index) => (
+            <div
+              key={`${interaction.fromObjectId}-${interaction.toObjectId}-${index}`}
+              className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
+            >
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <SectionInputLabel>From Object</SectionInputLabel>
+                  <select
+                    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                    value={interaction.fromObjectId}
+                    onChange={(event) => {
+                      const next = [...component.objectInteractions];
+                      next[index] = { ...next[index], fromObjectId: event.target.value };
+                      onChange({ ...component, objectInteractions: next });
+                    }}
+                  >
+                    <option value="">Select object</option>
+                    {component.objects.map((object) => (
+                      <option key={object.id} value={object.id}>
+                        {object.name || "Unnamed object"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <SectionInputLabel>To Object</SectionInputLabel>
+                  <select
+                    className="w-full rounded-xl border border-slate/20 bg-white px-3 py-2 text-sm text-ink outline-none transition focus:border-copper focus:ring-2 focus:ring-copper/20"
+                    value={interaction.toObjectId}
+                    onChange={(event) => {
+                      const next = [...component.objectInteractions];
+                      next[index] = { ...next[index], toObjectId: event.target.value };
+                      onChange({ ...component, objectInteractions: next });
+                    }}
+                  >
+                    <option value="">Select object</option>
+                    {component.objects.map((object) => (
+                      <option key={object.id} value={object.id}>
+                        {object.name || "Unnamed object"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <SectionInputLabel>Relationship</SectionInputLabel>
+                <TextInput
+                  value={interaction.relationship}
+                  onChange={(value) => {
+                    const next = [...component.objectInteractions];
+                    next[index] = { ...next[index], relationship: value };
+                    onChange({ ...component, objectInteractions: next });
+                  }}
+                  placeholder="e.g. sends work to, reads from, updates"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <SectionInputLabel>Notes</SectionInputLabel>
+                <TextArea
+                  value={interaction.notes ?? ""}
+                  onChange={(value) => {
+                    const next = [...component.objectInteractions];
+                    next[index] = { ...next[index], notes: value };
+                    onChange({ ...component, objectInteractions: next });
+                  }}
+                  rows={2}
+                  placeholder="Optional detail"
+                />
+              </div>
+              <Button
+                onClick={() =>
+                  onChange({
+                    ...component,
+                    objectInteractions: component.objectInteractions.filter(
+                      (_, currentIndex) => currentIndex !== index,
+                    ),
+                  })
+                }
+                tone="danger"
+                size="compact"
+              >
+                Remove
+              </Button>
+            </div>
+          ))}
+          <Button
+            onClick={() =>
+              onChange({
+                ...component,
+                objectInteractions: [
+                  ...component.objectInteractions,
+                  {
+                    fromObjectId: component.objects[0]?.id ?? "",
+                    toObjectId: component.objects[1]?.id ?? component.objects[0]?.id ?? "",
+                    relationship: "",
+                    notes: "",
+                  },
+                ],
+              })
+            }
+            disabled={component.objects.length === 0}
+          >
+            Add Object Interaction
+          </Button>
+        </div>
+      </Field>
+
+      {selectedObject?.needsState ? (
+        <StateListEditor
+          items={selectedObject.states}
+          onChange={(items) =>
+            updateObject(selectedObject.id, (object) => ({ ...object, states: items }))
+          }
+        />
+      ) : selectedObject ? (
+        <div className="rounded-2xl border border-dashed border-slate/20 bg-mist/45 p-4 text-sm text-slate">
+          This object does not currently need state. Turn on <span className="font-medium text-ink">Needs State</span> when this object has meaningful lifecycle modes like idle, waiting, processing, retrying, or failed.
+        </div>
+      ) : null}
+    </div>
+  );
+};
