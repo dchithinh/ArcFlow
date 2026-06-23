@@ -70,7 +70,10 @@ import {
   type SequenceStep,
   type WorkspaceSectionId,
 } from "../../features/workspaces/schema/workspace";
-import { generateWorkspaceOutputs } from "../../features/workspaces/generators";
+import {
+  generateWorkspaceOutputs,
+  getBehavioralComponentNodeId,
+} from "../../features/workspaces/generators";
 import { isWorkspaceSectionStarted } from "../../features/workspaces/state/progress";
 
 const SectionInputLabel = ({ children }: { children: string }) => (
@@ -413,7 +416,6 @@ type AiStageSuccessResponse = {
 };
 
 type ComponentDetailMode = "container" | "state";
-
 type ScopeChatState = {
   draft: string;
   messages: WorkspaceChatMessage[];
@@ -461,6 +463,9 @@ export const FeatureWorkspacePage = ({
   const [selectedRuntimeLinkId, setSelectedRuntimeLinkId] = useState<string | null>(
     workspace.discovery.runtimeLinks[0]?.id ?? null,
   );
+  const [expandedBehavioralComponentIds, setExpandedBehavioralComponentIds] = useState<string[]>(
+    [],
+  );
   const [componentDetailOpen, setComponentDetailOpen] = useState(false);
   const [componentDetailMode, setComponentDetailMode] = useState<ComponentDetailMode>("container");
   const [contextDetailOpen, setContextDetailOpen] = useState(false);
@@ -484,6 +489,7 @@ export const FeatureWorkspacePage = ({
         workspace,
         selectedComponentId ?? undefined,
         selectedComponentObjectId ?? undefined,
+        expandedBehavioralComponentIds,
         selectedContextEntityId ?? undefined,
         selectedScenarioId ?? undefined,
         selectedDataFlowNodeId ?? undefined,
@@ -497,6 +503,7 @@ export const FeatureWorkspacePage = ({
       selectedContextEntityId,
       selectedDataFlowId,
       selectedDataFlowNodeId,
+      expandedBehavioralComponentIds,
       selectedRuntimeLinkId,
       selectedRuntimeNodeId,
       selectedScenarioId,
@@ -547,6 +554,17 @@ export const FeatureWorkspacePage = ({
     workspace.discovery.runtimeLinks.find((link) => link.id === selectedRuntimeLinkId) ??
     workspace.discovery.runtimeLinks[0] ??
     null;
+  const behavioralDiagramComponents =
+    workspace.components.length > 0 ? workspace.components : workspace.discovery.candidateComponents;
+  const behavioralDiagramNodeActions = behavioralDiagramComponents.map((component, index) => ({
+    nodeId: getBehavioralComponentNodeId(component.id || component.name || "component", index),
+    onClick: () =>
+      setExpandedBehavioralComponentIds((current) =>
+        current.includes(component.id)
+          ? current.filter((id) => id !== component.id)
+          : [...current, component.id],
+      ),
+  }));
 
   const updateTimestamp = (next: FeatureWorkspace): FeatureWorkspace => ({
     ...next,
@@ -2178,6 +2196,7 @@ export const FeatureWorkspacePage = ({
               previewDefaultHeight={460}
               previewMinWidth="min-w-[1100px]"
               expandedMinWidth="min-w-[1600px]"
+              nodeActions={behavioralDiagramNodeActions}
             />
             <DiagramPreviewCard
               title="Selected Component Internal Object Diagram"
@@ -2642,6 +2661,242 @@ const PreviewCard = ({
   </article>
 );
 
+const BehavioralArchitectureCanvas = ({
+  workspace,
+  selectedComponentId,
+  expandedComponentIds,
+  onToggleComponent,
+  large = false,
+}: {
+  workspace: FeatureWorkspace;
+  selectedComponentId: string | null;
+  expandedComponentIds: string[];
+  onToggleComponent: (componentId: string) => void;
+  large?: boolean;
+}) => {
+  const components =
+    workspace.components.length > 0
+      ? workspace.components
+      : workspace.discovery.candidateComponents.map((candidate) => ({
+          ...createEmptyComponent(candidate),
+          summary: candidate.responsibility,
+        }));
+  const componentNameById = new Map(components.map((component) => [component.id, component.name]));
+
+  return (
+    <div className={`rounded-2xl bg-white p-4 ${large ? "min-h-full" : "min-h-[420px]"}`}>
+      <div className="space-y-4">
+        {workspace.discovery.contextEntities.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {workspace.discovery.contextEntities.slice(0, 6).map((entity) => (
+              <div
+                key={entity.id}
+                className="rounded-full border border-slate/15 bg-mist px-3 py-1 text-xs font-medium text-slate"
+              >
+                {entity.name || "Unnamed entity"}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+          {components.map((component) => {
+            const expanded = expandedComponentIds.includes(component.id);
+            const selected = selectedComponentId === component.id;
+            const activeObjects = component.objects.filter(
+              (object) => object.objectType === "active",
+            ).length;
+            const statefulObjects = component.objects.filter((object) => object.needsState).length;
+
+            return (
+              <div
+                key={component.id}
+                className={`rounded-2xl border p-4 transition ${
+                  selected
+                    ? "border-copper bg-sand/65 shadow-sm"
+                    : "border-slate/15 bg-white"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => onToggleComponent(component.id)}
+                  className="w-full text-left"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-base font-semibold text-ink">
+                        {component.name || "Unnamed component"}
+                      </p>
+                      <p className="mt-1 text-sm text-slate">
+                        {component.summary || "No component summary yet."}
+                      </p>
+                    </div>
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-copper/25 bg-white text-sm font-semibold text-copper">
+                      {expanded ? "-" : "+"}
+                    </span>
+                  </div>
+                </button>
+
+                <div className="mt-3 rounded-xl bg-mist/55 px-3 py-2 text-xs text-slate">
+                  {component.objects.length} object{component.objects.length === 1 ? "" : "s"} |{" "}
+                  {activeObjects} active | {statefulObjects} stateful
+                </div>
+
+                {expanded ? (
+                  <div className="mt-4 space-y-3 border-t border-slate/10 pt-4">
+                    {component.objects.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-slate/20 bg-mist/40 p-3 text-sm text-slate">
+                        No internal objects yet.
+                      </div>
+                    ) : (
+                      component.objects.map((object) => (
+                        <div
+                          key={object.id}
+                          className={`rounded-xl border px-3 py-3 ${
+                            object.objectType === "active"
+                              ? "border-pine/20 bg-white"
+                              : "border-slate/15 bg-mist/35"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-ink">
+                                {object.name || "Unnamed object"}
+                              </p>
+                              <p className="mt-1 text-xs text-slate">
+                                {object.objectType === "active" ? "Active object" : "Passive object"}
+                              </p>
+                            </div>
+                            <span className="rounded-full bg-sand px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-copper">
+                              {object.needsState ? `${object.states.length} states` : "no state"}
+                            </span>
+                          </div>
+                          {object.responsibility ? (
+                            <p className="mt-2 text-sm text-slate">{object.responsibility}</p>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+
+                    {component.objectInteractions.length > 0 ? (
+                      <div className="rounded-xl border border-slate/15 bg-white px-3 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate">
+                          Internal Links
+                        </p>
+                        <div className="mt-2 space-y-2">
+                          {component.objectInteractions.map((interaction, index) => (
+                            <div
+                              key={`${interaction.fromObjectId}-${interaction.toObjectId}-${index}`}
+                              className="rounded-lg bg-mist/45 px-2.5 py-2 text-xs text-slate"
+                            >
+                              <span className="font-medium text-ink">
+                                {component.objects.find((object) => object.id === interaction.fromObjectId)?.name ||
+                                  "Unknown"}
+                              </span>{" "}
+                              →{" "}
+                              <span className="font-medium text-ink">
+                                {component.objects.find((object) => object.id === interaction.toObjectId)?.name ||
+                                  "Unknown"}
+                              </span>
+                              {interaction.relationship ? ` | ${interaction.relationship}` : ""}
+                              {interaction.notes ? ` | ${interaction.notes}` : ""}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="rounded-2xl border border-slate/10 bg-mist/45 p-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-slate">
+            Component Interactions
+          </p>
+          <div className="mt-3 space-y-2">
+            {workspace.discovery.interactions.length === 0 ? (
+              <p className="text-sm text-slate">No component interactions documented yet.</p>
+            ) : (
+              workspace.discovery.interactions.map((interaction, index) => (
+                <div
+                  key={`${interaction.fromComponentId}-${interaction.toComponentId}-${index}`}
+                  className="rounded-xl bg-white px-3 py-2 text-sm text-slate"
+                >
+                  <span className="font-medium text-ink">
+                    {componentNameById.get(interaction.fromComponentId) || "Unknown source"}
+                  </span>{" "}
+                  →{" "}
+                  <span className="font-medium text-ink">
+                    {componentNameById.get(interaction.toComponentId) || "Unknown target"}
+                  </span>
+                  {interaction.mechanism || interaction.data
+                    ? ` | ${[interaction.mechanism, interaction.data].filter(Boolean).join(": ")}`
+                    : ""}
+                  {interaction.notes ? ` | ${interaction.notes}` : ""}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const BehavioralArchitectureOverlayButton = ({
+  workspace,
+  selectedComponentId,
+  expandedComponentIds,
+  onToggleComponent,
+}: {
+  workspace: FeatureWorkspace;
+  selectedComponentId: string | null;
+  expandedComponentIds: string[];
+  onToggleComponent: (componentId: string) => void;
+}) => {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <Button onClick={() => setExpanded(true)} tone="secondary">
+        Open Large View
+      </Button>
+      {expanded ? (
+        <div className="fixed inset-0 z-[60] bg-ink/75 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[96vw] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Expanded Diagram</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">
+                  Behavioral Architecture Diagram
+                </h3>
+              </div>
+              <Button onClick={() => setExpanded(false)} tone="ghost">
+                Close
+              </Button>
+            </div>
+            <div className="mt-4 flex-1 overflow-auto rounded-2xl bg-mist/60 p-3">
+              <BehavioralArchitectureCanvas
+                workspace={workspace}
+                selectedComponentId={selectedComponentId}
+                expandedComponentIds={expandedComponentIds}
+                onToggleComponent={onToggleComponent}
+                large
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+};
+
+void BehavioralArchitectureCanvas;
+void BehavioralArchitectureOverlayButton;
+
 const DiagramPreviewCard = ({
   title,
   chart,
@@ -2650,6 +2905,8 @@ const DiagramPreviewCard = ({
   previewDefaultHeight,
   previewMinWidth,
   expandedMinWidth,
+  action,
+  nodeActions,
 }: {
   title: string;
   chart: string;
@@ -2658,13 +2915,15 @@ const DiagramPreviewCard = ({
   previewDefaultHeight: number;
   previewMinWidth: string;
   expandedMinWidth: string;
+  action?: ReactNode;
+  nodeActions?: Array<{ nodeId: string; onClick: () => void }>;
 }) => {
   const [viewMode, setViewMode] = useState<"fit" | "scroll">("fit");
   const [expanded, setExpanded] = useState(false);
 
   return (
     <>
-      <PreviewCard title={title}>
+      <PreviewCard title={title} action={action}>
         <div className="flex flex-wrap gap-2">
           <Button
             onClick={() => setViewMode("fit")}
@@ -2696,6 +2955,7 @@ const DiagramPreviewCard = ({
             minHeight={Math.max(260, previewDefaultHeight - 120)}
             maxHeight={1100}
             className={viewMode === "fit" ? "h-full min-h-0" : `h-full min-h-0 ${previewMinWidth}`}
+            nodeActions={nodeActions}
           />
         </div>
       </PreviewCard>
@@ -2736,6 +2996,7 @@ const DiagramPreviewCard = ({
                 chart={chart}
                 svgMode={viewMode === "fit" ? "fit" : "natural"}
                 className={viewMode === "fit" ? "min-h-full" : `min-h-full ${expandedMinWidth}`}
+                nodeActions={nodeActions}
               />
             </div>
           </div>

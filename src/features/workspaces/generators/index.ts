@@ -76,16 +76,40 @@ const wrapText = (value: string, maxCharsPerLine: number): string => {
 
   return lines.map(escapeLabel).join("<br/>");
 };
+const wrapMultilineText = (value: string, maxCharsPerLine: number): string => {
+  const paragraphs = value
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length === 0) {
+    return "";
+  }
+
+  return paragraphs
+    .map((line) => {
+      const bulletPrefix = /^[-*]\s+/.test(line) ? `${line.slice(0, 2)}` : "";
+      const content = bulletPrefix ? line.slice(2).trim() : line;
+      const wrapped = wrapText(content, Math.max(8, maxCharsPerLine - bulletPrefix.length));
+      return bulletPrefix ? `${escapeLabel(bulletPrefix)}${wrapped}` : wrapped;
+    })
+    .join("<br/>");
+};
+const formatBehavioralComponentLabel = (
+  title: string,
+  summary: string,
+): string =>
+  [
+    `<div style="font-weight:700;text-align:center;line-height:1.25;">${escapeLabel(title)}</div>`,
+    `<div style="font-size:10px;line-height:1.2;text-align:left;color:#365166;margin-top:4px;">${wrapMultilineText(summary, 34)}</div>`,
+  ].join("");
 const componentAnchorId = (componentId: string, index: number): string =>
   cleanNode(`${componentId || "component"}_${index}`);
+export const getBehavioralComponentNodeId = (componentId: string, index: number): string =>
+  componentAnchorId(componentId || "component", index);
 const shorten = (value: string, maxLength = 52): string =>
   value.length > maxLength ? `${value.slice(0, maxLength - 3)}...` : value;
-const tokenize = (value: string): string[] =>
-  value
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((token) => token.length > 1);
-
 type FlowchartShape =
   | "rectangle"
   | "rounded"
@@ -96,7 +120,8 @@ type FlowchartShape =
   | "hexagon";
 
 const wrapFlowchartNode = (id: string, label: string, shape: FlowchartShape): string => {
-  const escaped = escapeLabel(label);
+  const escaped =
+    /<\/?[a-z][\s\S]*>/i.test(label) ? label : escapeLabel(label);
   switch (shape) {
     case "rounded":
       return `${id}("${escaped}")`;
@@ -174,105 +199,6 @@ const objectAnchorId = (
   objectIndex: number,
 ): string =>
   `${componentId}_object_${cleanNode(objectId || objectName || `object_${objectIndex}`)}_${objectIndex}`;
-
-const stateAnchorId = (
-  componentId: string,
-  objectId: string,
-  stateName: string,
-  stateIndex: number,
-): string =>
-  `${componentId}_${cleanNode(objectId || "object")}_state_${cleanNode(
-    stateName || `state_${stateIndex}`,
-  )}_${stateIndex}`;
-
-const findIncomingObjectTargets = (
-  component: FeatureComponent,
-  componentId: string,
-): Map<string, string[]> => {
-  const targets = new Map<string, string[]>();
-
-  component.objects.forEach((object) => {
-    if (!object.needsState || object.states.length === 0) {
-      return;
-    }
-
-    const anchor =
-      stateAnchorId(componentId, object.id, object.states[0]?.name || object.name, 0);
-    object.states.forEach((state) => {
-      state.transitions
-        .filter((transition) => transition.triggerKind === "incoming")
-        .forEach((transition) => {
-          const key = transition.event.trim().toLowerCase();
-          if (!key) {
-            return;
-          }
-
-          const current = targets.get(key) ?? [];
-          if (!current.includes(anchor)) {
-            current.push(anchor);
-          }
-          targets.set(key, current);
-        });
-    });
-  });
-
-  return targets;
-};
-
-const scoreObjectForOutgoingSignal = (
-  object: ComponentObject,
-  signalName: string,
-): number => {
-  const signalTokens = tokenize(signalName);
-  const objectTokens = tokenize(
-    `${object.name} ${object.responsibility} ${object.objectType}`,
-  );
-  let score = signalTokens.filter((token) => objectTokens.includes(token)).length;
-
-  object.states.forEach((state) => {
-    const transitionTokens = tokenize(
-      `${state.name} ${state.description} ${state.transitions
-        .map((transition) => `${transition.event} ${transition.action || ""} ${transition.targetState}`)
-        .join(" ")}`,
-    );
-    score += signalTokens.filter((token) => transitionTokens.includes(token)).length;
-  });
-
-  if (score === 0 && object.objectType === "active") {
-    score += 1;
-  }
-
-  return score;
-};
-
-const findOutgoingObjectSource = (
-  component: FeatureComponent,
-  componentId: string,
-  signalName: string,
-): string => {
-  if (component.objects.length === 0) {
-    return componentId;
-  }
-
-  const scoredObjects = component.objects.map((object, objectIndex) => ({
-    anchor:
-      object.needsState && object.states.length > 0
-        ? stateAnchorId(componentId, object.id, object.states[0].name, 0)
-        : objectAnchorId(componentId, object.id, object.name, objectIndex),
-    score: scoreObjectForOutgoingSignal(object, signalName),
-    index: objectIndex,
-  }));
-
-  scoredObjects.sort((left, right) => {
-    if (right.score !== left.score) {
-      return right.score - left.score;
-    }
-
-    return right.index - left.index;
-  });
-
-  return scoredObjects[0].anchor;
-};
 
 const generateMarkdown = (workspace: FeatureWorkspace): string => {
   const requirementListText = workspace.featureSummary.goals
@@ -508,6 +434,7 @@ ${linkStyleLines.join("\n")}`;
 const generateBehavioralArchitectureDiagram = (
   workspace: FeatureWorkspace,
   selectedComponentId?: string,
+  expandedComponentIds: string[] = [],
 ): string => {
   const components =
     workspace.components.length > 0
@@ -531,144 +458,136 @@ const generateBehavioralArchitectureDiagram = (
             observability: [],
           },
         }));
+  const expandedIds = new Set(expandedComponentIds);
 
   if (components.length === 0) {
     return `flowchart LR
     ${wrapFlowchartNode("Requirement", workspace.title, "subroutine")} --> ${wrapFlowchartNode("Discovery", "Component discovery", "rounded")}
     Discovery --> ${wrapFlowchartNode("Refinement", "Component refinement", "rounded")}
-    Refinement --> ${wrapFlowchartNode("Behavior", "Internal object view", "rounded")}`;
+    Refinement --> ${wrapFlowchartNode("Behavior", "Component interaction view", "rounded")}`;
   }
 
-  const subgraphs = components.flatMap((component, index) => {
+  const componentNodes = components.flatMap((component, index) => {
     const componentId = componentAnchorId(component.id || component.name || "component", index);
-    const groupId = `${componentId}_group`;
-    const objectsGroupId = `${componentId}_objects`;
-    const roleNode = `${componentId}_role`;
+    const componentGroupId = `${componentId}_group`;
     const summary = component.summary.trim() || "No responsibility summary yet";
     const selected = selectedComponentId === component.id;
-
+    const expanded = expandedIds.has(component.id);
     const objectNodes =
-      component.objects.length > 0
+      expanded && component.objects.length > 0
         ? component.objects.flatMap((object, objectIndex) => {
             const objectId = objectAnchorId(componentId, object.id, object.name, objectIndex);
             const objectLabel = [
               object.name || `Object ${objectIndex + 1}`,
               object.objectType === "active" ? "Active object" : "Passive object",
-              object.responsibility ? shorten(object.responsibility, 46) : "",
-              object.needsState ? `${object.states.length} state(s)` : "No state modeled",
-            ]
-              .filter(Boolean)
-              .join("<br/>");
+              object.needsState
+                ? `${object.states.length} state${object.states.length === 1 ? "" : "s"}`
+                : "No state modeled",
+            ].join("<br/>");
 
             return [
-              `        ${wrapFlowchartNode(objectId, objectLabel, "rounded")}`,
-              `        class ${objectId} ${object.objectType === "active" ? "componentObjectActive" : "componentObjectPassive"}`,
+              `      ${wrapFlowchartNode(objectId, objectLabel, "rounded")}`,
+              `      class ${objectId} ${
+                object.objectType === "active"
+                  ? "behaviorObjectActive"
+                  : "behaviorObjectPassive"
+              }`,
             ];
           })
-        : [
-            `        ${wrapFlowchartNode(`${componentId}_object_placeholder`, "No internal objects yet", "rounded")}`,
-            `        class ${componentId}_object_placeholder componentStateGhost`,
-          ];
+        : expanded
+          ? [
+              `      ${wrapFlowchartNode(`${componentId}_empty`, "No internal objects yet", "rounded")}`,
+              `      class ${componentId}_empty behaviorObjectGhost`,
+            ]
+          : [];
+    const objectEdges =
+      expanded && component.objectInteractions.length > 0
+        ? component.objectInteractions.flatMap((interaction) => {
+            const fromIndex = component.objects.findIndex(
+              (object) => object.id === interaction.fromObjectId,
+            );
+            const toIndex = component.objects.findIndex(
+              (object) => object.id === interaction.toObjectId,
+            );
+            if (fromIndex < 0 || toIndex < 0) {
+              return [];
+            }
 
-    const objectEdges = component.objectInteractions.flatMap((interaction) => {
-      const fromIndex = component.objects.findIndex((object) => object.id === interaction.fromObjectId);
-      const toIndex = component.objects.findIndex((object) => object.id === interaction.toObjectId);
-      if (fromIndex < 0 || toIndex < 0) {
-        return [];
-      }
+            const fromId = objectAnchorId(
+              componentId,
+              component.objects[fromIndex].id,
+              component.objects[fromIndex].name,
+              fromIndex,
+            );
+            const toId = objectAnchorId(
+              componentId,
+              component.objects[toIndex].id,
+              component.objects[toIndex].name,
+              toIndex,
+            );
 
-      const fromId = objectAnchorId(
-        componentId,
-        component.objects[fromIndex].id,
-        component.objects[fromIndex].name,
-        fromIndex,
-      );
-      const toId = objectAnchorId(
-        componentId,
-        component.objects[toIndex].id,
-        component.objects[toIndex].name,
-        toIndex,
-      );
-
-      return [
-        `        ${fromId} -->|"${escapeLabel(
-          [interaction.relationship, interaction.notes].filter(Boolean).join(": ") || "interaction",
-        )}"| ${toId}`,
-      ];
-    });
+            return [
+              `      ${fromId} -->|"${escapeLabel(
+                [interaction.relationship, interaction.notes]
+                  .filter(Boolean)
+                  .join(": ") || "interaction",
+              )}"| ${toId}`,
+            ];
+          })
+        : [];
 
     return [
-      `    subgraph ${groupId}["${escapeLabel(component.name || `Component ${index + 1}`)}"]`,
-      "        direction TB",
-      `        ${wrapFlowchartNode(componentId, component.name || `Component ${index + 1}`, "subroutine")}`,
-      `        subgraph ${objectsGroupId}[" "]`,
-      "            direction TB",
-      ...objectNodes.map((line) => `    ${line}`),
-      ...objectEdges.map((line) => `    ${line}`),
-      "        end",
-      `        ${wrapFlowchartNode(roleNode, `Role<br/>${summary}`, "rectangle")}`,
-      "    end",
+      `    subgraph ${componentGroupId}[" "]`,
+      `      direction TB`,
+      `      ${wrapFlowchartNode(
+        componentId,
+        formatBehavioralComponentLabel(
+          `${expanded ? "[-]" : "[+]"} ${component.name || `Component ${index + 1}`}`,
+          summary,
+        ),
+        "subroutine",
+      )}`,
+      ...objectNodes,
+      ...objectEdges,
+      `    end`,
+      `    style ${componentGroupId} fill:${selected ? "#fff6e6" : "#fffdf8"},stroke:${selected ? "#b5651d" : "#365166"},stroke-width:${selected ? "3px" : "2px"},color:#081521`,
       `    class ${componentId} componentCore`,
-      `    class ${roleNode} componentMeta`,
-      `    style ${groupId} fill:${selected ? "#fff2d7" : "#fff8ef"},stroke:${selected ? "#0f766e" : "#b85f2c"},stroke-width:${selected ? "5px" : "3px"},color:#081521`,
-      `    style ${objectsGroupId} fill:transparent,stroke:transparent`,
+      ...(selected
+        ? [`    style ${componentId} fill:#f5ecd8,stroke:#0f766e,stroke-width:3px,color:#081521,font-weight:bold`]
+        : []),
     ];
   });
 
   const componentIds = new Set(components.map((component) => component.id));
   const edges =
     workspace.discovery.interactions.length > 0
-      ? workspace.discovery.interactions
-          .map((interaction, index) => {
-            const fromComponent = components.find(
-              (component) => component.id === interaction.fromComponentId,
-            );
-            const toComponent = components.find(
-              (component) => component.id === interaction.toComponentId,
-            );
-            const fromIndex = fromComponent ? components.indexOf(fromComponent) : index;
-            const toIndex = toComponent ? components.indexOf(toComponent) : index + 1;
-            const fromId = componentAnchorId(
-              fromComponent?.id || interaction.fromComponentId || "from",
-              fromIndex,
-            );
-            const toId = componentAnchorId(
-              toComponent?.id || interaction.toComponentId || "to",
-              toIndex,
-            );
-            const sourceAnchor = fromComponent
-              ? findOutgoingObjectSource(fromComponent, fromId, interaction.data || interaction.mechanism)
-              : fromId;
-            const incomingTargets = toComponent
-              ? findIncomingObjectTargets(toComponent, toId)
-              : new Map<string, string[]>();
-            const targetAnchors =
-              incomingTargets.get((interaction.data || "").trim().toLowerCase()) ??
-              incomingTargets.get((interaction.notes || "").trim().toLowerCase()) ??
-              [
-                toComponent && toComponent.objects.length > 0
-                  ? objectAnchorId(toId, toComponent.objects[0].id, toComponent.objects[0].name, 0)
-                  : toId,
-              ];
-            const label =
-              [interaction.mechanism, interaction.data].filter(Boolean).join(": ") ||
-              "interaction";
-            return targetAnchors.map(
-              (targetAnchor) =>
-                `    ${sourceAnchor} -->|"${escapeLabel(label)}"| ${targetAnchor}`,
-            );
-          })
-          .flat()
+      ? workspace.discovery.interactions.map((interaction, index) => {
+          const fromComponent = components.find(
+            (component) => component.id === interaction.fromComponentId,
+          );
+          const toComponent = components.find(
+            (component) => component.id === interaction.toComponentId,
+          );
+          const fromIndex = fromComponent ? components.indexOf(fromComponent) : index;
+          const toIndex = toComponent ? components.indexOf(toComponent) : index + 1;
+          const fromId = componentAnchorId(
+            fromComponent?.id || interaction.fromComponentId || "from",
+            fromIndex,
+          );
+          const toId = componentAnchorId(
+            toComponent?.id || interaction.toComponentId || "to",
+            toIndex,
+          );
+          const label =
+            [interaction.mechanism, interaction.data].filter(Boolean).join(": ") ||
+            "interaction";
+          return `    ${fromId} -->|"${escapeLabel(label)}"| ${toId}`;
+        })
       : components.slice(0, -1).map((component, index) => {
           const nextComponent = components[index + 1];
           const fromId = componentAnchorId(component.id, index);
           const toId = componentAnchorId(nextComponent.id, index + 1);
-          const sourceAnchor = findOutgoingObjectSource(component, fromId, "discovery relation");
-          const targetAnchor =
-            nextComponent.objects.length > 0
-              ? objectAnchorId(toId, nextComponent.objects[0].id, nextComponent.objects[0].name, 0)
-              : toId;
-          return `    ${sourceAnchor} -->|"discovery relation"| ${targetAnchor}`;
+          return `    ${fromId} -->|"discovery relation"| ${toId}`;
         });
 
   const actorEdges = workspace.discovery.contextEntities
@@ -698,12 +617,11 @@ const generateBehavioralArchitectureDiagram = (
 
   return `flowchart LR
     classDef componentCore fill:#f4e7cf,stroke:#123a35,stroke-width:3px,color:#081521,font-weight:bold;
-    classDef componentMeta fill:#ffffff,stroke:#365166,stroke-width:2px,color:#081521;
-    classDef componentObjectActive fill:#fffdf8,stroke:#365166,stroke-width:2px,color:#081521;
-    classDef componentObjectPassive fill:#f4f7fb,stroke:#7a8fa3,stroke-width:2px,color:#081521;
-    classDef componentStateGhost fill:#f8f1e4,stroke:#8a9aa8,stroke-dasharray: 4 4,color:#4b6477;
+    classDef behaviorObjectActive fill:#fffdf8,stroke:#365166,stroke-width:2px,color:#081521;
+    classDef behaviorObjectPassive fill:#f4f7fb,stroke:#7a8fa3,stroke-width:2px,color:#081521;
+    classDef behaviorObjectGhost fill:#f8f1e4,stroke:#8a9aa8,stroke-dasharray: 4 4,color:#4b6477;
     classDef actorNode fill:#eef4f7,stroke:#365166,stroke-width:2px,color:#081521;
-${subgraphs.join("\n")}
+${componentNodes.join("\n")}
 ${actorEdges.join("\n")}
 ${edges.join("\n")}`;
 };
@@ -804,23 +722,48 @@ const generateComponentStateDiagram = (
     OBJECTS --> STATES`;
   }
 
-  const firstState = cleanNode(object.states[0].name || "INITIAL");
-  const lines: string[] = ["stateDiagram-v2", `    [*] --> ${firstState}`];
+  const stateAlias = (stateName: string, stateIndex: number): string =>
+    `${cleanNode(object.id || "object")}_${cleanNode(stateName || `STATE_${stateIndex}`)}_${stateIndex}`;
 
-  lines.push(`    note right of ${firstState}: ${escapeLabel(object.name || "Selected object")}`);
+  const firstState = stateAlias(object.states[0].name || "INITIAL", 0);
+  const lines: string[] = ["stateDiagram-v2"];
 
-  for (const state of object.states) {
-    const source = cleanNode(state.name || "STATE");
+  object.states.forEach((state, stateIndex) => {
+    lines.push(
+      `    state "${escapeLabel(state.name || `State ${stateIndex + 1}`)}" as ${stateAlias(
+        state.name,
+        stateIndex,
+      )}`,
+    );
+  });
+
+  lines.push(`    [*] --> ${firstState}`);
+
+  for (const [stateIndex, state] of object.states.entries()) {
+    const source = stateAlias(state.name || "STATE", stateIndex);
 
     if (state.transitions.length === 0) {
-      lines.push(`    ${source}: ${state.description || "No description"}`);
+      if (state.description.trim()) {
+        lines.push(`    note right of ${source}: ${escapeLabel(state.description.trim())}`);
+      }
       continue;
     }
 
     for (const transition of state.transitions) {
-      lines.push(
-        `    ${source} --> ${cleanNode(transition.targetState || "UNKNOWN")}: ${formatTransitionEventLabel(transition.event, transition.triggerKind)}`,
+      const targetIndex = object.states.findIndex(
+        (candidate) => candidate.name.trim() === transition.targetState.trim(),
       );
+      const target =
+        targetIndex >= 0
+          ? stateAlias(object.states[targetIndex].name, targetIndex)
+          : cleanNode(transition.targetState || "UNKNOWN");
+      lines.push(
+        `    ${source} --> ${target}: ${formatTransitionEventLabel(transition.event, transition.triggerKind)}`,
+      );
+    }
+
+    if (state.description.trim()) {
+      lines.push(`    note right of ${source}: ${escapeLabel(state.description.trim())}`);
     }
   }
 
@@ -1159,6 +1102,7 @@ export const generateWorkspaceOutputs = (
   workspace: FeatureWorkspace,
   selectedComponentId?: string,
   selectedObjectId?: string,
+  expandedBehavioralComponentIds: string[] = [],
   selectedContextEntityId?: string,
   selectedScenarioId?: string,
   selectedDataFlowNodeId?: string,
@@ -1177,6 +1121,7 @@ export const generateWorkspaceOutputs = (
   behavioralArchitectureDiagram: generateBehavioralArchitectureDiagram(
     workspace,
     selectedComponentId,
+    expandedBehavioralComponentIds,
   ),
   componentObjectDiagram: generateComponentObjectDiagram(
     workspace,

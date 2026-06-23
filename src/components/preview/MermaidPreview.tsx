@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
+type MermaidNodeAction = {
+  nodeId: string;
+  onClick: () => void;
+};
+
 type MermaidPreviewProps = {
   chart: string;
   title: string;
@@ -9,6 +14,7 @@ type MermaidPreviewProps = {
   defaultHeight?: number;
   minHeight?: number;
   maxHeight?: number;
+  nodeActions?: MermaidNodeAction[];
 };
 
 const formatSvg = (svg: string, svgMode: "fit" | "natural"): string => {
@@ -39,6 +45,7 @@ export const MermaidPreview = ({
   defaultHeight,
   minHeight = 280,
   maxHeight = 1100,
+  nodeActions = [],
 }: MermaidPreviewProps) => {
   const [svg, setSvg] = useState<string>("");
   const [failed, setFailed] = useState(false);
@@ -53,6 +60,7 @@ export const MermaidPreview = ({
     originY: number;
   } | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const svgContainerRef = useRef<HTMLDivElement | null>(null);
 
   const clampZoom = (value: number): number => Math.min(6, Math.max(0.5, value));
 
@@ -74,6 +82,10 @@ export const MermaidPreview = ({
         mermaid.initialize({
           startOnLoad: false,
           theme: "base",
+          flowchart: {
+            htmlLabels: true,
+            useMaxWidth: false,
+          },
           themeVariables: {
             primaryColor: "#f4e7cf",
             primaryTextColor: "#081521",
@@ -128,6 +140,52 @@ export const MermaidPreview = ({
       viewport.removeEventListener("wheel", handleWheel);
     };
   }, []);
+
+  useEffect(() => {
+    if (!svgContainerRef.current || nodeActions.length === 0) {
+      return;
+    }
+
+    const cleanups: Array<() => void> = [];
+
+    nodeActions.forEach(({ nodeId, onClick }) => {
+      const svgRoot = svgContainerRef.current;
+      if (!svgRoot) {
+        return;
+      }
+
+      const escapedId =
+        typeof CSS !== "undefined" && typeof CSS.escape === "function"
+          ? CSS.escape(nodeId)
+          : nodeId.replace(/([^a-zA-Z0-9_-])/g, "\\$1");
+      const target =
+        svgRoot.querySelector<SVGGElement>(`#${escapedId}`) ??
+        svgRoot.querySelector<SVGGElement>(`[data-id="${nodeId}"]`) ??
+        svgRoot.querySelector<SVGGElement>(`[id$="${nodeId}"]`) ??
+        svgRoot.querySelector<SVGGElement>(`[id*="-${escapedId}-"]`) ??
+        svgRoot.querySelector<SVGGElement>(`[id*="${escapedId}"]`);
+
+      if (!target) {
+        return;
+      }
+
+      target.style.cursor = "pointer";
+      target.setAttribute("data-interactive-node", "true");
+
+      const handleClick = () => {
+        onClick();
+      };
+
+      target.addEventListener("click", handleClick);
+      cleanups.push(() => {
+        target.removeEventListener("click", handleClick);
+      });
+    });
+
+    return () => {
+      cleanups.forEach((cleanup) => cleanup());
+    };
+  }, [nodeActions, svg]);
 
   const beginDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (zoom <= 1) {
@@ -241,6 +299,7 @@ export const MermaidPreview = ({
         onPointerLeave={endDrag}
       >
         <div
+          ref={svgContainerRef}
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             transformOrigin: "top left",

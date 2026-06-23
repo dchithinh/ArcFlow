@@ -144,7 +144,12 @@ type StateListEditorProps = {
   items: Array<{
     name: string;
     description: string;
-    transitions: Array<{ event: string; targetState: string; action?: string }>;
+    transitions: Array<{
+      event: string;
+      triggerKind?: "incoming" | "internal";
+      targetState: string;
+      action?: string;
+    }>;
   }>;
   onChange: (items: StateListEditorProps["items"]) => void;
 };
@@ -156,7 +161,12 @@ export const StateListEditor = ({ items, onChange }: StateListEditorProps) => {
     onChange(next);
   };
 
-  const updateTransition = (stateIndex: number, transitionIndex: number, key: string, value: string) => {
+  const updateTransition = (
+    stateIndex: number,
+    transitionIndex: number,
+    key: string,
+    value: string,
+  ) => {
     const next = [...items];
     const transitions = [...next[stateIndex].transitions];
     transitions[transitionIndex] = { ...transitions[transitionIndex], [key]: value };
@@ -182,8 +192,28 @@ export const StateListEditor = ({ items, onChange }: StateListEditorProps) => {
                   <LabeledInput label="Triggering Event">
                     <TextInput value={transition.event} onChange={(value) => updateTransition(stateIndex, transitionIndex, "event", value)} placeholder="Triggering event" />
                   </LabeledInput>
+                  <LabeledInput label="Event Kind">
+                    <Select
+                      value={transition.triggerKind ?? "incoming"}
+                      onChange={(value) =>
+                        updateTransition(stateIndex, transitionIndex, "triggerKind", value)
+                      }
+                      options={["incoming", "internal"]}
+                    />
+                  </LabeledInput>
                   <LabeledInput label="Target State">
-                    <TextInput value={transition.targetState} onChange={(value) => updateTransition(stateIndex, transitionIndex, "targetState", value)} placeholder="Target state" />
+                    <Select
+                      value={transition.targetState}
+                      onChange={(value) =>
+                        updateTransition(stateIndex, transitionIndex, "targetState", value)
+                      }
+                      options={[
+                        transition.targetState,
+                        ...items
+                          .map((state) => state.name.trim())
+                          .filter(Boolean),
+                      ].filter((value, index, values) => values.indexOf(value) === index)}
+                    />
                   </LabeledInput>
                   <LabeledInput label="Action">
                     <TextInput value={transition.action ?? ""} onChange={(value) => updateTransition(stateIndex, transitionIndex, "action", value)} placeholder="Transition action" />
@@ -207,9 +237,19 @@ export const StateListEditor = ({ items, onChange }: StateListEditorProps) => {
               <Button
                 onClick={() => {
                   const next = [...items];
+                  const firstOtherState =
+                    next.find((state, index) => index !== stateIndex && state.name.trim())?.name ?? "";
                   next[stateIndex] = {
                     ...next[stateIndex],
-                    transitions: [...next[stateIndex].transitions, { event: "", targetState: "", action: "" }],
+                    transitions: [
+                      ...next[stateIndex].transitions,
+                      {
+                        event: "",
+                        triggerKind: "incoming",
+                        targetState: firstOtherState,
+                        action: "",
+                      },
+                    ],
                   };
                   onChange(next);
                 }}
