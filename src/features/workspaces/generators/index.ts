@@ -96,14 +96,10 @@ const wrapMultilineText = (value: string, maxCharsPerLine: number): string => {
     })
     .join("<br/>");
 };
-const formatBehavioralComponentLabel = (
-  title: string,
-  summary: string,
-): string =>
-  [
-    `<div style="font-weight:700;text-align:center;line-height:1.25;">${escapeLabel(title)}</div>`,
-    `<div style="font-size:10px;line-height:1.2;text-align:left;color:#365166;margin-top:4px;">${wrapMultilineText(summary, 34)}</div>`,
-  ].join("");
+const formatBehavioralComponentHeader = (title: string): string =>
+  `<div style="font-weight:700;text-align:center;line-height:1.25;">${escapeLabel(title)}</div>`;
+const formatBehavioralComponentRole = (summary: string): string =>
+  `<div style="font-size:10px;line-height:1.2;text-align:left;color:#365166;">${wrapMultilineText(summary, 34)}</div>`;
 const componentAnchorId = (componentId: string, index: number): string =>
   cleanNode(`${componentId || "component"}_${index}`);
 export const getBehavioralComponentNodeId = (componentId: string, index: number): string =>
@@ -470,6 +466,7 @@ const generateBehavioralArchitectureDiagram = (
   const componentNodes = components.flatMap((component, index) => {
     const componentId = componentAnchorId(component.id || component.name || "component", index);
     const componentGroupId = `${componentId}_group`;
+    const componentRoleId = `${componentId}_role`;
     const summary = component.summary.trim() || "No responsibility summary yet";
     const selected = selectedComponentId === component.id;
     const expanded = expandedIds.has(component.id);
@@ -477,13 +474,7 @@ const generateBehavioralArchitectureDiagram = (
       expanded && component.objects.length > 0
         ? component.objects.flatMap((object, objectIndex) => {
             const objectId = objectAnchorId(componentId, object.id, object.name, objectIndex);
-            const objectLabel = [
-              object.name || `Object ${objectIndex + 1}`,
-              object.objectType === "active" ? "Active object" : "Passive object",
-              object.needsState
-                ? `${object.states.length} state${object.states.length === 1 ? "" : "s"}`
-                : "No state modeled",
-            ].join("<br/>");
+            const objectLabel = object.name || `Object ${objectIndex + 1}`;
 
             return [
               `      ${wrapFlowchartNode(objectId, objectLabel, "rounded")}`,
@@ -541,20 +532,30 @@ const generateBehavioralArchitectureDiagram = (
       `      direction TB`,
       `      ${wrapFlowchartNode(
         componentId,
-        formatBehavioralComponentLabel(
+        formatBehavioralComponentHeader(
           `${expanded ? "[-]" : "[+]"} ${component.name || `Component ${index + 1}`}`,
-          summary,
         ),
-        "subroutine",
+        "rectangle",
       )}`,
-      ...objectNodes,
-      ...objectEdges,
+      `      class ${componentId} componentHeader`,
+      ...(expanded
+        ? [
+            `      ${wrapFlowchartNode(componentRoleId, formatBehavioralComponentRole(summary), "rectangle")}`,
+            `      class ${componentRoleId} componentRole`,
+            ...objectNodes,
+            ...objectEdges,
+          ]
+        : []),
       `    end`,
       `    style ${componentGroupId} fill:${selected ? "#fff6e6" : "#fffdf8"},stroke:${selected ? "#b5651d" : "#365166"},stroke-width:${selected ? "3px" : "2px"},color:#081521`,
-      `    class ${componentId} componentCore`,
       ...(selected
-        ? [`    style ${componentId} fill:#f5ecd8,stroke:#0f766e,stroke-width:3px,color:#081521,font-weight:bold`]
-        : []),
+        ? [
+            `    style ${componentId} fill:#f5ecd8,stroke:#0f766e,stroke-width:2px,color:#081521,font-weight:bold`,
+            ...(expanded
+              ? [`    style ${componentRoleId} fill:transparent,stroke:transparent,color:#365166`]
+              : []),
+          ]
+        : [`    style ${componentId} fill:#f5ecd8,stroke:#123a35,stroke-width:2px,color:#081521,font-weight:bold`]),
     ];
   });
 
@@ -578,16 +579,18 @@ const generateBehavioralArchitectureDiagram = (
             toComponent?.id || interaction.toComponentId || "to",
             toIndex,
           );
+          const fromGroupId = `${fromId}_group`;
+          const toGroupId = `${toId}_group`;
           const label =
             [interaction.mechanism, interaction.data].filter(Boolean).join(": ") ||
             "interaction";
-          return `    ${fromId} -->|"${escapeLabel(label)}"| ${toId}`;
+          return `    ${fromGroupId} -->|"${escapeLabel(label)}"| ${toGroupId}`;
         })
       : components.slice(0, -1).map((component, index) => {
           const nextComponent = components[index + 1];
           const fromId = componentAnchorId(component.id, index);
           const toId = componentAnchorId(nextComponent.id, index + 1);
-          return `    ${fromId} -->|"discovery relation"| ${toId}`;
+          return `    ${fromId}_group -->|"discovery relation"| ${toId}_group`;
         });
 
   const actorEdges = workspace.discovery.contextEntities
@@ -610,13 +613,14 @@ const generateBehavioralArchitectureDiagram = (
       );
       return [
         `    ${wrapFlowchartNode(actorId, actor, "rectangle")}`,
-        `    ${actorId} -.-> ${normalizedTargetId}`,
+        `    ${actorId} -.-> ${normalizedTargetId}_group`,
         `    class ${actorId} actorNode`,
       ];
     });
 
   return `flowchart LR
-    classDef componentCore fill:#f4e7cf,stroke:#123a35,stroke-width:3px,color:#081521,font-weight:bold;
+    classDef componentHeader fill:#f5ecd8,stroke:#123a35,stroke-width:2px,color:#081521,font-weight:bold;
+    classDef componentRole fill:transparent,stroke:transparent,color:#365166;
     classDef behaviorObjectActive fill:#fffdf8,stroke:#365166,stroke-width:2px,color:#081521;
     classDef behaviorObjectPassive fill:#f4f7fb,stroke:#7a8fa3,stroke-width:2px,color:#081521;
     classDef behaviorObjectGhost fill:#f8f1e4,stroke:#8a9aa8,stroke-dasharray: 4 4,color:#4b6477;
