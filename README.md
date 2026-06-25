@@ -48,6 +48,7 @@ ArchFlow keeps that design work editable and structured before code exists.
 - Deployment / runtime diagram
 - Markdown export
 - Workspace JSON export/import
+- Synced file round-trip for `.workspace.json`, `.md`, and `AGENTS.md`
 - Optional AI-assisted drafting with OpenAI or Ollama
 
 ## Requirements
@@ -197,6 +198,21 @@ ArchFlow can export a human-readable markdown design draft from the current work
 
 Use workspace JSON when you want full-fidelity round-trip of the design data between machines or browsers.
 
+### Synced LLM / Codex Files
+
+From a workspace, you can sync three files into a folder for reuse with Codex or another assistant:
+
+- `${feature}.workspace.json`
+- `${feature}.md`
+- `AGENTS.md`
+
+ArchFlow also supports pulling changes back from that same synced folder:
+
+- edited `.workspace.json` updates the full workspace model
+- edited `.md` updates feature-definition fields such as title, requirement, summary, constraints, responsibilities, assumptions, and open questions
+- if both are pulled, JSON is loaded first and markdown feature-definition fields are then applied on top
+- if synced files changed outside ArchFlow, the workspace warns before normal editing and lets you either pull first or explicitly force ArchFlow to overwrite the files on the next sync
+
 ## Notes
 
 - Workspaces are stored in browser `localStorage`
@@ -210,4 +226,3 @@ Use workspace JSON when you want full-fidelity round-trip of the design data bet
 - The canonical source of truth is the workspace schema, not the Mermaid text
 - The workspace page is the main integration surface
 - Diagram rendering is intentionally derived from normalized workspace data
-

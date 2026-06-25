@@ -74,7 +74,9 @@ import {
   generateWorkspaceOutputs,
   getBehavioralComponentNodeId,
 } from "../../features/workspaces/generators";
+import { applyImportedMarkdownToWorkspace } from "../../features/workspaces/import/markdown";
 import { isWorkspaceSectionStarted } from "../../features/workspaces/state/progress";
+import type { WorkspaceSyncInspection, WorkspaceSyncState } from "../../features/workspaces/storage/file-sync";
 
 const SectionInputLabel = ({ children }: { children: string }) => (
   <span className="block text-[9px] font-medium uppercase tracking-[0.06em] text-slate/70">
@@ -261,14 +263,20 @@ const InlineHelpTrigger = ({
   </button>
 );
 
+const syncStateLabels: Record<WorkspaceSyncState, string> = {
+  unlinked: "Not linked",
+  "needs-baseline": "Needs baseline sync",
+  "in-sync": "In sync",
+  "workspace-changed": "Workspace changed",
+  "files-changed": "Files changed",
+  conflict: "Conflict",
+};
+
 const requirementsToText = (requirements: string[]): string =>
   requirements
     .map((item) => item.trim())
     .filter(Boolean)
     .join("\n");
-
-const stripRequirementPrefix = (value: string): string =>
-  value.replace(/^REQ-\d+\s*:\s*/i, "").trim();
 
 const appendUniqueOption = (
   options: string[],
@@ -294,108 +302,6 @@ const appendUniqueOption = (
 const removeOptionValue = (options: string[], value: string): string[] =>
   options.filter((option) => option.trim().toLowerCase() !== value.trim().toLowerCase());
 
-const headingAliases = {
-  summary: new Set(["summary", "feature summary"]),
-  requirement: new Set([
-    "requirement",
-    "requirements",
-    "feature requirement",
-    "feature requirements",
-    "overview",
-    "description",
-  ]),
-  constraints: new Set(["constraints", "constraint"]),
-  responsibilities: new Set([
-    "responsibilities",
-    "responsibility",
-    "feature responsibilities",
-    "feature responsibility",
-  ]),
-  goals: new Set(["goals", "goal"]),
-  assumptions: new Set(["assumptions", "assumption"]),
-  openQuestions: new Set(["open questions", "questions", "question"]),
-};
-
-const normalizeHeading = (value: string): string =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[*_`:#-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const parseMarkdownSections = (markdown: string): {
-  title: string;
-  sections: Map<string, string[]>;
-} => {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
-  const sections = new Map<string, string[]>();
-  let title = "";
-  let currentHeading = "requirement";
-
-  for (const line of lines) {
-    const headingMatch = line.match(/^\s{0,3}(#{1,6})\s+(.*)$/);
-    if (headingMatch) {
-      const level = headingMatch[1].length;
-      const heading = normalizeHeading(headingMatch[2]);
-      if (level === 1 && !title && heading) {
-        title = headingMatch[2].trim();
-      }
-
-      currentHeading = heading || currentHeading;
-      if (!sections.has(currentHeading)) {
-        sections.set(currentHeading, []);
-      }
-      continue;
-    }
-
-    const bucket = sections.get(currentHeading) ?? [];
-    bucket.push(line);
-    sections.set(currentHeading, bucket);
-  }
-
-  return { title, sections };
-};
-
-const resolveSectionBlock = (
-  sections: Map<string, string[]>,
-  aliases: Set<string>,
-): string[] => {
-  for (const [heading, lines] of sections.entries()) {
-    if (aliases.has(heading)) {
-      return lines;
-    }
-  }
-
-  return [];
-};
-
-const toBulletList = (lines: string[]): string[] => {
-  const bullets = lines
-    .map((line) => line.trim())
-    .filter((line) => /^[-*+]\s+/.test(line) || /^\d+\.\s+/.test(line))
-    .map((line) => line.replace(/^([-*+]|\d+\.)\s+/, "").trim())
-    .filter(Boolean);
-
-  if (bullets.length > 0) {
-    return bullets;
-  }
-
-  return lines
-    .join("\n")
-    .split(/\n+/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-};
-
-const toParagraph = (lines: string[]): string =>
-  lines
-    .join("\n")
-    .trim()
-    .replace(/\n{3,}/g, "\n\n");
-
-const inferTitleFromFileName = (fileName: string): string =>
-  fileName.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
 
 type FeatureWorkspacePageProps = {
   workspace: FeatureWorkspace;
@@ -403,6 +309,17 @@ type FeatureWorkspacePageProps = {
   onChange: (updater: (current: FeatureWorkspace) => FeatureWorkspace) => void;
   onExport: (markdown: string, fileName: string) => void;
   onExportWorkspaceJson: (workspace: FeatureWorkspace) => void;
+  onInspectLlmSync: (
+    workspace: FeatureWorkspace,
+    markdown: string,
+  ) => Promise<WorkspaceSyncInspection>;
+  onSyncLlmFiles: (workspace: FeatureWorkspace, markdown: string) => Promise<void>;
+  onPullLlmFiles: (workspace: FeatureWorkspace) => Promise<{
+    directoryName: string;
+    manifestFound: boolean;
+    markdown: { content: string; name: string } | null;
+    workspaceJson: { content: string; name: string } | null;
+  }>;
 };
 
 type AiStage = "definition" | "discovery" | "component";
@@ -433,9 +350,12 @@ const createEmptyScopeChatState = (): ScopeChatState => ({
 export const FeatureWorkspacePage = ({
   workspace,
   onBack,
-  onChange,
+  onChange: onWorkspaceChange,
   onExport,
   onExportWorkspaceJson,
+  onInspectLlmSync,
+  onSyncLlmFiles,
+  onPullLlmFiles,
 }: FeatureWorkspacePageProps) => {
   const [activeSection, setActiveSection] = useState<WorkspaceSectionId>("featureDefinition");
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(
@@ -482,6 +402,11 @@ export const FeatureWorkspacePage = ({
   const [importStatus, setImportStatus] = useState<"idle" | "success" | "error">("idle");
   const [importMessage, setImportMessage] = useState("");
   const [chatByScope, setChatByScope] = useState<Record<string, ScopeChatState>>({});
+  const [syncStatus, setSyncStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [syncMessage, setSyncMessage] = useState("");
+  const [syncState, setSyncState] = useState<WorkspaceSyncState>("unlinked");
+  const [syncDirectoryName, setSyncDirectoryName] = useState<string | null>(null);
+  const [editingOverrideEnabled, setEditingOverrideEnabled] = useState(false);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const outputs = useMemo(
     () =>
@@ -570,6 +495,118 @@ export const FeatureWorkspacePage = ({
     ...next,
     updatedAt: new Date().toISOString(),
   });
+
+  const refreshSyncState = async () => {
+    try {
+      const inspection = await onInspectLlmSync(workspace, outputs.markdown);
+      setSyncState(inspection.state);
+      setSyncDirectoryName(inspection.directoryName);
+      if (inspection.state === "files-changed" || inspection.state === "conflict") {
+        setEditingOverrideEnabled(false);
+      }
+      return inspection;
+    } catch {
+      return null;
+    }
+  };
+
+  const onChange = (updater: (current: FeatureWorkspace) => FeatureWorkspace) => {
+    if (syncState === "files-changed" && !editingOverrideEnabled) {
+      const shouldForceEdit = window.confirm(
+        "Synced files changed outside ArchFlow and have not been pulled yet.\n\nPress OK to continue editing in ArchFlow anyway. This may overwrite those file changes when you sync.\n\nPress Cancel to pull or review the file changes first.",
+      );
+      if (!shouldForceEdit) {
+        setSyncStatus("error");
+        setSyncMessage("Pulled file changes are required before normal editing, unless you explicitly force ArchFlow to continue.");
+        return;
+      }
+      setEditingOverrideEnabled(true);
+      setSyncState("conflict");
+      setSyncStatus("error");
+      setSyncMessage("Editing continued in ArchFlow after external file changes. Resolve by pulling or force syncing one side.");
+    }
+
+    onWorkspaceChange(updater);
+    if (syncState === "in-sync") {
+      setSyncState("workspace-changed");
+    } else if (syncState === "files-changed" && editingOverrideEnabled) {
+      setSyncState("conflict");
+    }
+  };
+
+  const syncLlmFiles = async () => {
+    if (syncState === "files-changed" || syncState === "conflict") {
+      const shouldForceSync = window.confirm(
+        "The synced files changed outside ArchFlow.\n\nPress OK to force ArchFlow to overwrite the files.\nPress Cancel to keep the file version and pull changes instead.",
+      );
+      if (!shouldForceSync) {
+        return;
+      }
+    }
+
+    setSyncStatus("loading");
+    setSyncMessage("Syncing workspace files...");
+    try {
+      await onSyncLlmFiles(workspace, outputs.markdown);
+      setEditingOverrideEnabled(false);
+      setSyncState("in-sync");
+      setSyncStatus("success");
+      setSyncMessage("Synced workspace JSON, markdown, and LLM guide.");
+    } catch (error) {
+      setSyncStatus("error");
+      setSyncMessage(
+        error instanceof Error ? error.message : "Could not sync workspace files.",
+      );
+    }
+  };
+
+  const pullLlmFiles = async () => {
+    if (syncState === "workspace-changed" || syncState === "conflict") {
+      const shouldPull = window.confirm(
+        "ArchFlow has local changes that have not been synced yet.\n\nPress OK to pull the file version into this workspace and overwrite those local changes.\nPress Cancel to keep the ArchFlow version and sync it out instead.",
+      );
+      if (!shouldPull) {
+        return;
+      }
+    }
+
+    setSyncStatus("loading");
+    setSyncMessage("Pulling changes from synced files...");
+    try {
+      const result = await onPullLlmFiles(workspace);
+      setEditingOverrideEnabled(false);
+      setSyncState("in-sync");
+      const pulledKinds = [
+        result.workspaceJson ? "JSON" : null,
+        result.markdown ? "markdown" : null,
+      ].filter(Boolean);
+      setSyncStatus("success");
+      setSyncMessage(
+        `Pulled ${pulledKinds.join(" and ")} from ${result.directoryName}. ${
+          result.markdown ? "Markdown updates override feature definition fields." : ""
+        }`.trim(),
+      );
+      setActiveSection("featureDefinition");
+    } catch (error) {
+      setSyncStatus("error");
+      setSyncMessage(
+        error instanceof Error ? error.message : "Could not pull synced workspace files.",
+      );
+    }
+  };
+
+  useEffect(() => {
+    void refreshSyncState();
+  }, [workspace.id]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      void refreshSyncState();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [workspace.id]);
 
   useEffect(() => {
     if (
@@ -913,67 +950,8 @@ export const FeatureWorkspacePage = ({
 
     try {
       const content = await file.text();
-      const { title, sections } = parseMarkdownSections(content);
-      const summaryBlock = resolveSectionBlock(sections, headingAliases.summary);
-      const requirementBlock = resolveSectionBlock(sections, headingAliases.requirement);
-      const constraintsBlock = resolveSectionBlock(sections, headingAliases.constraints);
-      const responsibilitiesBlock = resolveSectionBlock(
-        sections,
-        headingAliases.responsibilities,
-      );
-      const goalsBlock = resolveSectionBlock(sections, headingAliases.goals);
-      const assumptionsBlock = resolveSectionBlock(sections, headingAliases.assumptions);
-      const openQuestionsBlock = resolveSectionBlock(
-        sections,
-        headingAliases.openQuestions,
-      );
-
-      const nextTitle = title || inferTitleFromFileName(file.name) || workspace.title;
-      const nextSummary = toParagraph(summaryBlock);
-      const nextRequirements = toBulletList(requirementBlock);
-      const nextRequirement =
-        (nextRequirements.length > 0
-          ? requirementsToText(nextRequirements.map(stripRequirementPrefix))
-          : "") ||
-        toParagraph(requirementBlock) ||
-        (sections.size === 1 ? content.trim() : workspace.requirement);
-      const nextConstraints = toBulletList(constraintsBlock);
-      const nextResponsibilities = toBulletList(responsibilitiesBlock);
-      const nextGoals = toBulletList(goalsBlock);
-      const nextAssumptions = toBulletList(assumptionsBlock);
-      const nextOpenQuestions = toBulletList(openQuestionsBlock);
-
       onChange((current) =>
-        updateTimestamp({
-          ...current,
-          title: nextTitle,
-          requirement: nextRequirement,
-          featureSummary: {
-            ...current.featureSummary,
-            summary: nextSummary || current.featureSummary.summary,
-            goals:
-              nextRequirements.length > 0
-                ? nextRequirements.map(stripRequirementPrefix)
-                : nextGoals.length > 0
-                  ? nextGoals
-                  : current.featureSummary.goals,
-            constraints:
-              nextConstraints.length > 0 ? nextConstraints : current.featureSummary.constraints,
-            assumptions:
-              nextAssumptions.length > 0 ? nextAssumptions : current.featureSummary.assumptions,
-            openQuestions:
-              nextOpenQuestions.length > 0
-                ? nextOpenQuestions
-                : current.featureSummary.openQuestions,
-          },
-          discovery: {
-            ...current.discovery,
-            responsibilities:
-              nextResponsibilities.length > 0
-                ? nextResponsibilities
-                : current.discovery.responsibilities,
-          },
-        }),
+        updateTimestamp(applyImportedMarkdownToWorkspace(current, content, file.name)),
       );
 
       setActiveSection("featureDefinition");
@@ -2138,9 +2116,11 @@ export const FeatureWorkspacePage = ({
             <PreviewCard
               title="Feature Requirement Markdown"
               action={
-                <Button onClick={() => onExport(outputs.markdown, workspace.title)}>
-                  Export Requirement Markdown
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => onExport(outputs.markdown, workspace.title)}>
+                    Export Requirement Markdown
+                  </Button>
+                </div>
               }
             >
               <pre className="max-h-[420px] overflow-auto rounded-2xl bg-ink p-4 text-xs text-white">
@@ -2258,6 +2238,41 @@ export const FeatureWorkspacePage = ({
           </div>
         </section>
       ) : null}
+
+      <div className="fixed bottom-5 left-5 z-30 w-[min(250px,calc(100vw-2.5rem))] rounded-[20px] border border-white/70 bg-white/95 p-3 shadow-panel backdrop-blur">
+        <p className="text-[10px] uppercase tracking-[0.18em] text-copper">LLM Sync</p>
+        <p className="mt-1 text-xs text-slate">
+          Keep the same design files updated for Codex or another LLM.
+        </p>
+        <p className="mt-2 text-[11px] font-medium text-ink">
+          {syncStateLabels[syncState]}
+          {syncDirectoryName ? ` • ${syncDirectoryName}` : ""}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button onClick={() => void syncLlmFiles()} tone="primary" disabled={syncStatus === "loading"}>
+            {syncStatus === "loading" ? "Syncing Files..." : "Sync LLM Files"}
+          </Button>
+          <Button onClick={() => void pullLlmFiles()} tone="secondary" disabled={syncStatus === "loading"}>
+            {syncStatus === "loading" ? "Working..." : "Pull Synced Files"}
+          </Button>
+          <Button onClick={() => void refreshSyncState()} tone="secondary" size="compact" disabled={syncStatus === "loading"}>
+            Refresh
+          </Button>
+        </div>
+        {syncMessage ? (
+          <p
+            className={`mt-2 text-[11px] ${
+              syncStatus === "error"
+                ? "text-red-700"
+                : syncStatus === "success"
+                  ? "text-pine"
+                  : "text-slate"
+            }`}
+          >
+            {syncMessage}
+          </p>
+        ) : null}
+      </div>
 
     </div>
   );
