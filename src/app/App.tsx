@@ -292,6 +292,11 @@ Valid \`objectType\` values:
 - \`active\`
 - \`passive\`
 
+Derivation hint:
+
+- active objects are the strongest source for candidate tasks and runtime nodes
+- passive objects usually stay inside component detail only
+
 ## Internal Object Interaction Pattern
 
 Use:
@@ -348,6 +353,10 @@ Valid \`triggerKind\` values:
 Important:
 
 - \`targetState\` must match a real state name in the same object.
+
+Execution hint:
+
+- if an object has waiting, retrying, polling, scheduling, blocking, or asynchronous states, ask whether it implies a candidate task or another runtime node
 
 ## Sequence Scenario Pattern
 
@@ -500,6 +509,21 @@ How to think:
 - Component diagram asks: what logical parts exist?
 - Runtime diagram asks: where do those parts execute and what runtime resources connect them?
 
+Derive runtime from component details:
+
+1. identify active objects
+2. identify objects with meaningful state or independent waiting behavior
+3. identify object interactions that imply queue/timer/ISR/resource boundaries
+4. convert only the execution-relevant parts into runtime nodes and runtime links
+
+Do not assume one component equals one runtime node.
+
+Possible mappings:
+
+- one component -> many runtime nodes
+- many components -> one runtime node
+- one active object -> one candidate task -> one runtime node
+
 Do not fill this section with folder names, source files, or class names.
 Do not copy logical component names blindly unless they also represent real runtime nodes.
 
@@ -628,6 +652,12 @@ Use:
 discovery.candidateTasks[]
 \`\`\`
 
+What this section means:
+
+- Candidate tasks are draft execution-unit ideas.
+- They should come from component details, especially active objects and execution behavior.
+- They are not just copies of component names.
+
 Example:
 
 \`\`\`json
@@ -642,6 +672,17 @@ Example:
   "notes": ""
 }
 \`\`\`
+
+Good reasons to create a candidate task:
+
+- an active object waits independently
+- an object handles asynchronous work
+- an object may block
+- an object needs its own scheduling or priority
+
+Bad reason to create a candidate task:
+
+- a component exists at a high level, but no execution boundary is evident yet
 
 ## Common Mistakes To Avoid
 
@@ -791,9 +832,11 @@ If the requested change affects architecture, components, objects, interactions,
 1. Read \`${baseName}.md\` for quick understanding.
 2. Read \`${baseName}.workspace.json\` for the real editable structure.
 3. Decide whether the requested change belongs in markdown, JSON, or both.
-4. For architecture/detail changes, edit JSON first.
-5. Only edit markdown when the change is part of feature-definition text.
-6. Keep JSON and markdown semantically aligned when both are updated.
+4. Define or refine component details before inventing runtime structure.
+5. Use internal objects, active objects, object states, and object interactions as the source for candidate tasks and runtime nodes.
+6. For architecture/detail changes, edit JSON first.
+7. Only edit markdown when the change is part of feature-definition text.
+8. Keep JSON and markdown semantically aligned when both are updated.
 
 ## Workspace Section Edit Map
 
@@ -916,6 +959,14 @@ Use this section for:
 - deciding active vs passive objects
 - deciding whether an object needs state
 
+This section is the main source for later execution thinking.
+
+Use these questions here:
+
+- what inside this component actually reacts to events?
+- what inside this component waits, retries, blocks, or runs independently?
+- which object has a real lifecycle over time?
+
 Valid intent:
 
 - add a new object
@@ -967,6 +1018,8 @@ Use this section for:
 - adding states for one object
 - adding transitions between states
 - clarifying transition events and actions
+
+Objects with meaningful waiting, retrying, polling, timing, blocking, or asynchronous states are strong candidates for later candidate-task or runtime-node derivation.
 
 Important:
 
@@ -1063,6 +1116,15 @@ Use this section for:
 
 This section is for runtime entities, not logical components.
 
+Derive this section from component details, especially:
+
+- active objects
+- stateful objects
+- object interactions
+- blocking or waiting behavior
+- event-driven behavior
+- queue/timer/ISR/resource needs
+
 Good runtime nodes:
 
 - UART ISR
@@ -1073,6 +1135,17 @@ Good runtime nodes:
 - STM32F4 MCU
 
 Do not blindly copy component names into runtime nodes unless that component is also a real execution node or runtime resource.
+
+Mapping rule:
+
+- component = logical ownership
+- runtime node = execution or runtime-resource ownership
+
+That means:
+
+- one component may map to many runtime nodes
+- many components may run inside one runtime node
+- do not force 1-to-1 mapping
 
 ### 12. Candidate tasks
 
@@ -1085,6 +1158,24 @@ Use this section for:
 - candidate execution units
 - worker/task ideas
 - trigger, priority, and blocking notes
+
+Derive candidate tasks from component details first, not from high-level component names alone.
+
+Strong candidate-task signals:
+
+- active object
+- object that waits independently
+- object that blocks or may block
+- object that needs its own priority
+- object with asynchronous trigger handling
+- object with a meaningful execution lifecycle
+
+Important:
+
+- not every active object becomes a task
+- candidate tasks are draft execution ideas
+- runtime nodes are the fuller runtime model
+- candidate tasks are often a subset of runtime nodes
 
 ### 13. Custom options
 
