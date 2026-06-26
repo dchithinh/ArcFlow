@@ -52,7 +52,9 @@ export const MermaidPreview = ({
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
+  const suppressClickRef = useRef(false);
   const dragStateRef = useRef<{
+    hasMoved: boolean;
     pointerId: number;
     startX: number;
     startY: number;
@@ -187,12 +189,36 @@ export const MermaidPreview = ({
     };
   }, [nodeActions, svg]);
 
-  const beginDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (zoom <= 1) {
+  useEffect(() => {
+    const svgRoot = svgContainerRef.current;
+    if (!svgRoot) {
       return;
     }
 
+    const handleCaptureClick = (event: MouseEvent) => {
+      if (!suppressClickRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      suppressClickRef.current = false;
+    };
+
+    svgRoot.addEventListener("click", handleCaptureClick, true);
+    return () => {
+      svgRoot.removeEventListener("click", handleCaptureClick, true);
+    };
+  }, [svg]);
+
+  const beginDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
     dragStateRef.current = {
+      hasMoved: false,
       pointerId: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
@@ -200,7 +226,6 @@ export const MermaidPreview = ({
       originY: pan.y,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
-    setIsDragging(true);
   };
 
   const updateDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -210,6 +235,16 @@ export const MermaidPreview = ({
 
     const deltaX = event.clientX - dragStateRef.current.startX;
     const deltaY = event.clientY - dragStateRef.current.startY;
+    const movedEnough = Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3;
+    if (!dragStateRef.current.hasMoved && !movedEnough) {
+      return;
+    }
+
+    dragStateRef.current.hasMoved = true;
+    if (!isDragging) {
+      setIsDragging(true);
+    }
+
     setPan({
       x: dragStateRef.current.originX + deltaX,
       y: dragStateRef.current.originY + deltaY,
@@ -218,6 +253,7 @@ export const MermaidPreview = ({
 
   const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (dragStateRef.current?.pointerId === event.pointerId) {
+      suppressClickRef.current = dragStateRef.current.hasMoved;
       dragStateRef.current = null;
       setIsDragging(false);
       event.currentTarget.releasePointerCapture(event.pointerId);
@@ -289,9 +325,10 @@ export const MermaidPreview = ({
       </div>
       <div
         ref={viewportRef}
-        className={`min-h-0 flex-1 overflow-auto rounded-2xl bg-white ${
+        className={`min-h-0 flex-1 overflow-auto rounded-2xl bg-white select-none ${
           isDragging ? "cursor-grabbing" : zoom > 1 ? "cursor-grab" : "cursor-default"
         }`}
+        style={{ userSelect: "none", WebkitUserSelect: "none" }}
         onPointerDown={beginDrag}
         onPointerMove={updateDrag}
         onPointerUp={endDrag}
@@ -300,9 +337,12 @@ export const MermaidPreview = ({
       >
         <div
           ref={svgContainerRef}
+          className="select-none"
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             transformOrigin: "top left",
+            userSelect: "none",
+            WebkitUserSelect: "none",
           }}
           dangerouslySetInnerHTML={{ __html: svg }}
         />
