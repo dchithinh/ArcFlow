@@ -216,7 +216,6 @@ export const MermaidPreview = ({
       return;
     }
 
-    event.preventDefault();
     dragStateRef.current = {
       hasMoved: false,
       pointerId: event.pointerId,
@@ -225,7 +224,6 @@ export const MermaidPreview = ({
       originX: pan.x,
       originY: pan.y,
     };
-    event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const updateDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -238,6 +236,11 @@ export const MermaidPreview = ({
     const movedEnough = Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3;
     if (!dragStateRef.current.hasMoved && !movedEnough) {
       return;
+    }
+
+    if (!dragStateRef.current.hasMoved) {
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
     }
 
     dragStateRef.current.hasMoved = true;
@@ -254,9 +257,11 @@ export const MermaidPreview = ({
   const endDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (dragStateRef.current?.pointerId === event.pointerId) {
       suppressClickRef.current = dragStateRef.current.hasMoved;
+      if (dragStateRef.current.hasMoved && event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
       dragStateRef.current = null;
       setIsDragging(false);
-      event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
 
