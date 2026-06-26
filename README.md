@@ -48,7 +48,7 @@ ArchFlow keeps that design work editable and structured before code exists.
 - Deployment / runtime diagram
 - Markdown export
 - Workspace JSON export/import
-- Synced file round-trip for `.workspace.json`, `.md`, and `AGENTS.md`
+- Synced file round-trip for `.workspace.json`, `.md`, `AGENTS.md`, and `ARCHFLOW_EDIT_TEMPLATE.md`
 - Optional AI-assisted drafting with OpenAI or Ollama
 
 ## Requirements
@@ -200,11 +200,12 @@ Use workspace JSON when you want full-fidelity round-trip of the design data bet
 
 ### Synced LLM / Codex Files
 
-From a workspace, you can sync three files into a folder for reuse with Codex or another assistant:
+From a workspace, you can sync four files into a folder for reuse with Codex or another assistant:
 
 - `${feature}.workspace.json`
 - `${feature}.md`
 - `AGENTS.md`
+- `ARCHFLOW_EDIT_TEMPLATE.md`
 
 ArchFlow also supports pulling changes back from that same synced folder:
 

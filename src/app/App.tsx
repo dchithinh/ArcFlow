@@ -108,10 +108,12 @@ export const App = () => {
     const baseName = buildWorkspaceBaseName(workspace);
     const workspaceJson = JSON.stringify(workspace, null, 2);
     const agents = buildLlmGuideContent(workspace, markdown);
+    const editTemplate = buildEditTemplateContent(workspace);
 
     return {
       agents,
       baseName,
+      editTemplate,
       markdown,
       workspaceJson,
     };
@@ -123,6 +125,534 @@ export const App = () => {
       hash = (hash * 33) ^ value.charCodeAt(index);
     }
     return (hash >>> 0).toString(16);
+  };
+
+  const buildEditTemplateContent = (workspace: FeatureWorkspace): string => {
+    const featureTitle = workspace.title || "Feature Name";
+    return `# ARCHFLOW_EDIT_TEMPLATE.md
+
+## Purpose
+
+Use this file as the concrete editing pattern reference when updating ArchFlow synced files.
+
+Read order:
+
+1. \`AGENTS.md\`
+2. \`${buildWorkspaceBaseName(workspace)}.md\`
+3. \`${buildWorkspaceBaseName(workspace)}.workspace.json\`
+4. \`ARCHFLOW_EDIT_TEMPLATE.md\`
+
+This file shows valid edit shapes.
+It is not the source of truth.
+It is the example guide for how to edit the real workspace JSON safely.
+
+## Core Rules
+
+- Keep JSON valid.
+- Preserve existing IDs for existing items.
+- Add new IDs only for new items.
+- Preserve arrays as arrays.
+- Preserve objects as objects.
+- Do not replace structured fields with prose.
+- Edit markdown only for feature-definition text.
+
+## Feature Definition Pattern
+
+Use these JSON fields:
+
+\`\`\`text
+title
+requirement
+featureSummary.summary
+featureSummary.goals
+featureSummary.constraints
+featureSummary.assumptions
+featureSummary.openQuestions
+discovery.responsibilities
+\`\`\`
+
+Example:
+
+\`\`\`json
+{
+  "title": "${featureTitle}",
+  "requirement": "REQ-1\\nREQ-2",
+  "featureSummary": {
+    "summary": "Short feature summary",
+    "goals": ["REQ-1", "REQ-2"],
+    "constraints": ["Constraint 1"],
+    "assumptions": ["Assumption 1"],
+    "openQuestions": ["Question 1"]
+  },
+  "discovery": {
+    "responsibilities": ["Responsibility 1", "Responsibility 2"]
+  }
+}
+\`\`\`
+
+## Candidate Component Pattern
+
+Use:
+
+\`\`\`text
+discovery.candidateComponents[]
+\`\`\`
+
+Example:
+
+\`\`\`json
+{
+  "id": "component-existing-or-new-id",
+  "name": "Command Parser",
+  "responsibility": "Parse raw command text into structured command data",
+  "rationale": "Separates parsing from transport and dispatch"
+}
+\`\`\`
+
+## Component Interaction Pattern
+
+Use:
+
+\`\`\`text
+discovery.interactions[]
+\`\`\`
+
+Example:
+
+\`\`\`json
+{
+  "fromComponentId": "component-a-id",
+  "toComponentId": "component-b-id",
+  "mechanism": "event",
+  "data": "parsed command",
+  "notes": "Forward validated command for dispatch"
+}
+\`\`\`
+
+Important:
+
+- Use component IDs, not component names.
+- Keep \`mechanism\` as a short machine-friendly string.
+
+## Component Detail Pattern
+
+Use:
+
+\`\`\`text
+components[]
+\`\`\`
+
+Example:
+
+\`\`\`json
+{
+  "id": "component-a-id",
+  "name": "Command Parser",
+  "summary": "Parse raw terminal input into structured command data",
+  "inputs": ["raw command text"],
+  "outputs": ["parsed command"],
+  "incomingEvents": [],
+  "internalSignals": [],
+  "outgoingSignals": [],
+  "objects": [],
+  "objectInteractions": [],
+  "ownership": [],
+  "failureModes": [],
+  "debugging": {
+    "logs": [],
+    "traces": [],
+    "observability": []
+  }
+}
+\`\`\`
+
+## Internal Object Pattern
+
+Use:
+
+\`\`\`text
+components[].objects[]
+\`\`\`
+
+Example:
+
+\`\`\`json
+{
+  "id": "component-object-new-id",
+  "name": "Dispatch Queue Worker",
+  "responsibility": "Wait for parsed command and route it to the correct handler",
+  "objectType": "active",
+  "needsState": true,
+  "states": []
+}
+\`\`\`
+
+Valid \`objectType\` values:
+
+- \`active\`
+- \`passive\`
+
+## Internal Object Interaction Pattern
+
+Use:
+
+\`\`\`text
+components[].objectInteractions[]
+\`\`\`
+
+Example:
+
+\`\`\`json
+{
+  "fromObjectId": "object-a-id",
+  "toObjectId": "object-b-id",
+  "relationship": "Forwards parsed command",
+  "notes": "Internal handoff inside the component"
+}
+\`\`\`
+
+Important:
+
+- Use object IDs, not object names.
+
+## Object State Pattern
+
+Use:
+
+\`\`\`text
+components[].objects[].states[]
+\`\`\`
+
+Example:
+
+\`\`\`json
+{
+  "name": "WAIT_FOR_COMMAND",
+  "description": "Waiting for parsed command",
+  "transitions": [
+    {
+      "event": "parsed command received",
+      "triggerKind": "incoming",
+      "targetState": "DISPATCHING",
+      "action": "Select target handler"
+    }
+  ]
+}
+\`\`\`
+
+Valid \`triggerKind\` values:
+
+- \`incoming\`
+- \`internal\`
+
+Important:
+
+- \`targetState\` must match a real state name in the same object.
+
+## Sequence Scenario Pattern
+
+Use:
+
+\`\`\`text
+discovery.sequenceScenarios[]
+\`\`\`
+
+Scenario shape:
+
+\`\`\`json
+{
+  "id": "sequence-scenario-id",
+  "name": "User sends LED control command",
+  "goal": "Send an LED command and return a result",
+  "trigger": "User enters LED command in terminal",
+  "outcome": "LED handler executes the command and the user receives a response",
+  "failurePath": "Invalid command is rejected before dispatch",
+  "participants": [],
+  "steps": []
+}
+\`\`\`
+
+Participant shape:
+
+\`\`\`json
+{
+  "id": "sequence-participant-id",
+  "name": "Command Parser",
+  "kind": "component",
+  "description": "Parses raw command text"
+}
+\`\`\`
+
+Step shape:
+
+\`\`\`json
+{
+  "id": "sequence-step-id",
+  "fromParticipantId": "sequence-participant-a",
+  "toParticipantId": "sequence-participant-b",
+  "message": "Forward raw command text",
+  "type": "call",
+  "note": "Optional extra detail"
+}
+\`\`\`
+
+Only valid sequence step \`type\` values:
+
+- \`call\`
+- \`async\`
+- \`return\`
+- \`event\`
+
+Never use:
+
+- \`request\`
+- \`response\`
+- \`message\`
+
+If you think in terms of request/response, map them like this:
+
+- request -> \`call\`
+- async send -> \`async\`
+- response/result -> \`return\`
+- event emission -> \`event\`
+
+## Context Diagram Pattern
+
+Use:
+
+\`\`\`text
+discovery.contextEntities[]
+discovery.contextFlows[]
+\`\`\`
+
+Context entity example:
+
+\`\`\`json
+{
+  "id": "context-entity-id",
+  "name": "User",
+  "kind": "user",
+  "description": "Sends commands through terminal"
+}
+\`\`\`
+
+Context flow example:
+
+\`\`\`json
+{
+  "id": "context-flow-id",
+  "entityId": "context-entity-id",
+  "direction": "bidirectional",
+  "label": "set/get data",
+  "description": "User interacts with the feature"
+}
+\`\`\`
+
+## Data Flow Pattern
+
+Use:
+
+\`\`\`text
+discovery.dataFlowNodes[]
+discovery.dataFlows[]
+\`\`\`
+
+Data flow node example:
+
+\`\`\`json
+{
+  "id": "data-flow-node-id",
+  "name": "Command Dispatcher",
+  "kind": "process",
+  "description": "Routes commands to handlers"
+}
+\`\`\`
+
+Data flow example:
+
+\`\`\`json
+{
+  "id": "data-flow-id",
+  "fromNodeId": "data-flow-node-a",
+  "toNodeId": "data-flow-node-b",
+  "label": "parsed command",
+  "notes": "Command transfer"
+}
+\`\`\`
+
+## Runtime Pattern
+
+Use:
+
+\`\`\`text
+discovery.runtimeNodes[]
+discovery.runtimeLinks[]
+\`\`\`
+
+What this section means:
+
+- This is runtime structure, not code structure.
+- It shows what actually runs or exists at execution time.
+- Use it for tasks, threads, ISRs, queues, timers, mutexes, peripherals, services, devices, and hosting nodes.
+
+How to think:
+
+- Component diagram asks: what logical parts exist?
+- Runtime diagram asks: where do those parts execute and what runtime resources connect them?
+
+Do not fill this section with folder names, source files, or class names.
+Do not copy logical component names blindly unless they also represent real runtime nodes.
+
+Runtime node example:
+
+\`\`\`json
+{
+  "id": "runtime-node-id",
+  "name": "Command Task",
+  "kind": "task",
+  "responsibility": "Processes parsed commands",
+  "hostNodeId": "runtime-node-parent-id",
+  "notes": ""
+}
+\`\`\`
+
+Example runtime mapping for an STM32 + FreeRTOS command feature:
+
+\`\`\`json
+{
+  "runtimeNodes": [
+    {
+      "id": "runtime-mcu",
+      "name": "STM32F4 MCU",
+      "kind": "mcu",
+      "responsibility": "Hosts FreeRTOS tasks, queues and peripherals",
+      "hostNodeId": "",
+      "notes": ""
+    },
+    {
+      "id": "runtime-uart-isr",
+      "name": "UART ISR",
+      "kind": "isr",
+      "responsibility": "Receives UART bytes and wakes command handling flow",
+      "hostNodeId": "runtime-mcu",
+      "notes": ""
+    },
+    {
+      "id": "runtime-cli-task",
+      "name": "CLI Task",
+      "kind": "task",
+      "responsibility": "Collects terminal input and forwards complete command text",
+      "hostNodeId": "runtime-mcu",
+      "notes": ""
+    },
+    {
+      "id": "runtime-command-queue",
+      "name": "Command Queue",
+      "kind": "queue",
+      "responsibility": "Transfers parsed commands to worker tasks",
+      "hostNodeId": "runtime-mcu",
+      "notes": ""
+    },
+    {
+      "id": "runtime-led-task",
+      "name": "LED Task",
+      "kind": "task",
+      "responsibility": "Executes LED control commands",
+      "hostNodeId": "runtime-mcu",
+      "notes": ""
+    },
+    {
+      "id": "runtime-datetime-task",
+      "name": "DateTime Task",
+      "kind": "task",
+      "responsibility": "Executes date/time update commands",
+      "hostNodeId": "runtime-mcu",
+      "notes": ""
+    }
+  ],
+  "runtimeLinks": [
+    {
+      "id": "runtime-link-uart-cli",
+      "fromNodeId": "runtime-uart-isr",
+      "toNodeId": "runtime-cli-task",
+      "kind": "interrupt",
+      "label": "UART receive event",
+      "notes": ""
+    },
+    {
+      "id": "runtime-link-cli-queue",
+      "fromNodeId": "runtime-cli-task",
+      "toNodeId": "runtime-command-queue",
+      "kind": "queue",
+      "label": "parsed command",
+      "notes": ""
+    },
+    {
+      "id": "runtime-link-queue-led",
+      "fromNodeId": "runtime-command-queue",
+      "toNodeId": "runtime-led-task",
+      "kind": "queue",
+      "label": "LED command",
+      "notes": ""
+    },
+    {
+      "id": "runtime-link-queue-datetime",
+      "fromNodeId": "runtime-command-queue",
+      "toNodeId": "runtime-datetime-task",
+      "kind": "queue",
+      "label": "date/time command",
+      "notes": ""
+    }
+  ]
+}
+\`\`\`
+
+Runtime link example:
+
+\`\`\`json
+{
+  "id": "runtime-link-id",
+  "fromNodeId": "runtime-node-a",
+  "toNodeId": "runtime-node-b",
+  "kind": "queue",
+  "label": "command queue",
+  "notes": ""
+}
+\`\`\`
+
+## Candidate Task Pattern
+
+Use:
+
+\`\`\`text
+discovery.candidateTasks[]
+\`\`\`
+
+Example:
+
+\`\`\`json
+{
+  "id": "task-id",
+  "name": "LED Worker Task",
+  "responsibility": "Execute LED commands",
+  "priority": "medium",
+  "type": "event-driven",
+  "trigger": "LED command queued",
+  "mayBlock": false,
+  "notes": ""
+}
+\`\`\`
+
+## Common Mistakes To Avoid
+
+- Do not replace IDs with labels.
+- Do not invent new enum values when an existing one already exists.
+- Do not write sequence steps without \`id\`.
+- Do not use \`request\`, \`response\`, or \`message\` as sequence step types.
+- Do not move component architecture edits into markdown only.
+- Do not delete empty arrays or optional fields just to simplify the file.
+- Do not rename keys such as \`note\` to \`notes\` unless the schema already uses that exact field in that exact section.
+`;
   };
 
   const buildLlmGuideContent = (workspace: FeatureWorkspace, markdown: string): string => {
@@ -150,6 +680,11 @@ Use these files together:
 - Use this for quick orientation before reading the JSON.
 - It may be easier to review, but it is derived output.
 
+### \`ARCHFLOW_EDIT_TEMPLATE.md\`
+- Concrete editing examples for each workspace section.
+- Use this when you need an exact reference for valid JSON shapes and allowed values.
+- Follow this template when editing the synced workspace files.
+
 ## File Ownership Rules
 
 - Treat \`${baseName}.workspace.json\` as the only full-fidelity editable source.
@@ -158,11 +693,46 @@ Use these files together:
 - Do not edit \`AGENTS.md\` unless the user explicitly asks to change the agent instructions.
 - If markdown and JSON disagree, trust and edit the JSON.
 
+## Design View Meaning
+
+Use the correct design view for the correct kind of change:
+
+- Feature definition = feature intent, requirements, constraints, responsibilities
+- Component design = logical responsibilities and boundaries
+- Object/state design = internal behavior inside one component
+- Sequence design = step-by-step scenario flow
+- Runtime / deployment design = execution topology
+
+Important distinction:
+
+- Component design is not code structure.
+- Runtime / deployment design is not code structure either.
+- Runtime / deployment design shows what actually runs and how runtime nodes communicate.
+
+Runtime / deployment examples:
+
+- task
+- thread
+- ISR
+- timer
+- queue
+- mutex
+- peripheral
+- service
+- device
+
+Use runtime / deployment design when the question is:
+
+- where does this behavior execute?
+- what task/thread/ISR/service owns it?
+- what runtime resource carries the communication?
+
 ## Working Rules
 
 - Read this file first.
 - Read \`${baseName}.md\` next for fast understanding.
 - Read \`${baseName}.workspace.json\` after that for exact structure and field-level truth.
+- Read \`ARCHFLOW_EDIT_TEMPLATE.md\` before making JSON edits.
 - If markdown and JSON differ, trust the JSON.
 - Keep suggestions incremental and practical.
 - Preserve the user's intent and vocabulary.
@@ -225,6 +795,313 @@ If the requested change affects architecture, components, objects, interactions,
 5. Only edit markdown when the change is part of feature-definition text.
 6. Keep JSON and markdown semantically aligned when both are updated.
 
+## Workspace Section Edit Map
+
+Use this map to decide exactly where to edit.
+
+### 1. Feature definition
+
+Use markdown and JSON together only for feature-definition content.
+
+Primary JSON fields:
+
+- \`title\`
+- \`requirement\`
+- \`featureSummary.summary\`
+- \`featureSummary.goals\`
+- \`featureSummary.constraints\`
+- \`featureSummary.assumptions\`
+- \`featureSummary.openQuestions\`
+- \`discovery.responsibilities\`
+
+Use this section for:
+
+- feature name
+- feature summary
+- requirements
+- constraints
+- responsibilities
+- assumptions
+- open questions
+
+### 2. Candidate components
+
+Primary JSON field:
+
+- \`discovery.candidateComponents\`
+
+Each item should keep:
+
+- \`id\`
+- \`name\`
+- \`responsibility\`
+- \`rationale\`
+
+Use this section for:
+
+- adding or refining high-level components
+- adjusting component names
+- refining component responsibility wording
+- improving rationale for why a component exists
+
+### 3. Component interactions
+
+Primary JSON field:
+
+- \`discovery.interactions\`
+
+Each item should keep:
+
+- \`fromComponentId\`
+- \`toComponentId\`
+- \`mechanism\`
+- \`data\`
+- \`notes\`
+
+Use this section for:
+
+- who talks to whom
+- what data is exchanged
+- what interaction mechanism is used
+
+Do not replace component IDs with names in this section.
+
+### 4. Component details
+
+Primary JSON field:
+
+- \`components\`
+
+Each component should keep:
+
+- \`id\`
+- \`name\`
+- \`summary\`
+- \`inputs\`
+- \`outputs\`
+- \`incomingEvents\`
+- \`internalSignals\`
+- \`outgoingSignals\`
+- \`objects\`
+- \`objectInteractions\`
+- \`ownership\`
+- \`failureModes\`
+- \`debugging\`
+
+Use this section for:
+
+- refining one component in detail
+- defining inputs/outputs/events/signals
+- ownership and failure-mode detail
+- logging, traces, and observability notes
+
+### 5. Internal objects inside a component
+
+Primary JSON field:
+
+- \`components[].objects\`
+
+Each object should keep:
+
+- \`id\`
+- \`name\`
+- \`responsibility\`
+- \`objectType\`
+- \`needsState\`
+- \`states\`
+
+Use this section for:
+
+- defining internal objects before state design
+- deciding active vs passive objects
+- deciding whether an object needs state
+
+Valid intent:
+
+- add a new object
+- refine object responsibility
+- change \`objectType\` between \`active\` and \`passive\`
+- set \`needsState\`
+
+### 6. Internal object interactions
+
+Primary JSON field:
+
+- \`components[].objectInteractions\`
+
+Each item should keep:
+
+- \`fromObjectId\`
+- \`toObjectId\`
+- \`relationship\`
+- \`notes\`
+
+Use this section for:
+
+- object-to-object collaboration inside one component
+- control flow or information flow between internal objects
+
+Do not use object names in place of object IDs here.
+
+### 7. Object state diagrams
+
+Primary JSON field:
+
+- \`components[].objects[].states\`
+
+Each state should keep:
+
+- \`name\`
+- \`description\`
+- \`transitions\`
+
+Each transition should keep:
+
+- \`event\`
+- \`triggerKind\`
+- \`targetState\`
+- \`action\`
+
+Use this section for:
+
+- adding states for one object
+- adding transitions between states
+- clarifying transition events and actions
+
+Important:
+
+- state names must be stable strings
+- \`targetState\` must point to a real state name in the same object
+- do not replace states with free-form prose
+
+### 8. Context diagram
+
+Primary JSON fields:
+
+- \`discovery.contextEntities\`
+- \`discovery.contextFlows\`
+
+Use this section for:
+
+- external users, devices, systems, or services
+- boundary flows into and out of the feature
+
+### 9. Sequence scenarios
+
+Primary JSON field:
+
+- \`discovery.sequenceScenarios\`
+
+Each scenario should keep:
+
+- \`id\`
+- \`name\`
+- \`goal\`
+- \`trigger\`
+- \`outcome\`
+- \`failurePath\`
+- \`participants\`
+- \`steps\`
+
+Each participant should keep:
+
+- \`id\`
+- \`name\`
+- \`kind\`
+- \`description\`
+
+Each step should keep:
+
+- \`id\`
+- \`fromParticipantId\`
+- \`toParticipantId\`
+- \`message\`
+- \`type\`
+- \`note\`
+
+For sequence step \`type\`, only use:
+
+- \`call\`
+- \`async\`
+- \`return\`
+- \`event\`
+
+Do not invent alternative step types like:
+
+- \`request\`
+- \`response\`
+- \`message\`
+
+Map them to the valid values above instead.
+
+### 10. Data flow diagram
+
+Primary JSON fields:
+
+- \`discovery.dataFlowNodes\`
+- \`discovery.dataFlows\`
+
+Use this section for:
+
+- external entities
+- processes
+- data stores
+- data movement between them
+
+### 11. Runtime / deployment
+
+Primary JSON fields:
+
+- \`discovery.runtimeNodes\`
+- \`discovery.runtimeLinks\`
+
+Use this section for:
+
+- MCU/core/task/thread/timer/queue/mutex/service topology
+- execution placement
+- runtime communication links
+
+This section is for runtime entities, not logical components.
+
+Good runtime nodes:
+
+- UART ISR
+- CLI Task
+- Command Queue
+- LED Task
+- DateTime Task
+- STM32F4 MCU
+
+Do not blindly copy component names into runtime nodes unless that component is also a real execution node or runtime resource.
+
+### 12. Candidate tasks
+
+Primary JSON field:
+
+- \`discovery.candidateTasks\`
+
+Use this section for:
+
+- candidate execution units
+- worker/task ideas
+- trigger, priority, and blocking notes
+
+### 13. Custom options
+
+Primary JSON field:
+
+- \`discovery.customOptions\`
+
+Only edit this when you are intentionally adding custom enum-like values for:
+
+- interaction mechanisms
+- data flow node kinds
+- runtime node kinds
+- runtime link kinds
+- context entity kinds
+
+Do not edit this section unless needed.
+
 ## What Codex Should Help With
 
 - find missing components
@@ -266,6 +1143,8 @@ Read AGENTS.md first, then read ${baseName}.md and ${baseName}.workspace.json.
 
 Use the markdown file for overview and the JSON file as the source of truth.
 Edit the files in a way that remains re-importable into ArchFlow.
+Follow the workspace section edit map in AGENTS.md when deciding what to change.
+Use ARCHFLOW_EDIT_TEMPLATE.md as the concrete reference for valid edit shapes.
 
 Help me improve this design incrementally.
 Focus on:
@@ -281,6 +1160,7 @@ Do not rewrite the whole design unless I ask.
 Preserve schema structure and existing IDs unless a new item is being added.
 If the change affects architecture detail, edit the JSON.
 If the change only affects feature-definition text, markdown edits are allowed.
+For sequence scenarios, use only valid step types: call, async, return, event.
 Keep edits concrete so I can pull them back into ArchFlow.
 \`\`\`
 
@@ -348,6 +1228,11 @@ ${markdown}
         {
           name: `AGENTS.md`,
           content: currentFiles.agents,
+          type: "text/markdown;charset=utf-8",
+        },
+        {
+          name: `ARCHFLOW_EDIT_TEMPLATE.md`,
+          content: currentFiles.editTemplate,
           type: "text/markdown;charset=utf-8",
         },
       ],

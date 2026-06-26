@@ -551,7 +551,7 @@ export const FeatureWorkspacePage = ({
       setEditingOverrideEnabled(false);
       setSyncState("in-sync");
       setSyncStatus("success");
-      setSyncMessage("Synced workspace JSON, markdown, and LLM guide.");
+      setSyncMessage("Synced workspace JSON, markdown, AGENTS.md, and edit template.");
     } catch (error) {
       setSyncStatus("error");
       setSyncMessage(
