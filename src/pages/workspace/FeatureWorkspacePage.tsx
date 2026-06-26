@@ -383,6 +383,9 @@ export const FeatureWorkspacePage = ({
   const [selectedRuntimeLinkId, setSelectedRuntimeLinkId] = useState<string | null>(
     workspace.discovery.runtimeLinks[0]?.id ?? null,
   );
+  const [selectedCandidateTaskId, setSelectedCandidateTaskId] = useState<string | null>(
+    workspace.discovery.candidateTasks[0]?.id ?? null,
+  );
   const [expandedBehavioralComponentIds, setExpandedBehavioralComponentIds] = useState<string[]>(
     [],
   );
@@ -395,6 +398,7 @@ export const FeatureWorkspacePage = ({
   const [dataFlowDetailOpen, setDataFlowDetailOpen] = useState(false);
   const [runtimeNodeDetailOpen, setRuntimeNodeDetailOpen] = useState(false);
   const [runtimeLinkDetailOpen, setRuntimeLinkDetailOpen] = useState(false);
+  const [candidateTaskDetailOpen, setCandidateTaskDetailOpen] = useState(false);
   const [aiStatus, setAiStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [aiMessage, setAiMessage] = useState("");
   const [aiStage, setAiStage] = useState<AiStage>("discovery");
@@ -478,6 +482,10 @@ export const FeatureWorkspacePage = ({
   const selectedRuntimeLink =
     workspace.discovery.runtimeLinks.find((link) => link.id === selectedRuntimeLinkId) ??
     workspace.discovery.runtimeLinks[0] ??
+    null;
+  const selectedCandidateTask =
+    workspace.discovery.candidateTasks.find((task) => task.id === selectedCandidateTaskId) ??
+    workspace.discovery.candidateTasks[0] ??
     null;
   const behavioralDiagramComponents =
     workspace.components.length > 0 ? workspace.components : workspace.discovery.candidateComponents;
@@ -715,6 +723,17 @@ export const FeatureWorkspacePage = ({
   }, [selectedRuntimeLinkId, workspace.discovery.runtimeLinks]);
 
   useEffect(() => {
+    if (
+      selectedCandidateTaskId &&
+      workspace.discovery.candidateTasks.some((task) => task.id === selectedCandidateTaskId)
+    ) {
+      return;
+    }
+
+    setSelectedCandidateTaskId(workspace.discovery.candidateTasks[0]?.id ?? null);
+  }, [selectedCandidateTaskId, workspace.discovery.candidateTasks]);
+
+  useEffect(() => {
     if (aiStatus !== "loading") {
       setAiElapsedSeconds(0);
       return;
@@ -775,6 +794,12 @@ export const FeatureWorkspacePage = ({
       setRuntimeLinkDetailOpen(false);
     }
   }, [runtimeLinkDetailOpen, selectedRuntimeLink]);
+
+  useEffect(() => {
+    if (!selectedCandidateTask && candidateTaskDetailOpen) {
+      setCandidateTaskDetailOpen(false);
+    }
+  }, [candidateTaskDetailOpen, selectedCandidateTask]);
 
   const canGenerateAiDraft = canGenerateDiscoveryDraft(workspace);
   const missingDiscoveryInputs = getMissingDiscoveryDraftInputs(workspace);
@@ -1264,6 +1289,7 @@ export const FeatureWorkspacePage = ({
             setSelectedDataFlowId={setSelectedDataFlowId}
             selectedRuntimeNodeId={selectedRuntimeNodeId}
             selectedRuntimeLinkId={selectedRuntimeLinkId}
+            selectedCandidateTaskId={selectedCandidateTaskId}
             onOpenComponentDetail={(componentId, mode = "container") => {
               setSelectedComponentId(componentId);
               const component =
@@ -1299,6 +1325,10 @@ export const FeatureWorkspacePage = ({
             onOpenRuntimeLinkDetail={(linkId) => {
               setSelectedRuntimeLinkId(linkId);
               setRuntimeLinkDetailOpen(true);
+            }}
+            onOpenCandidateTaskDetail={(taskId) => {
+              setSelectedCandidateTaskId(taskId);
+              setCandidateTaskDetailOpen(true);
             }}
             canGenerateAiDraft={canGenerateAiDraft}
             missingDiscoveryInputs={missingDiscoveryInputs}
@@ -2237,6 +2267,67 @@ export const FeatureWorkspacePage = ({
             />
           </div>
         </section>
+      ) : null}
+
+      {candidateTaskDetailOpen && selectedCandidateTask ? (
+        <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-[1200px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-copper">Candidate Task Detail</p>
+                <h3 className="mt-2 text-2xl font-semibold text-ink">
+                  {selectedCandidateTask.name || "Unnamed candidate task"}
+                </h3>
+                <p className="mt-1 text-sm text-slate">
+                  Refine this candidate execution unit in a focused page with more room for trigger, priority, blocking, and task notes.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={() => setCandidateTaskDetailOpen(false)} tone="ghost">
+                  Close
+                </Button>
+              </div>
+            </div>
+            <div className="mt-4 grid flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(360px,0.92fr)_minmax(0,1.08fr)]">
+              <div className="space-y-4 overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <PreviewCard
+                  title="Deployment / Runtime Diagram"
+                  action={
+                    <ComponentOverlayDiagramButton
+                      title="Deployment / Runtime Diagram"
+                      chart={outputs.deploymentRuntimeDiagram}
+                    />
+                  }
+                >
+                  <MermaidPreview
+                    title={`${selectedCandidateTask.name || "Candidate Task"} Runtime Context`}
+                    chart={outputs.deploymentRuntimeDiagram}
+                    svgMode="natural"
+                    className="min-h-[420px]"
+                  />
+                </PreviewCard>
+              </div>
+              <div className="overflow-y-auto rounded-2xl bg-mist/60 p-4">
+                <CandidateTaskDetailEditor
+                  task={selectedCandidateTask}
+                  onChange={(nextTask) =>
+                    onChange((current) =>
+                      updateTimestamp({
+                        ...current,
+                        discovery: {
+                          ...current.discovery,
+                          candidateTasks: current.discovery.candidateTasks.map((task) =>
+                            task.id === nextTask.id ? nextTask : task,
+                          ),
+                        },
+                      }),
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <div className="fixed bottom-5 left-5 z-30 w-[min(250px,calc(100vw-2.5rem))] rounded-[20px] border border-white/70 bg-white/95 p-3 shadow-panel backdrop-blur">
@@ -3488,6 +3579,97 @@ const RuntimeLinkDetailEditor = ({
   </div>
 );
 
+const CandidateTaskDetailEditor = ({
+  task,
+  onChange,
+}: {
+  task: CandidateTask;
+  onChange: (nextTask: CandidateTask) => void;
+}) => (
+  <div className="space-y-4">
+    <Field
+      label="Candidate Task Details"
+      hint="Describe this possible execution unit before deciding whether it becomes part of the runtime topology."
+    >
+      <div className="grid gap-3">
+        <div className="space-y-1.5">
+          <SectionInputLabel>Task Name</SectionInputLabel>
+          <TextInput
+            value={task.name}
+            onChange={(value) => onChange({ ...task, name: value })}
+            placeholder="Task name"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Responsibility</SectionInputLabel>
+          <TextArea
+            value={task.responsibility}
+            onChange={(value) => onChange({ ...task, responsibility: value })}
+            rows={3}
+            placeholder="What would this execution unit handle?"
+          />
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <SectionInputLabel>Priority</SectionInputLabel>
+            <Select
+              value={task.priority}
+              onChange={(value) =>
+                onChange({
+                  ...task,
+                  priority: value === "high" || value === "low" ? value : "medium",
+                })
+              }
+              options={["high", "medium", "low"]}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <SectionInputLabel>Task Type</SectionInputLabel>
+            <Select
+              value={task.type}
+              onChange={(value) =>
+                onChange({
+                  ...task,
+                  type:
+                    value === "periodic" || value === "background" || value === "worker"
+                      ? value
+                      : "event-driven",
+                })
+              }
+              options={["periodic", "event-driven", "background", "worker"]}
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Trigger</SectionInputLabel>
+          <TextInput
+            value={task.trigger}
+            onChange={(value) => onChange({ ...task, trigger: value })}
+            placeholder="What starts or wakes this task?"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>May Block</SectionInputLabel>
+          <Select
+            value={task.mayBlock ? "yes" : "no"}
+            onChange={(value) => onChange({ ...task, mayBlock: value === "yes" })}
+            options={["yes", "no"]}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <SectionInputLabel>Notes</SectionInputLabel>
+          <TextArea
+            value={task.notes ?? ""}
+            onChange={(value) => onChange({ ...task, notes: value })}
+            rows={3}
+            placeholder="Optional notes, risks, or implementation considerations"
+          />
+        </div>
+      </div>
+    </Field>
+  </div>
+);
+
 const ContextEntityDetailEditor = ({
   entity,
   flows,
@@ -3927,6 +4109,7 @@ const WorkspaceSectionForm = ({
   setSelectedDataFlowId,
   selectedRuntimeNodeId,
   selectedRuntimeLinkId,
+  selectedCandidateTaskId,
   onOpenComponentDetail,
   onOpenContextDetail,
   onOpenScenarioDetail,
@@ -3935,6 +4118,7 @@ const WorkspaceSectionForm = ({
   onOpenDataFlowDetail,
   onOpenRuntimeNodeDetail,
   onOpenRuntimeLinkDetail,
+  onOpenCandidateTaskDetail,
   canGenerateAiDraft,
   missingDiscoveryInputs,
   aiStatus,
@@ -3962,6 +4146,7 @@ const WorkspaceSectionForm = ({
   setSelectedDataFlowId: (flowId: string | null) => void;
   selectedRuntimeNodeId: string | null;
   selectedRuntimeLinkId: string | null;
+  selectedCandidateTaskId: string | null;
   onOpenComponentDetail: (componentId: string, mode?: ComponentDetailMode) => void;
   onOpenContextDetail: (entityId: string) => void;
   onOpenScenarioDetail: (scenarioId: string) => void;
@@ -3970,6 +4155,7 @@ const WorkspaceSectionForm = ({
   onOpenDataFlowDetail: (flowId: string) => void;
   onOpenRuntimeNodeDetail: (nodeId: string) => void;
   onOpenRuntimeLinkDetail: (linkId: string) => void;
+  onOpenCandidateTaskDetail: (taskId: string) => void;
   canGenerateAiDraft: boolean;
   missingDiscoveryInputs: string[];
   aiStatus: "idle" | "loading" | "success" | "error";
@@ -4960,46 +5146,30 @@ const WorkspaceSectionForm = ({
                 label="Candidate Tasks"
                 hint="Capture the execution units that likely carry this feature as part of the design."
               >
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {workspace.discovery.candidateTasks.map((task, index) => (
                     <div
                       key={task.id}
-                      className="grid gap-3 rounded-2xl border border-slate/15 bg-mist/70 p-4"
+                      className={designSelectionCardClass(selectedCandidateTaskId === task.id)}
                     >
-                      <ObjectListEditor<CandidateTask>
-                        label="Task"
-                        items={[task]}
-                        onChange={(items) =>
-                          onChange((current) => {
-                            const next = [...current.discovery.candidateTasks];
-                            next[index] = items[0];
-                            return {
-                              ...current,
-                              discovery: { ...current.discovery, candidateTasks: next },
-                            };
-                          })
-                        }
-                        template={createEmptyCandidateTask()}
-                        fields={[
-                          { key: "name", label: "Task Name" },
-                          { key: "responsibility", label: "Responsibility" },
-                          {
-                            key: "priority",
-                            label: "Priority",
-                            type: "select",
-                            options: ["high", "medium", "low"],
-                          },
-                          {
-                            key: "type",
-                            label: "Task Type",
-                            type: "select",
-                            options: ["periodic", "event-driven", "background", "worker"],
-                          },
-                          { key: "trigger", label: "Trigger" },
-                          { key: "mayBlock", label: "May Block", type: "toggle" },
-                          { key: "notes", label: "Notes", type: "textarea" },
-                        ]}
-                      />
+                      <div className="flex items-start justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onOpenCandidateTaskDetail(task.id)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span className="block font-semibold">
+                            {task.name || "Unnamed candidate task"}
+                          </span>
+                          <p className="mt-1 text-sm text-slate">
+                            {task.type}
+                            {task.priority ? ` | ${task.priority}` : ""}
+                            {task.responsibility ? ` | ${task.responsibility}` : ""}
+                          </p>
+                          <p className="mt-1 text-sm text-slate/85">
+                            {task.trigger || "No trigger documented yet."}
+                          </p>
+                        </button>
                       <Button
                         onClick={() =>
                           onChange((current) => ({
@@ -5013,24 +5183,28 @@ const WorkspaceSectionForm = ({
                           }))
                         }
                         tone="danger"
+                        size="compact"
                       >
                         Remove
                       </Button>
                     </div>
+                    </div>
                   ))}
                   <Button
-                    onClick={() =>
+                    onClick={() => {
+                      const nextTask = createEmptyCandidateTask();
+                      onOpenCandidateTaskDetail(nextTask.id);
                       onChange((current) => ({
                         ...current,
                         discovery: {
                           ...current.discovery,
                           candidateTasks: [
                             ...current.discovery.candidateTasks,
-                            createEmptyCandidateTask(),
+                            nextTask,
                           ],
                         },
-                      }))
-                    }
+                      }));
+                    }}
                   >
                     Add Candidate Task
                   </Button>
