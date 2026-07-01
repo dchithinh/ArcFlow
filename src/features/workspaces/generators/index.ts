@@ -6,6 +6,7 @@ import type {
 
 export type WorkspaceOutputs = {
   markdown: string;
+  implementationOutline: string;
   contextDiagram: string;
   architectureFlowchart: string;
   dataFlowDiagram: string;
@@ -228,6 +229,80 @@ ${listBlock(workspace.featureSummary.assumptions)}
 ## Open Questions
 ${listBlock(workspace.featureSummary.openQuestions)}
 `;
+};
+
+const generateImplementationOutline = (workspace: FeatureWorkspace): string => {
+  const unitSections =
+    workspace.implementation.units.length > 0
+      ? workspace.implementation.units
+          .map((unit, index) => {
+            const componentNames = unit.componentIds
+              .map(
+                (componentId) =>
+                  workspace.discovery.candidateComponents.find((item) => item.id === componentId)?.name,
+              )
+              .filter(Boolean)
+              .join(", ");
+            const runtimeNames = unit.runtimeNodeIds
+              .map(
+                (runtimeNodeId) =>
+                  workspace.discovery.runtimeNodes.find((item) => item.id === runtimeNodeId)?.name,
+              )
+              .filter(Boolean)
+              .join(", ");
+            const taskNames = unit.candidateTaskIds
+              .map(
+                (taskId) =>
+                  workspace.discovery.candidateTasks.find((item) => item.id === taskId)?.name,
+              )
+              .filter(Boolean)
+              .join(", ");
+
+            return `### Unit ${index + 1}: ${unit.name || "Unnamed implementation unit"}
+- Kind: ${unit.kind || "other"}
+- Responsibility: ${unit.responsibility || "Not documented yet."}
+- Requirement refs: ${unit.requirementRefs.join(", ") || "None"}
+- Components: ${componentNames || "None"}
+- Runtime nodes: ${runtimeNames || "None"}
+- Candidate tasks: ${taskNames || "None"}
+- Interfaces: ${unit.interfaces.filter((item) => item.trim()).join(", ") || "None"}
+- Files: ${unit.files.filter((item) => item.trim()).join(", ") || "None"}
+- Notes: ${unit.notes?.trim() || "None"}`;
+          })
+          .join("\n\n")
+      : "No implementation units mapped yet.";
+
+  const stepSections =
+    workspace.implementation.steps.length > 0
+      ? workspace.implementation.steps
+          .map((step, index) => {
+            const unitNames = step.moduleIds
+              .map(
+                (unitId) =>
+                  workspace.implementation.units.find((item) => item.id === unitId)?.name,
+              )
+              .filter(Boolean)
+              .join(", ");
+
+            return `### Step ${index + 1}: ${step.name || "Unnamed implementation step"}
+- Goal: ${step.goal || "Not documented yet."}
+- Units: ${unitNames || "None"}
+- Verification: ${step.verification.filter((item) => item.trim()).join(", ") || "None"}
+- Notes: ${step.notes?.trim() || "None"}`;
+          })
+          .join("\n\n")
+      : "No implementation steps mapped yet.";
+
+  return `# ${workspace.title}
+
+## Implementation Rules
+${listBlock(workspace.implementation.rules)}
+
+## Implementation Units
+${unitSections}
+
+## Implementation Steps
+${stepSections}`;
 };
 
 const generateContextDiagram = (
@@ -1115,6 +1190,7 @@ export const generateWorkspaceOutputs = (
   selectedRuntimeLinkId?: string,
 ): WorkspaceOutputs => ({
   markdown: generateMarkdown(workspace),
+  implementationOutline: generateImplementationOutline(workspace),
   contextDiagram: generateContextDiagram(workspace, selectedContextEntityId),
   architectureFlowchart: generateArchitectureFlowchart(workspace),
   dataFlowDiagram: generateDataFlowDiagram(

@@ -67,7 +67,8 @@ export type RuntimeLinkKind = FlexibleString<KnownRuntimeLinkKind>;
 
 export type WorkspaceSectionId =
   | "featureDefinition"
-  | "featureDesign";
+  | "featureDesign"
+  | "implementationMapping";
 
 export type EventDefinition = {
   name: string;
@@ -221,6 +222,39 @@ export type CandidateTask = {
   notes?: string;
 };
 
+type KnownImplementationUnitKind =
+  | "module"
+  | "service"
+  | "adapter"
+  | "worker"
+  | "interface"
+  | "store"
+  | "other";
+export type ImplementationUnitKind = FlexibleString<KnownImplementationUnitKind>;
+
+export type ImplementationUnit = {
+  id: string;
+  name: string;
+  kind: ImplementationUnitKind;
+  responsibility: string;
+  requirementRefs: string[];
+  componentIds: string[];
+  runtimeNodeIds: string[];
+  candidateTaskIds: string[];
+  interfaces: string[];
+  files: string[];
+  notes?: string;
+};
+
+export type ImplementationStep = {
+  id: string;
+  name: string;
+  goal: string;
+  moduleIds: string[];
+  verification: string[];
+  notes?: string;
+};
+
 export type WorkspaceCustomOptions = {
   interactionMechanisms: string[];
   dataFlowNodeKinds: string[];
@@ -279,16 +313,22 @@ export type FeatureWorkspace = {
     customOptions: WorkspaceCustomOptions;
   };
   components: FeatureComponent[];
+  implementation: {
+    units: ImplementationUnit[];
+    steps: ImplementationStep[];
+    rules: string[];
+  };
 };
 
 export type WorkspaceSectionDefinition = {
   id: WorkspaceSectionId;
   label: string;
   description: string;
-  stage: "definition" | "design";
+  stage: "definition" | "design" | "implementation";
 };
 
 export const WORKSPACE_SECTIONS: WorkspaceSectionDefinition[] = [
   { id: "featureDefinition", label: "Feature Definition", description: "Define the feature intent, scope, goals, constraints, and responsibilities.", stage: "definition" },
   { id: "featureDesign", label: "Feature Design", description: "Define candidate components, their interactions, and each component detail in one place.", stage: "design" },
+  { id: "implementationMapping", label: "Implementation Mapping", description: "Map the design into code-facing units, interfaces, and implementation steps.", stage: "implementation" },
 ];

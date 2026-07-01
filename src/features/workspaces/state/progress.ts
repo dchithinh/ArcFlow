@@ -74,6 +74,30 @@ export const isWorkspaceSectionStarted = (
             (step) => hasText(step.message) || hasText(step.note),
           ),
       );
+    case "implementationMapping":
+      return (
+        hasList(workspace.implementation.rules) ||
+        workspace.implementation.units.some(
+          (unit) =>
+            hasText(unit.name) ||
+            hasText(unit.responsibility) ||
+            hasText(unit.notes) ||
+            hasList(unit.interfaces) ||
+            hasList(unit.files) ||
+            unit.requirementRefs.length > 0 ||
+            unit.componentIds.length > 0 ||
+            unit.runtimeNodeIds.length > 0 ||
+            unit.candidateTaskIds.length > 0,
+        ) ||
+        workspace.implementation.steps.some(
+          (step) =>
+            hasText(step.name) ||
+            hasText(step.goal) ||
+            hasText(step.notes) ||
+            hasList(step.verification) ||
+            step.moduleIds.length > 0,
+        )
+      );
     default:
       return false;
   }

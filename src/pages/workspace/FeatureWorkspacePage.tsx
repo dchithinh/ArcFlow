@@ -20,6 +20,8 @@ import {
   createEmptyCandidateTask,
   createEmptyComponent,
   createEmptyComponentObject,
+  createEmptyImplementationStep,
+  createEmptyImplementationUnit,
   createEmptyContextEntity,
   createEmptyContextFlow,
   createEmptyDataFlow,
@@ -63,6 +65,8 @@ import {
   type FailureModeDefinition,
   type FeatureComponent,
   type FeatureWorkspace,
+  type ImplementationStep,
+  type ImplementationUnit,
   type OwnershipDefinition,
   type RuntimeLink,
   type RuntimeNode,
@@ -129,6 +133,16 @@ const RUNTIME_LINK_TYPE_OPTIONS = [
   "timer",
   "mutex",
   "data",
+  "other",
+] as const;
+
+const IMPLEMENTATION_UNIT_KIND_OPTIONS = [
+  "module",
+  "service",
+  "adapter",
+  "worker",
+  "interface",
+  "store",
   "other",
 ] as const;
 
@@ -241,6 +255,27 @@ const ActiveObjectStateHelpContent = () => (
       <p className="mt-1">
         If something inside it manages a lifecycle or reacts asynchronously, model that thing as an active object and start with three to five states.
       </p>
+    </div>
+  </div>
+);
+
+const ImplementationMappingHelpContent = () => (
+  <div className="space-y-4 text-sm text-slate">
+    <div className="rounded-2xl bg-mist/55 p-3">
+      <p className="font-semibold text-ink">What this phase is for</p>
+      <ul className="mt-2 space-y-1">
+        <li>Implementation units are code-facing ownership blocks such as modules, workers, adapters, stores, or interfaces.</li>
+        <li>Each unit should trace back to REQ-x, logical components, and runtime or task decisions where useful.</li>
+        <li>Implementation steps describe the order to build, integrate, and verify those units.</li>
+      </ul>
+    </div>
+    <div className="rounded-2xl bg-mist/55 p-3">
+      <p className="font-semibold text-ink">How to use it</p>
+      <ul className="mt-2 space-y-1">
+        <li>Start from implementation steps so the build slices are clear.</li>
+        <li>Then define code units that those steps build or integrate.</li>
+        <li>Use traceability links only where they help explain why a unit exists.</li>
+      </ul>
     </div>
   </div>
 );
@@ -1265,7 +1300,7 @@ export const FeatureWorkspacePage = ({
                 </div>
               </div>
             </>
-          ) : activeSection === "featureDesign" ? (
+          ) : activeSection === "featureDesign" || activeSection === "implementationMapping" ? (
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => onExportWorkspaceJson(workspace)} tone="secondary">
                 Export Workspace JSON
@@ -2269,6 +2304,34 @@ export const FeatureWorkspacePage = ({
         </section>
       ) : null}
 
+      {activeSection === "implementationMapping" ? (
+        <section className="rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel">
+          <p className="text-xs uppercase tracking-[0.25em] text-copper">Generated Outputs</p>
+          <h2 className="mt-2 text-2xl font-semibold">Implementation View</h2>
+          <div className="mt-5 space-y-5">
+            <DiagramPreviewCard
+              title="Deployment / Runtime Diagram"
+              chart={outputs.deploymentRuntimeDiagram}
+              previewTitle="Deployment / Runtime Diagram"
+              expandedTitle="Deployment / Runtime Diagram"
+              previewDefaultHeight={380}
+              previewMinWidth="min-w-[980px]"
+              expandedMinWidth="min-w-[1400px]"
+            />
+            <PreviewCard title="Candidate Task Summary">
+              <pre className="max-h-[320px] overflow-auto rounded-2xl bg-ink p-4 text-xs text-white">
+                {outputs.taskTable}
+              </pre>
+            </PreviewCard>
+            <PreviewCard title="Implementation Mapping Outline">
+              <pre className="max-h-[520px] overflow-auto rounded-2xl bg-ink p-4 text-xs text-white">
+                {outputs.implementationOutline}
+              </pre>
+            </PreviewCard>
+          </div>
+        </section>
+      ) : null}
+
       {candidateTaskDetailOpen && selectedCandidateTask ? (
         <div className="fixed inset-0 z-50 bg-ink/70 p-4 backdrop-blur-sm">
           <div className="mx-auto flex h-full max-w-[1200px] flex-col rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
@@ -3117,7 +3180,7 @@ const ArchitectureViewPanel = ({
   description,
   children,
 }: {
-  title: string;
+  title: ReactNode;
   description: string;
   children: ReactNode;
 }) => (
@@ -3179,6 +3242,356 @@ const formatDataFlowName = (
     workspace.discovery.dataFlowNodes,
     flow.toNodeId,
   )}`;
+
+const SelectableChipGroup = ({
+  options,
+  selected,
+  onToggle,
+  emptyMessage,
+}: {
+  options: Array<{ label: string; value: string }>;
+  selected: string[];
+  onToggle: (value: string) => void;
+  emptyMessage: string;
+}) =>
+  options.length === 0 ? (
+    <div className="rounded-xl border border-dashed border-slate/20 bg-mist/40 px-3 py-2 text-xs text-slate">
+      {emptyMessage}
+    </div>
+  ) : (
+    <div className="flex flex-wrap gap-2">
+      {options.map((option) => {
+        const active = selected.includes(option.value);
+        return (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => onToggle(option.value)}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+              active
+                ? "border-copper bg-sand text-ink"
+                : "border-slate/20 bg-white text-slate hover:border-slate/35"
+            }`}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+const toggleSelection = (items: string[], value: string): string[] =>
+  items.includes(value) ? items.filter((item) => item !== value) : [...items, value];
+
+const getSelectedLabels = (
+  options: Array<{ label: string; value: string }>,
+  selected: string[],
+): string[] => {
+  const labelByValue = new Map(options.map((option) => [option.value, option.label]));
+  return selected.map((value) => labelByValue.get(value) ?? value).filter(Boolean);
+};
+
+const ManagedSelectionField = ({
+  label,
+  hint,
+  options,
+  selected,
+  onToggle,
+  emptyMessage,
+  manageLabel = "Manage",
+  onItemClick,
+}: {
+  label: string;
+  hint: string;
+  options: Array<{ label: string; value: string }>;
+  selected: string[];
+  onToggle: (value: string) => void;
+  emptyMessage: string;
+  manageLabel?: string;
+  onItemClick?: (value: string) => void;
+}) => {
+  const [manageOpen, setManageOpen] = useState(false);
+  const selectedItems = options.filter((option) => selected.includes(option.value));
+
+  return (
+    <Field
+      label={
+        <div className="flex items-center justify-between gap-3">
+          <span>{label}</span>
+          <Button onClick={() => setManageOpen((current) => !current)} tone="secondary" size="compact">
+            {manageOpen ? "Close" : manageLabel}
+          </Button>
+        </div>
+      }
+      hint={hint}
+    >
+      <div className="space-y-3">
+        {selectedItems.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {selectedItems.map((item) => (
+              <span
+                key={item.value}
+                className="inline-flex items-center overflow-hidden rounded-full border border-copper/30 bg-sand text-xs font-medium text-ink"
+              >
+                <button
+                  type="button"
+                  onClick={() => onItemClick?.(item.value)}
+                  className={`px-3 py-1.5 text-left transition ${
+                    onItemClick ? "hover:bg-copper/10" : "cursor-default"
+                  }`}
+                >
+                  {item.label}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onToggle(item.value)}
+                  className="border-l border-copper/20 px-2 py-1.5 transition hover:bg-copper/15"
+                  aria-label={`Remove ${item.label}`}
+                  title={`Remove ${item.label}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-slate/20 bg-mist/40 px-3 py-2 text-xs text-slate">
+            {emptyMessage}
+          </div>
+        )}
+        {manageOpen ? (
+          <div className="rounded-xl border border-slate/15 bg-white px-3 py-3">
+            <SelectableChipGroup
+              options={options}
+              selected={selected}
+              onToggle={onToggle}
+              emptyMessage={emptyMessage}
+            />
+          </div>
+        ) : null}
+      </div>
+    </Field>
+  );
+};
+
+const ImplementationUnitEditor = ({
+  unit,
+  requirementLabels,
+  components,
+  runtimeNodes,
+  candidateTasks,
+  onChange,
+  onRemove,
+  index,
+}: {
+  unit: ImplementationUnit;
+  requirementLabels: string[];
+  components: ComponentCandidate[];
+  runtimeNodes: RuntimeNode[];
+  candidateTasks: CandidateTask[];
+  onChange: (unit: ImplementationUnit) => void;
+  onRemove: () => void;
+  index: number;
+}) => {
+  const requirementOptions = requirementLabels.map((label) => ({ label, value: label }));
+  const componentOptions = components.map((component) => ({
+    label: component.name || "Unnamed component",
+    value: component.id,
+  }));
+  const runtimeOptions = runtimeNodes.map((node) => ({
+    label: node.name || "Unnamed runtime node",
+    value: node.id,
+  }));
+  const taskOptions = candidateTasks.map((task) => ({
+    label: task.name || "Unnamed candidate task",
+    value: task.id,
+  }));
+
+  const selectedRequirements = getSelectedLabels(requirementOptions, unit.requirementRefs);
+  const selectedComponents = getSelectedLabels(componentOptions, unit.componentIds);
+  const selectedRuntimeNodes = getSelectedLabels(runtimeOptions, unit.runtimeNodeIds);
+  const selectedTasks = getSelectedLabels(taskOptions, unit.candidateTaskIds);
+
+  return (
+    <div className="rounded-[24px] border border-slate/15 bg-white/95 p-4 shadow-sm">
+      <div id={`implementation-unit-${unit.id}`} className="absolute -mt-24" />
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-copper">Implementation Unit {index + 1}</p>
+          <h4 className="mt-1 text-lg font-semibold text-ink">
+            {unit.name || "Unnamed implementation unit"}
+          </h4>
+          <p className="mt-1 text-xs text-slate">
+            {selectedRequirements.length > 0 ? selectedRequirements.join(", ") : "No REQ linked yet"}
+            {" | "}
+            {selectedComponents.length > 0 ? selectedComponents.join(", ") : "No component linked yet"}
+          </p>
+        </div>
+        <Button onClick={onRemove} tone="danger" size="compact">
+          Remove
+        </Button>
+      </div>
+      <div className="mt-4 grid gap-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+          <Field label="Unit Name">
+            <TextInput value={unit.name} onChange={(value) => onChange({ ...unit, name: value })} />
+          </Field>
+          <Field label="Kind">
+            <Select
+              value={unit.kind}
+              options={[...IMPLEMENTATION_UNIT_KIND_OPTIONS]}
+              onChange={(value) => onChange({ ...unit, kind: value })}
+            />
+          </Field>
+        </div>
+        <Field
+          label="Responsibility"
+          hint="Describe what code this unit should own. Keep this short and stable so it stays maintainable."
+        >
+          <TextArea
+            value={unit.responsibility}
+            onChange={(value) => onChange({ ...unit, responsibility: value })}
+          />
+        </Field>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <ManagedSelectionField
+            label="REQ Links"
+            hint="Keep these visible because they explain why the unit exists."
+            options={requirementOptions}
+            selected={unit.requirementRefs}
+            onToggle={(value) => onChange({ ...unit, requirementRefs: toggleSelection(unit.requirementRefs, value) })}
+            emptyMessage="No REQ-x items linked yet."
+            manageLabel="Link REQ"
+          />
+          <ManagedSelectionField
+            label="Mapped Components"
+            hint="Link the logical components this code unit realizes."
+            options={componentOptions}
+            selected={unit.componentIds}
+            onToggle={(value) => onChange({ ...unit, componentIds: toggleSelection(unit.componentIds, value) })}
+            emptyMessage="No components linked yet."
+            manageLabel="Link Components"
+          />
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <StringListEditor
+            label="Interfaces"
+            hint="Examples: command handler API, queue wrapper, parser entry point."
+            items={unit.interfaces}
+            onChange={(items) => onChange({ ...unit, interfaces: items })}
+            placeholder="Interface or API surface"
+          />
+          <StringListEditor
+            label="Files / Code Artifacts"
+            hint="Optional file hints only. Do not over-specify this too early."
+            items={unit.files}
+            onChange={(items) => onChange({ ...unit, files: items })}
+            placeholder="File path or code artifact"
+          />
+        </div>
+        <details className="rounded-2xl border border-slate/15 bg-mist/35 px-4 py-3">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-ink">
+            Advanced Traceability
+            <span className="ml-2 text-xs font-normal text-slate">
+              {selectedRuntimeNodes.length} runtime link{selectedRuntimeNodes.length === 1 ? "" : "s"}
+              {" | "}
+              {selectedTasks.length} task link{selectedTasks.length === 1 ? "" : "s"}
+            </span>
+          </summary>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <ManagedSelectionField
+              label="Mapped Runtime Nodes"
+              hint="Use only when this unit clearly belongs to a runtime boundary."
+              options={runtimeOptions}
+              selected={unit.runtimeNodeIds}
+              onToggle={(value) => onChange({ ...unit, runtimeNodeIds: toggleSelection(unit.runtimeNodeIds, value) })}
+              emptyMessage="No runtime nodes linked yet."
+              manageLabel="Link Runtime"
+            />
+            <ManagedSelectionField
+              label="Mapped Candidate Tasks"
+              hint="Use only when this unit clearly supports an execution unit."
+              options={taskOptions}
+              selected={unit.candidateTaskIds}
+              onToggle={(value) => onChange({ ...unit, candidateTaskIds: toggleSelection(unit.candidateTaskIds, value) })}
+              emptyMessage="No candidate tasks linked yet."
+              manageLabel="Link Tasks"
+            />
+          </div>
+        </details>
+        <Field label="Notes">
+          <TextArea value={unit.notes ?? ""} onChange={(value) => onChange({ ...unit, notes: value })} />
+        </Field>
+      </div>
+    </div>
+  );
+};
+
+const ImplementationStepEditor = ({
+  step,
+  units,
+  onChange,
+  onRemove,
+  index,
+}: {
+  step: ImplementationStep;
+  units: ImplementationUnit[];
+  onChange: (step: ImplementationStep) => void;
+  onRemove: () => void;
+  index: number;
+}) => {
+  const scrollToUnit = (unitId: string) => {
+    const element = document.getElementById(`implementation-unit-${unitId}`);
+    element?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  return (
+  <div className="rounded-[24px] border border-slate/15 bg-white/95 p-4 shadow-sm">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-xs uppercase tracking-[0.18em] text-copper">Implementation Step {index + 1}</p>
+        <h4 className="mt-1 text-lg font-semibold text-ink">
+          {step.name || "Unnamed implementation step"}
+        </h4>
+      </div>
+      <Button onClick={onRemove} tone="danger" size="compact">
+        Remove
+      </Button>
+    </div>
+    <div className="mt-4 grid gap-4">
+      <Field label="Step Name">
+        <TextInput value={step.name} onChange={(value) => onChange({ ...step, name: value })} />
+      </Field>
+      <Field label="Goal" hint="Describe what will exist and be working after this step is complete.">
+        <TextArea value={step.goal} onChange={(value) => onChange({ ...step, goal: value })} />
+      </Field>
+      <ManagedSelectionField
+        label="Linked Units"
+        hint="Choose the implementation units that this step builds or integrates."
+        options={units.map((unit) => ({
+          label: unit.name || "Unnamed implementation unit",
+          value: unit.id,
+        }))}
+        selected={step.moduleIds}
+        onToggle={(value) => onChange({ ...step, moduleIds: toggleSelection(step.moduleIds, value) })}
+        emptyMessage="No implementation units linked yet."
+        manageLabel="Link Units"
+        onItemClick={scrollToUnit}
+      />
+      <StringListEditor
+        label="Verification"
+        hint="List how you will prove this step is done: tests, logs, demo flow, or manual checks."
+        items={step.verification}
+        onChange={(items) => onChange({ ...step, verification: items })}
+        placeholder="Verification item"
+      />
+      <Field label="Notes">
+        <TextArea value={step.notes ?? ""} onChange={(value) => onChange({ ...step, notes: value })} />
+      </Field>
+    </div>
+  </div>
+  );
+};
 
 const InteractionDetailEditor = ({
   interaction,
@@ -4174,6 +4587,7 @@ const WorkspaceSectionForm = ({
   });
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [activeObjectHelpDialogOpen, setActiveObjectHelpDialogOpen] = useState(false);
+  const [implementationHelpDialogOpen, setImplementationHelpDialogOpen] = useState(false);
 
   switch (activeSection) {
     case "featureDefinition":
@@ -5210,6 +5624,175 @@ const WorkspaceSectionForm = ({
                   </Button>
                 </div>
               </Field>
+            </div>
+          </ArchitectureViewPanel>
+        </div>
+      );
+    case "implementationMapping":
+      return (
+        <div className="space-y-5">
+          <ArchitectureViewPanel
+            title={
+              <div className="flex items-center justify-between gap-3">
+                <span>Implementation Mapping Guide</span>
+                <InlineHelpTrigger
+                  onClick={() => setImplementationHelpDialogOpen(true)}
+                  label="Open implementation mapping help"
+                />
+              </div>
+            }
+            description="Turn the design into code-facing units and a build order without losing traceability back to requirements, components, runtime nodes, and candidate tasks."
+          >
+            <div className="grid gap-4">
+              <StringListEditor
+                label="Implementation Rules"
+                hint="Capture rules the code should follow, such as layering, ownership, error handling, or threading boundaries."
+                items={workspace.implementation.rules}
+                onChange={(items) =>
+                  onChange((current) => ({
+                    ...current,
+                    implementation: { ...current.implementation, rules: items },
+                  }))
+                }
+                placeholder="Implementation rule"
+              />
+            </div>
+            {implementationHelpDialogOpen ? (
+              <div className="fixed inset-0 z-[70] bg-ink/70 p-4 backdrop-blur-sm">
+                <div className="mx-auto max-w-[720px] rounded-[28px] border border-white/20 bg-white p-5 shadow-panel">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.25em] text-copper">Field Help</p>
+                      <h3 className="mt-2 text-2xl font-semibold text-ink">
+                        Implementation Mapping Guide
+                      </h3>
+                    </div>
+                    <Button onClick={() => setImplementationHelpDialogOpen(false)} tone="ghost">
+                      Close
+                    </Button>
+                  </div>
+                  <div className="mt-4 max-h-[70vh] overflow-y-auto rounded-2xl bg-white px-4 py-3">
+                    <ImplementationMappingHelpContent />
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </ArchitectureViewPanel>
+
+          <ArchitectureViewPanel
+            title="Implementation Steps"
+            description="Start from the build slices first. This is the main implementation view and usually easier to maintain than reading all code units at once."
+          >
+            <div className="space-y-4">
+              {workspace.implementation.steps.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-6 text-sm text-slate">
+                  No implementation steps yet. Add the first slice you would build and how you would verify it.
+                </div>
+              ) : (
+                workspace.implementation.steps.map((step, index) => (
+                  <ImplementationStepEditor
+                    key={step.id}
+                    step={step}
+                    units={workspace.implementation.units}
+                    onChange={(nextStep) =>
+                      onChange((current) => ({
+                        ...current,
+                        implementation: {
+                          ...current.implementation,
+                          steps: current.implementation.steps.map((item) =>
+                            item.id === nextStep.id ? nextStep : item,
+                          ),
+                        },
+                      }))
+                    }
+                    onRemove={() =>
+                      onChange((current) => ({
+                        ...current,
+                        implementation: {
+                          ...current.implementation,
+                          steps: current.implementation.steps.filter((item) => item.id !== step.id),
+                        },
+                      }))
+                    }
+                    index={index}
+                  />
+                ))
+              )}
+              <Button
+                onClick={() =>
+                  onChange((current) => ({
+                    ...current,
+                    implementation: {
+                      ...current.implementation,
+                      steps: [...current.implementation.steps, createEmptyImplementationStep()],
+                    },
+                  }))
+                }
+              >
+                Add Implementation Step
+              </Button>
+            </div>
+          </ArchitectureViewPanel>
+
+          <ArchitectureViewPanel
+            title="Code Units"
+            description="Define the code-facing ownership blocks after the steps are clear. Keep the main unit summary simple and use advanced traceability only when needed."
+          >
+            <div className="space-y-4">
+              {workspace.implementation.units.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate/25 bg-mist/60 p-6 text-sm text-slate">
+                  No implementation units yet. Add one to map a piece of the design into a module, adapter, worker, store, or interface.
+                </div>
+              ) : (
+                workspace.implementation.units.map((unit, index) => (
+                  <ImplementationUnitEditor
+                    key={unit.id}
+                    unit={unit}
+                    requirementLabels={workspace.featureSummary.goals.map((_, goalIndex) => `REQ-${goalIndex + 1}`)}
+                    components={workspace.discovery.candidateComponents}
+                    runtimeNodes={workspace.discovery.runtimeNodes}
+                    candidateTasks={workspace.discovery.candidateTasks}
+                    onChange={(nextUnit) =>
+                      onChange((current) => ({
+                        ...current,
+                        implementation: {
+                          ...current.implementation,
+                          units: current.implementation.units.map((item) =>
+                            item.id === nextUnit.id ? nextUnit : item,
+                          ),
+                        },
+                      }))
+                    }
+                    onRemove={() =>
+                      onChange((current) => ({
+                        ...current,
+                        implementation: {
+                          ...current.implementation,
+                          units: current.implementation.units.filter((item) => item.id !== unit.id),
+                          steps: current.implementation.steps.map((step) => ({
+                            ...step,
+                            moduleIds: step.moduleIds.filter((moduleId) => moduleId !== unit.id),
+                          })),
+                        },
+                      }))
+                    }
+                    index={index}
+                  />
+                ))
+              )}
+              <Button
+                onClick={() =>
+                  onChange((current) => ({
+                    ...current,
+                    implementation: {
+                      ...current.implementation,
+                      units: [...current.implementation.units, createEmptyImplementationUnit()],
+                    },
+                  }))
+                }
+              >
+                Add Implementation Unit
+              </Button>
             </div>
           </ArchitectureViewPanel>
         </div>

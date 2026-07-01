@@ -14,6 +14,7 @@ Before implementation, treat this file as the operating contract for how work sh
 - Treat generated outputs as derived views of the design model, not as the source of truth.
 - Prefer additive schema evolution so incomplete designs remain editable.
 - Distinguish feature-level discovery from component-level detail.
+- Keep implementation mapping as a separate phase after design, not mixed into high-level discovery.
 
 ## Project Agents
 
@@ -80,6 +81,12 @@ These are project roles and responsibility boundaries. They are architectural ow
 - Must not generate markdown or diagrams as the source of truth.
 - Must leave all generated workspace fields editable by the user afterward.
 
+### 11. Implementation Mapping Agent
+- Owns the bridge from design artifacts into code-facing structure.
+- Handles implementation units, traceability links, implementation rules, and implementation steps.
+- Must derive from feature requirements, components, runtime nodes, and candidate tasks instead of replacing them.
+- Must not collapse logical design structure into file paths only.
+
 ## Architectural Rules
 
 - The canonical source of truth is the `FeatureWorkspace` object.
@@ -87,8 +94,10 @@ These are project roles and responsibility boundaries. They are architectural ow
 - Generators consume normalized design data and return strings or structured derived output.
 - Persistence runs at app boundaries and never mutates schema shape.
 - Feature-level discovery happens before component-level detail.
+- Implementation mapping happens after component and runtime thinking, using them as inputs.
 - The detailed checklist belongs to a selected component, not the entire feature workspace.
 - Inside component detail, users should identify internal objects before defining active objects or per-object state diagrams.
+- Candidate tasks and runtime nodes should inform implementation mapping, but they are not the same thing as code modules.
 - Design-diagram generators should not truncate user-entered labels or descriptions with `...` by default; prefer wrapping full text unless a compact view is explicitly intended.
 - Each workflow block maps to:
   - workspace schema fragment
@@ -125,6 +134,7 @@ skills/
 
 When choosing implementation details, prefer the option that:
 - keeps feature discovery and component detail separate
+- keeps implementation mapping separate from logical component design
 - keeps component boundaries explicit
 - keeps generators pure
 - keeps draft persistence recoverable

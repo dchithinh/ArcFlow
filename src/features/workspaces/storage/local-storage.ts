@@ -306,11 +306,51 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
       },
     },
     components: Array.from(componentMap.values()),
+    implementation: {
+      units: [],
+      steps: [],
+      rules: [],
+    },
   };
 };
 
 export const normalizeImportedWorkspace = (workspace: FeatureWorkspace): FeatureWorkspace => {
   const base = createEmptyWorkspace();
+  const normalizeImplementationRules = (rules: unknown): string[] =>
+    Array.isArray(rules)
+      ? rules
+          .map((rule) => {
+            if (typeof rule === "string") {
+              return rule;
+            }
+
+            if (rule && typeof rule === "object") {
+              const candidate = rule as {
+                name?: unknown;
+                description?: unknown;
+              };
+              const name =
+                typeof candidate.name === "string" ? candidate.name.trim() : "";
+              const description =
+                typeof candidate.description === "string"
+                  ? candidate.description.trim()
+                  : "";
+
+              if (name && description) {
+                return `${name}: ${description}`;
+              }
+              if (name) {
+                return name;
+              }
+              if (description) {
+                return description;
+              }
+            }
+
+            return "";
+          })
+          .filter((rule) => rule.trim().length > 0)
+      : [];
 
   return {
     ...base,
@@ -405,6 +445,31 @@ export const normalizeImportedWorkspace = (workspace: FeatureWorkspace): Feature
           ),
         }))
       : [],
+    implementation: {
+      ...base.implementation,
+      ...workspace.implementation,
+      units: Array.isArray(workspace.implementation?.units)
+        ? workspace.implementation.units.map((unit) => ({
+            ...unit,
+            requirementRefs: Array.isArray(unit.requirementRefs) ? unit.requirementRefs : [],
+            componentIds: Array.isArray(unit.componentIds) ? unit.componentIds : [],
+            runtimeNodeIds: Array.isArray(unit.runtimeNodeIds) ? unit.runtimeNodeIds : [],
+            candidateTaskIds: Array.isArray(unit.candidateTaskIds)
+              ? unit.candidateTaskIds
+              : [],
+            interfaces: Array.isArray(unit.interfaces) ? unit.interfaces : [],
+            files: Array.isArray(unit.files) ? unit.files : [],
+          }))
+        : [],
+      steps: Array.isArray(workspace.implementation?.steps)
+        ? workspace.implementation.steps.map((step) => ({
+            ...step,
+            moduleIds: Array.isArray(step.moduleIds) ? step.moduleIds : [],
+            verification: Array.isArray(step.verification) ? step.verification : [],
+          }))
+        : [],
+      rules: normalizeImplementationRules(workspace.implementation?.rules),
+    },
   };
 };
 

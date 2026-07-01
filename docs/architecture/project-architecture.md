@@ -42,7 +42,7 @@ This means one design is no longer "one component". One design is one feature wo
 
 The system should be organized around this pipeline:
 
-`rough requirement -> feature architecture skeleton -> component detail -> derived outputs`
+`rough requirement -> feature architecture skeleton -> component detail -> runtime/task thinking -> implementation mapping -> derived outputs`
 
 With AI assistance enabled, the assisted path becomes:
 
@@ -52,6 +52,7 @@ This means:
 - the requirement is the input, not the full design
 - the app must support architecture discovery before detailed checklists
 - per-component design detail is subordinate to the feature workspace
+- implementation mapping should be a separate workflow phase that translates design into code-facing ownership
 - generated outputs should reflect both feature-level and component-level structure
 - AI suggestions must write into the workspace model, not directly into markdown or diagrams
 - AI generation should be staged by workflow block instead of trying to draft the full workspace in one request
@@ -212,8 +213,15 @@ type FeatureComponent = {
 ### 4. Output Generation
 - Generate feature-level architecture flow
 - Generate component-level state diagrams
+- Generate implementation mapping summaries
 - Generate markdown design draft
 - Generate risk review
+
+### 5. Implementation Mapping
+- User maps requirements, components, candidate tasks, and runtime nodes into code-facing implementation units.
+- User records interfaces, likely files or artifacts, and implementation rules.
+- User defines implementation steps so the build order is explicit and reviewable.
+- This phase should improve traceability from design to code without replacing the design model as the source of truth.
 
 ## Primary Modules
 

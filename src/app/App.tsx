@@ -684,6 +684,125 @@ Bad reason to create a candidate task:
 
 - a component exists at a high level, but no execution boundary is evident yet
 
+## Implementation Mapping Pattern
+
+Use:
+
+\`\`\`text
+implementation.units[]
+implementation.steps[]
+implementation.rules[]
+\`\`\`
+
+Important shape:
+
+- \`implementation.rules\` must stay a plain list of strings
+- do not convert \`implementation.rules\` into objects with fields like \`id\`, \`name\`, or \`description\`
+- if more detail is needed for a rule, keep it in one string line
+
+What this section means:
+
+- Implementation units are code-facing ownership blocks.
+- They are where you map the design into modules, workers, adapters, stores, or interfaces.
+- They should trace back to REQ-x, components, runtime nodes, or candidate tasks when useful.
+- Implementation steps describe build order and verification, not just architecture structure.
+
+Before editing this section, inspect these workspace inputs first:
+
+- \`featureSummary.goals\`
+- \`discovery.responsibilities\`
+- \`discovery.candidateComponents\`
+- \`discovery.interactions\`
+- \`components[].objects\`
+- \`components[].objectInteractions\`
+- \`components[].objects[].states\`
+- \`discovery.sequenceScenarios\`
+- \`discovery.candidateTasks\`
+- \`discovery.runtimeNodes\`
+- \`discovery.runtimeLinks\`
+
+Derive implementation mapping from the design already present in the workspace:
+
+1. start from \`featureSummary.goals\` and \`discovery.responsibilities\`
+2. inspect \`discovery.candidateComponents\` and \`discovery.interactions\`
+3. inspect \`components[].objects\`, \`components[].objectInteractions\`, and \`components[].objects[].states\`
+4. inspect \`discovery.sequenceScenarios\` for end-to-end behavior
+5. inspect \`discovery.candidateTasks\` and \`discovery.runtimeNodes\` for execution boundaries
+6. then create or update \`implementation.units\`, \`implementation.steps\`, and \`implementation.rules\`
+
+Do not invent implementation mapping separately from the design.
+If the current design is too weak to support a confident mapping, prefer:
+
+- leaving the implementation section partial
+- adding conservative implementation units
+- adding notes that point out what design detail is still missing
+
+Implementation mapping should answer:
+
+- what code-facing units should exist?
+- which REQ-x does each unit support?
+- which components does each unit realize?
+- which runtime node or candidate task does it relate to, if any?
+- what interface or API surface should it expose?
+- what is the safest implementation order?
+
+Implementation unit example:
+
+\`\`\`json
+{
+  "id": "implementation-unit-id",
+  "name": "Command Dispatch Module",
+  "kind": "module",
+  "responsibility": "Accept validated commands and route them to the correct handler path",
+  "requirementRefs": ["REQ-1"],
+  "componentIds": ["component-parser"],
+  "runtimeNodeIds": ["runtime-cli-task"],
+  "candidateTaskIds": ["task-command-worker"],
+  "interfaces": ["dispatch(command)"],
+  "files": ["src/features/command-dispatch/module.ts"],
+  "notes": ""
+}
+\`\`\`
+
+Good implementation-unit signals:
+
+- one component owns a clear responsibility boundary that should become code
+- several internal objects collaborate tightly and belong in one module
+- one active object implies a worker, adapter, scheduler, or service boundary
+- one runtime node clearly needs supporting code ownership
+- one interaction implies a stable interface or contract
+
+Bad implementation-unit behavior:
+
+- copying every component directly into one file without checking real code ownership
+- inventing files with no traceability back to the current design
+- using implementation mapping to redesign components indirectly
+
+Implementation step example:
+
+\`\`\`json
+{
+  "id": "implementation-step-id",
+  "name": "Build command dispatch path",
+  "goal": "Validated commands can reach the correct handler through one owned module boundary",
+  "moduleIds": ["implementation-unit-id"],
+  "verification": ["Unit test dispatch routing", "Manual demo with one valid command"],
+  "notes": ""
+}
+\`\`\`
+
+Implementation-step hints:
+
+- early steps should usually build one narrow vertical slice
+- each step should identify what gets implemented and how it is verified
+- verification should come from the scenario flow, runtime behavior, or feature requirement being satisfied
+
+Implementation-rule example:
+
+\`\`\`json
+"Keep terminal I/O separate from worker execution logic"
+\`\`\`
+
 ## Common Mistakes To Avoid
 
 - Do not replace IDs with labels.
@@ -691,6 +810,10 @@ Bad reason to create a candidate task:
 - Do not write sequence steps without \`id\`.
 - Do not use \`request\`, \`response\`, or \`message\` as sequence step types.
 - Do not move component architecture edits into markdown only.
+- Do not confuse runtime nodes with code modules.
+- Do not reduce implementation mapping to file names without responsibility and traceability.
+- Do not generate implementation mapping from feature summary alone when richer design data already exists.
+- Do not ignore component details, internal objects, states, candidate tasks, or runtime nodes when they are present.
 - Do not delete empty arrays or optional fields just to simplify the file.
 - Do not rename keys such as \`note\` to \`notes\` unless the schema already uses that exact field in that exact section.
 `;
@@ -731,6 +854,7 @@ Use these files together:
 - Treat \`${baseName}.workspace.json\` as the only full-fidelity editable source.
 - Treat \`${baseName}.md\` as a limited feature-definition edit surface.
 - Do not use \`${baseName}.md\` to redesign component structure, object structure, interactions, or states.
+- Do not use \`${baseName}.md\` alone to create implementation mapping when the JSON already contains richer design detail.
 - Do not edit \`AGENTS.md\` unless the user explicitly asks to change the agent instructions.
 - If markdown and JSON disagree, trust and edit the JSON.
 
@@ -743,12 +867,15 @@ Use the correct design view for the correct kind of change:
 - Object/state design = internal behavior inside one component
 - Sequence design = step-by-step scenario flow
 - Runtime / deployment design = execution topology
+- Implementation mapping = code-facing ownership, interfaces, and build order
 
 Important distinction:
 
 - Component design is not code structure.
 - Runtime / deployment design is not code structure either.
 - Runtime / deployment design shows what actually runs and how runtime nodes communicate.
+- Implementation mapping is the bridge from design into code structure.
+- Implementation mapping must be derived from the current workspace design, not invented as a separate architecture.
 
 Runtime / deployment examples:
 
@@ -834,9 +961,10 @@ If the requested change affects architecture, components, objects, interactions,
 3. Decide whether the requested change belongs in markdown, JSON, or both.
 4. Define or refine component details before inventing runtime structure.
 5. Use internal objects, active objects, object states, and object interactions as the source for candidate tasks and runtime nodes.
-6. For architecture/detail changes, edit JSON first.
-7. Only edit markdown when the change is part of feature-definition text.
-8. Keep JSON and markdown semantically aligned when both are updated.
+6. Use requirements, components, component details, runtime nodes, candidate tasks, and sequence scenarios as the source for implementation mapping.
+7. For architecture/detail changes, edit JSON first.
+8. Only edit markdown when the change is part of feature-definition text.
+9. Keep JSON and markdown semantically aligned when both are updated.
 
 ## Workspace Section Edit Map
 
@@ -1177,7 +1305,44 @@ Important:
 - runtime nodes are the fuller runtime model
 - candidate tasks are often a subset of runtime nodes
 
-### 13. Custom options
+### 13. Implementation mapping
+
+Primary JSON fields:
+
+- \`implementation.units\`
+- \`implementation.steps\`
+- \`implementation.rules\`
+
+Use this section for:
+
+- code-facing modules, workers, adapters, stores, or interfaces
+- tracing code units back to REQ-x, components, runtime nodes, and candidate tasks
+- recording likely files or code artifacts
+- defining build order and verification steps
+
+Derive this section from:
+
+- \`featureSummary.goals\`
+- \`discovery.responsibilities\`
+- \`discovery.candidateComponents\`
+- \`discovery.interactions\`
+- \`components[].objects\`
+- \`components[].objectInteractions\`
+- \`components[].objects[].states\`
+- \`discovery.sequenceScenarios\`
+- \`discovery.candidateTasks\`
+- \`discovery.runtimeNodes\`
+- \`discovery.runtimeLinks\`
+
+Important:
+
+- implementation mapping is not the same thing as logical component design
+- implementation mapping is not the same thing as runtime topology
+- use implementation mapping to explain how the design should land in code
+- if the design is incomplete, prefer partial mapping plus explicit notes instead of invented certainty
+- \`implementation.rules\` must remain a string list, not a list of objects
+
+### 14. Custom options
 
 Primary JSON field:
 
@@ -1202,6 +1367,8 @@ Do not edit this section unless needed.
 - suggest clearer interactions between components
 - suggest clearer interactions between internal objects
 - suggest state candidates, transitions, and triggering events
+- suggest better implementation-unit boundaries and implementation steps
+- derive implementation mapping from the existing feature design instead of inventing it separately
 - identify risks, assumptions, and open questions
 - point out inconsistent responsibilities or weak boundaries
 - help the user refine the design without replacing it
@@ -1245,6 +1412,8 @@ Focus on:
 - candidate execution units or tasks
 - missing states, transitions, or events
 - unclear interactions
+- implementation units that should exist in code
+- implementation steps and verification order
 - design risks, weak assumptions, or inconsistent boundaries
 
 Do not rewrite the whole design unless I ask.
@@ -1252,6 +1421,16 @@ Preserve schema structure and existing IDs unless a new item is being added.
 If the change affects architecture detail, edit the JSON.
 If the change only affects feature-definition text, markdown edits are allowed.
 For sequence scenarios, use only valid step types: call, async, return, event.
+For implementation mapping, derive it from the current workspace design:
+- REQ-x
+- candidate components
+- component details
+- internal objects and states
+- sequence scenarios
+- candidate tasks
+- runtime nodes and links
+Do not invent implementation mapping as a separate architecture unrelated to those inputs.
+If the design is not detailed enough, leave conservative partial mapping and explain what is still missing.
 Keep edits concrete so I can pull them back into ArchFlow.
 \`\`\`
 

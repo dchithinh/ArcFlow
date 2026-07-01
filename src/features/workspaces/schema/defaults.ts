@@ -8,6 +8,8 @@ import type {
   ContextFlow,
   FeatureComponent,
   FeatureWorkspace,
+  ImplementationStep,
+  ImplementationUnit,
   RuntimeLink,
   RuntimeNode,
   SequenceParticipant,
@@ -66,6 +68,29 @@ export const createEmptyCandidateTask = (): CandidateTask => ({
   type: "event-driven",
   trigger: "",
   mayBlock: false,
+  notes: "",
+});
+
+export const createEmptyImplementationUnit = (): ImplementationUnit => ({
+  id: createId("implementation-unit"),
+  name: "",
+  kind: "module",
+  responsibility: "",
+  requirementRefs: [],
+  componentIds: [],
+  runtimeNodeIds: [],
+  candidateTaskIds: [],
+  interfaces: [],
+  files: [],
+  notes: "",
+});
+
+export const createEmptyImplementationStep = (): ImplementationStep => ({
+  id: createId("implementation-step"),
+  name: "",
+  goal: "",
+  moduleIds: [],
+  verification: [],
   notes: "",
 });
 
@@ -189,6 +214,11 @@ export const createEmptyWorkspace = (): FeatureWorkspace => ({
     },
   },
   components: [],
+  implementation: {
+    units: [],
+    steps: [],
+    rules: [],
+  },
 });
 
 export const createSampleWorkspace = (): FeatureWorkspace => {
@@ -828,5 +858,13 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
         },
       },
     ],
+    implementation: {
+      units: [],
+      steps: [],
+      rules: [
+        "Map code-facing units only after component, object, and runtime thinking are clear enough.",
+        "Keep each implementation unit traceable back to REQ-x and the design elements it realizes.",
+      ],
+    },
   };
 };
