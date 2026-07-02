@@ -3453,37 +3453,55 @@ const ImplementationUnitEditor = ({
             onChange={(value) => onChange({ ...unit, responsibility: value })}
           />
         </Field>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <ManagedSelectionField
-            label="REQ Links"
-            hint="Keep these visible because they explain why the unit exists."
-            options={requirementOptions}
-            selected={unit.requirementRefs}
-            onToggle={(value) => onChange({ ...unit, requirementRefs: toggleSelection(unit.requirementRefs, value) })}
-            emptyMessage="No REQ-x items linked yet."
-            manageLabel="Link REQ"
-          />
-          <ManagedSelectionField
-            label="Mapped Components"
-            hint="Link the logical components this code unit realizes."
-            options={componentOptions}
-            selected={unit.componentIds}
-            onToggle={(value) => onChange({ ...unit, componentIds: toggleSelection(unit.componentIds, value) })}
-            emptyMessage="No components linked yet."
-            manageLabel="Link Components"
-          />
-        </div>
+        <details className="rounded-2xl border border-slate/15 bg-mist/35 px-4 py-3">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-ink">
+            REQ Links
+            <span className="ml-2 text-xs font-normal text-slate">
+              {selectedRequirements.length} linked
+            </span>
+          </summary>
+          <div className="mt-4">
+            <ManagedSelectionField
+              label="REQ Links"
+              hint=""
+              options={requirementOptions}
+              selected={unit.requirementRefs}
+              onToggle={(value) => onChange({ ...unit, requirementRefs: toggleSelection(unit.requirementRefs, value) })}
+              emptyMessage="No REQ-x items linked yet."
+              manageLabel="Link REQ"
+            />
+          </div>
+        </details>
+        <details className="rounded-2xl border border-slate/15 bg-mist/35 px-4 py-3">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-ink">
+            Mapped Components
+            <span className="ml-2 text-xs font-normal text-slate">
+              {selectedComponents.length} linked
+            </span>
+          </summary>
+          <div className="mt-4">
+            <ManagedSelectionField
+              label="Mapped Components"
+              hint="Link the logical components this code unit realizes."
+              options={componentOptions}
+              selected={unit.componentIds}
+              onToggle={(value) => onChange({ ...unit, componentIds: toggleSelection(unit.componentIds, value) })}
+              emptyMessage="No components linked yet."
+              manageLabel="Link Components"
+            />
+          </div>
+        </details>
         <div className="grid gap-4 lg:grid-cols-2">
           <StringListEditor
             label="Interfaces"
-            hint="Examples: command handler API, queue wrapper, parser entry point."
+            hint=""
             items={unit.interfaces}
             onChange={(items) => onChange({ ...unit, interfaces: items })}
             placeholder="Interface or API surface"
           />
           <StringListEditor
             label="Files / Code Artifacts"
-            hint="Optional file hints only. Do not over-specify this too early."
+            hint=""
             items={unit.files}
             onChange={(items) => onChange({ ...unit, files: items })}
             placeholder="File path or code artifact"
