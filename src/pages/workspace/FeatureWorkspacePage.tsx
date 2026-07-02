@@ -2310,6 +2310,15 @@ export const FeatureWorkspacePage = ({
           <h2 className="mt-2 text-2xl font-semibold">Implementation View</h2>
           <div className="mt-5 space-y-5">
             <DiagramPreviewCard
+              title="Implementation Interface Diagram"
+              chart={outputs.implementationInterfaceDiagram}
+              previewTitle="Implementation Interface Diagram"
+              expandedTitle="Implementation Interface Diagram"
+              previewDefaultHeight={420}
+              previewMinWidth="min-w-[1100px]"
+              expandedMinWidth="min-w-[1500px]"
+            />
+            <DiagramPreviewCard
               title="Deployment / Runtime Diagram"
               chart={outputs.deploymentRuntimeDiagram}
               previewTitle="Deployment / Runtime Diagram"

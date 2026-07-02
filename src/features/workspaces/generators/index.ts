@@ -7,6 +7,7 @@ import type {
 export type WorkspaceOutputs = {
   markdown: string;
   implementationOutline: string;
+  implementationInterfaceDiagram: string;
   contextDiagram: string;
   architectureFlowchart: string;
   dataFlowDiagram: string;
@@ -303,6 +304,64 @@ ${unitSections}
 
 ## Implementation Steps
 ${stepSections}`;
+};
+
+const generateImplementationInterfaceDiagram = (
+  workspace: FeatureWorkspace,
+): string => {
+  if (workspace.implementation.units.length === 0) {
+    return `classDiagram
+    class ImplementationMapping {
+      +Add implementation units
+      +Add interfaces to visualize code organization
+    }`;
+  }
+
+  const interfaceNodeIds = new Map<string, string>();
+  const lines: string[] = ["classDiagram"];
+
+  workspace.implementation.units.forEach((unit, unitIndex) => {
+    const unitId = `impl_unit_${cleanNode(unit.id || unit.name || `unit_${unitIndex}`)}_${unitIndex}`;
+    const unitName = escapeLabel(unit.name || "Unnamed implementation unit");
+    const responsibility = (unit.responsibility?.trim() || "No responsibility documented yet.")
+      .replace(/"/g, "'")
+      .replace(/\r?\n/g, " ");
+    const fileLines = unit.files
+      .filter((item) => item.trim())
+      .slice(0, 3)
+      .map((file) => file.replace(/"/g, "'"));
+
+    lines.push(`    class ${unitId}["${unitName}"]`);
+    lines.push(`    class ${unitId} {`);
+    lines.push(`      <<${unit.kind || "other"}>>`);
+    lines.push(`      +${responsibility}`);
+    fileLines.forEach((file) => {
+      lines.push(`      +${file}`);
+    });
+    lines.push("    }");
+
+    unit.interfaces
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .forEach((interfaceName) => {
+        const interfaceKey = interfaceName.toLowerCase();
+        let interfaceNodeId = interfaceNodeIds.get(interfaceKey);
+        if (!interfaceNodeId) {
+          interfaceNodeId = `impl_interface_${cleanNode(interfaceName)}_${interfaceNodeIds.size}`;
+          interfaceNodeIds.set(interfaceKey, interfaceNodeId);
+          const interfaceLabel = escapeLabel(interfaceName);
+          lines.push(`    class ${interfaceNodeId}["${interfaceLabel}"]`);
+          lines.push(`    class ${interfaceNodeId} {`);
+          lines.push("      <<interface>>");
+          lines.push(`      +${interfaceName.replace(/"/g, "'")}`);
+          lines.push("    }");
+        }
+
+        lines.push(`    ${unitId} ..> ${interfaceNodeId} : exposes`);
+      });
+  });
+
+  return lines.join("\n");
 };
 
 const generateContextDiagram = (
@@ -1191,6 +1250,7 @@ export const generateWorkspaceOutputs = (
 ): WorkspaceOutputs => ({
   markdown: generateMarkdown(workspace),
   implementationOutline: generateImplementationOutline(workspace),
+  implementationInterfaceDiagram: generateImplementationInterfaceDiagram(workspace),
   contextDiagram: generateContextDiagram(workspace, selectedContextEntityId),
   architectureFlowchart: generateArchitectureFlowchart(workspace),
   dataFlowDiagram: generateDataFlowDiagram(
