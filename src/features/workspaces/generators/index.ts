@@ -8,6 +8,8 @@ export type WorkspaceOutputs = {
   markdown: string;
   implementationOutline: string;
   implementationInterfaceDiagram: string;
+  picoStarterProjectFiles: GeneratedProjectFile[];
+  picoStarterProjectBundle: string;
   contextDiagram: string;
   architectureFlowchart: string;
   dataFlowDiagram: string;
@@ -20,6 +22,13 @@ export type WorkspaceOutputs = {
   riskReview: string[];
 };
 
+export type GeneratedProjectFile = {
+  content: string;
+  language: string;
+  path: string;
+  type: string;
+};
+
 const listBlock = (items: string[]): string =>
   items.filter((item) => item.trim()).length > 0
     ? items.filter((item) => item.trim()).map((item) => `- ${item}`).join("\n")
@@ -27,6 +36,16 @@ const listBlock = (items: string[]): string =>
 
 const normalizeComparableText = (value: string): string =>
   value.replace(/\r\n/g, "\n").replace(/\s+/g, " ").trim().toLowerCase();
+const slugify = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || "feature_app";
+const fileBlock = (path: string, language: string, content: string): string =>
+  `### ${path}
+\`\`\`${language}
+${content.trim()}
+\`\`\``;
 
 const getComponentById = (
   workspace: FeatureWorkspace,
@@ -363,6 +382,528 @@ const generateImplementationInterfaceDiagram = (
 
   return lines.join("\n");
 };
+
+const generatePicoStarterProjectFiles = (
+  workspace: FeatureWorkspace,
+): GeneratedProjectFile[] => {
+  const projectName = slugify(workspace.title || "rp2040_feature_app");
+  const executableName = projectName;
+  const units =
+    workspace.implementation.units.length > 0
+      ? workspace.implementation.units
+      : [
+          {
+            id: "default_unit",
+            name: "Feature Module",
+            kind: "module",
+            responsibility: workspace.featureSummary.summary || "Feature logic placeholder",
+            requirementRefs: [],
+            componentIds: [],
+            runtimeNodeIds: [],
+            candidateTaskIds: [],
+            interfaces: [],
+            files: [],
+            notes: "",
+          },
+        ];
+
+  const moduleDefs = units.map((unit, index) => {
+    const baseName = slugify(unit.name || `unit_${index + 1}`);
+    const libraryName = `${baseName}_lib`;
+    const includeDir = `lib/${baseName}/include`;
+    const sourceDir = `lib/${baseName}/src`;
+    const headerPath = `${includeDir}/${baseName}.h`;
+    const sourcePath = `${sourceDir}/${baseName}.c`;
+    const cmakePath = `lib/${baseName}/CMakeLists.txt`;
+    const prefix = slugify(unit.name || `unit_${index + 1}`);
+    const summary = unit.responsibility?.trim() || "No responsibility documented yet.";
+    const interfaceComments =
+      unit.interfaces.filter((item) => item.trim()).length > 0
+        ? unit.interfaces
+            .filter((item) => item.trim())
+            .map((item) => `// Interface hint: ${item.trim()}`)
+            .join("\n")
+        : "// Interface hint: none documented yet";
+
+    const header = `#ifndef ${baseName.toUpperCase()}_H
+#define ${baseName.toUpperCase()}_H
+
+void ${prefix}_init(void);
+void ${prefix}_tick(void);
+
+#endif
+`;
+
+    const source = `#include "${baseName}.h"
+
+${interfaceComments}
+
+void ${prefix}_init(void) {
+  // TODO: initialize ${unit.name || `unit ${index + 1}`}
+}
+
+void ${prefix}_tick(void) {
+  // TODO: implement ${summary}
+}
+`;
+
+    const cmake = `add_library(${libraryName} STATIC
+    src/${baseName}.c
+)
+
+target_include_directories(${libraryName}
+    PUBLIC
+        \${CMAKE_CURRENT_LIST_DIR}/include
+)
+`;
+
+    return {
+      baseName,
+      libraryName,
+      prefix,
+      includeDir,
+      sourceDir,
+      headerPath,
+      sourcePath,
+      cmakePath,
+      header,
+      source,
+      cmake,
+    };
+  });
+
+  const moduleLibraryNames = moduleDefs
+    .map((moduleDef) => `    ${moduleDef.libraryName}`)
+    .join("\n");
+  const librarySubdirectories = moduleDefs
+    .map((moduleDef) => `add_subdirectory(${moduleDef.baseName})`)
+    .join("\n");
+  const headerIncludes = moduleDefs
+    .map((moduleDef) => `#include "${moduleDef.baseName}.h"`)
+    .join("\n");
+  const initCalls = moduleDefs
+    .map((moduleDef) => `  ${moduleDef.prefix}_init();`)
+    .join("\n");
+  const tickCalls = moduleDefs
+    .map((moduleDef) => `  ${moduleDef.prefix}_tick();`)
+    .join("\n");
+
+  const cmakeLists = `cmake_minimum_required(VERSION 3.13)
+
+include(pico_sdk_import.cmake)
+
+project(${projectName} C CXX ASM)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+pico_sdk_init()
+
+add_subdirectory(bsp)
+add_subdirectory(drivers)
+add_subdirectory(lib)
+add_subdirectory(app)
+add_subdirectory(test)
+
+add_executable(${executableName}
+    src/main.c
+)
+
+target_link_libraries(${executableName}
+    app
+)
+
+pico_enable_stdio_usb(${executableName} 1)
+pico_enable_stdio_uart(${executableName} 0)
+
+pico_add_extra_outputs(${executableName})
+`;
+
+  const picoSdkImport = `if (DEFINED ENV{PICO_SDK_PATH} AND (NOT PICO_SDK_PATH))
+    set(PICO_SDK_PATH $ENV{PICO_SDK_PATH})
+endif ()
+
+if (NOT PICO_SDK_PATH)
+    message(FATAL_ERROR "PICO_SDK_PATH is not set")
+endif ()
+
+include(\${PICO_SDK_PATH}/external/pico_sdk_import.cmake)
+`;
+
+  const mainC = `#include <stdio.h>
+
+#include "pico/stdlib.h"
+#include "app.h"
+
+int main(void) {
+  stdio_init_all();
+  app_init();
+
+  while (true) {
+    app_tick();
+    sleep_ms(10);
+  }
+}
+`;
+
+  const bspCMake = `add_library(bsp STATIC
+    src/board.c
+)
+
+target_include_directories(bsp
+    PUBLIC
+        \${CMAKE_CURRENT_LIST_DIR}/include
+        \${CMAKE_CURRENT_LIST_DIR}/../config/include
+)
+
+target_link_libraries(bsp
+    PUBLIC
+        pico_stdlib
+)
+`;
+
+  const boardConfigH = `#ifndef PROJECT_CONFIG_H
+#define PROJECT_CONFIG_H
+
+#define PROJECT_TICK_INTERVAL_MS 10
+#define PROJECT_STDIO_USB_ENABLED 1
+#define BOARD_STATUS_LED_PIN PICO_DEFAULT_LED_PIN
+#define BOARD_STATUS_LED_ACTIVE_HIGH 1
+
+#endif
+`;
+
+  const boardInitH = `#ifndef BOARD_H
+#define BOARD_H
+
+void board_init(void);
+
+#endif
+`;
+
+  const boardInitC = `#include "board.h"
+
+#include "app_config.h"
+#include "pico/stdlib.h"
+
+void board_init(void) {
+#if PROJECT_STDIO_USB_ENABLED
+  stdio_init_all();
+#endif
+}
+`;
+
+  const driversCMake = `add_subdirectory(led)
+`;
+
+  const ledDriverCMake = `add_library(led_driver STATIC
+    src/led.c
+)
+
+target_include_directories(led_driver
+    PUBLIC
+        \${CMAKE_CURRENT_LIST_DIR}/include
+        \${CMAKE_CURRENT_LIST_DIR}/../../config/include
+)
+
+target_link_libraries(led_driver
+    PUBLIC
+        pico_stdlib
+)
+`;
+
+  const ledDriverH = `#ifndef LED_H
+#define LED_H
+
+#include <stdbool.h>
+
+void led_init(void);
+void led_set(bool on);
+void led_toggle(void);
+
+#endif
+`;
+
+  const ledDriverC = `#include "led.h"
+
+#include <stdbool.h>
+
+#include "hardware/gpio.h"
+#include "app_config.h"
+
+static bool led_is_on = false;
+
+static void led_apply(bool on) {
+  const bool physical_level = BOARD_STATUS_LED_ACTIVE_HIGH ? on : !on;
+  gpio_put(BOARD_STATUS_LED_PIN, physical_level ? 1u : 0u);
+  led_is_on = on;
+}
+
+void led_init(void) {
+  gpio_init(BOARD_STATUS_LED_PIN);
+  gpio_set_dir(BOARD_STATUS_LED_PIN, GPIO_OUT);
+  led_apply(false);
+}
+
+void led_set(bool on) {
+  led_apply(on);
+}
+
+void led_toggle(void) {
+  led_apply(!led_is_on);
+}
+`;
+
+  const libCMake = `${librarySubdirectories || "# Add implementation libraries here."}
+`;
+
+  const appH = `#ifndef APP_H
+#define APP_H
+
+void app_init(void);
+void app_tick(void);
+
+#endif
+`;
+
+  const appCMake = `add_library(app STATIC
+    src/app.c
+)
+
+target_include_directories(app
+    PUBLIC
+        \${CMAKE_CURRENT_LIST_DIR}/include
+)
+
+target_link_libraries(app
+    PUBLIC
+        bsp
+        led_driver
+${moduleLibraryNames || "    pico_stdlib"}
+)
+`;
+
+  const appC = `#include "app.h"
+
+#include "board.h"
+#include "led.h"
+${headerIncludes}
+
+void app_init(void) {
+  board_init();
+  led_init();
+  led_set(true);
+${initCalls}
+}
+
+void app_tick(void) {
+  led_toggle();
+${tickCalls}
+}
+`;
+
+  const testCMake = `# Placeholder for host-side or integration tests.
+# Keep this directory in the generated scaffold so tests have an obvious home.
+`;
+
+  const testReadme = `# Test Layout
+
+Use this directory for:
+
+- host-side unit tests
+- Pico integration test runners
+- hardware smoke-test notes
+
+Keep production code in libraries under \`lib/\`, board-specific code under \`bsp/\`, and orchestration in \`app/\`.
+`;
+
+  const readme = `# ${workspace.title || "RP2040 Feature App"}
+
+Generated from ArchFlow implementation mapping for RP2040 / Pico SDK.
+
+## Project Layout
+
+- \`src/\`: firmware entry point only
+- \`app/\`: application orchestration layer
+- \`bsp/\`: board-support and Pico-specific startup wiring
+- \`config/\`: compile-time project configuration headers
+- \`drivers/\`: hardware-facing drivers for peripherals or devices
+- \`lib/\`: reusable implementation libraries derived from implementation units
+- \`test/\`: test and verification area
+
+## Build
+
+\`\`\`bash
+mkdir build
+cd build
+cmake ..
+cmake --build .
+\`\`\`
+
+## Notes
+
+- This is a starter scaffold, not a finished implementation.
+- Each generated implementation unit is emitted as its own library with local include and source folders.
+- The app layer wires those libraries together and keeps the firmware entry point thin.
+- Board-specific startup and SDK-facing initialization stay in \`bsp/\` so feature code does not own hardware bring-up directly.
+- Hardware-facing access belongs in \`drivers/\`; the generated scaffold includes a simple LED driver example.
+- Project-wide compile-time knobs start in \`config/include/app_config.h\`.
+- Current implementation units:
+${units.map((unit) => `  - ${unit.name || "Unnamed implementation unit"}: ${unit.responsibility || "No responsibility documented yet."}`).join("\n")}
+`;
+
+  const gitignore = `build/
+*.uf2
+*.elf
+*.bin
+*.hex
+`;
+
+  return [
+    {
+      path: "CMakeLists.txt",
+      language: "cmake",
+      type: "text/plain;charset=utf-8",
+      content: cmakeLists,
+    },
+    {
+      path: "pico_sdk_import.cmake",
+      language: "cmake",
+      type: "text/plain;charset=utf-8",
+      content: picoSdkImport,
+    },
+    {
+      path: "src/main.c",
+      language: "c",
+      type: "text/x-c;charset=utf-8",
+      content: mainC,
+    },
+    {
+      path: "bsp/CMakeLists.txt",
+      language: "cmake",
+      type: "text/plain;charset=utf-8",
+      content: bspCMake,
+    },
+    {
+      path: "bsp/include/board.h",
+      language: "c",
+      type: "text/x-c;charset=utf-8",
+      content: boardInitH,
+    },
+    {
+      path: "bsp/src/board.c",
+      language: "c",
+      type: "text/x-c;charset=utf-8",
+      content: boardInitC,
+    },
+    {
+      path: "config/include/app_config.h",
+      language: "c",
+      type: "text/x-c;charset=utf-8",
+      content: boardConfigH,
+    },
+    {
+      path: "drivers/CMakeLists.txt",
+      language: "cmake",
+      type: "text/plain;charset=utf-8",
+      content: driversCMake,
+    },
+    {
+      path: "drivers/led/CMakeLists.txt",
+      language: "cmake",
+      type: "text/plain;charset=utf-8",
+      content: ledDriverCMake,
+    },
+    {
+      path: "drivers/led/include/led.h",
+      language: "c",
+      type: "text/x-c;charset=utf-8",
+      content: ledDriverH,
+    },
+    {
+      path: "drivers/led/src/led.c",
+      language: "c",
+      type: "text/x-c;charset=utf-8",
+      content: ledDriverC,
+    },
+    {
+      path: "lib/CMakeLists.txt",
+      language: "cmake",
+      type: "text/plain;charset=utf-8",
+      content: libCMake,
+    },
+    {
+      path: "app/CMakeLists.txt",
+      language: "cmake",
+      type: "text/plain;charset=utf-8",
+      content: appCMake,
+    },
+    {
+      path: "app/include/app.h",
+      language: "c",
+      type: "text/x-c;charset=utf-8",
+      content: appH,
+    },
+    {
+      path: "app/src/app.c",
+      language: "c",
+      type: "text/x-c;charset=utf-8",
+      content: appC,
+    },
+    ...moduleDefs.flatMap((moduleDef) => [
+      {
+        path: moduleDef.cmakePath,
+        language: "cmake",
+        type: "text/plain;charset=utf-8",
+        content: moduleDef.cmake,
+      },
+      {
+        path: moduleDef.headerPath,
+        language: "c",
+        type: "text/x-c;charset=utf-8",
+        content: moduleDef.header,
+      },
+      {
+        path: moduleDef.sourcePath,
+        language: "c",
+        type: "text/x-c;charset=utf-8",
+        content: moduleDef.source,
+      },
+    ]),
+    {
+      path: "test/CMakeLists.txt",
+      language: "cmake",
+      type: "text/plain;charset=utf-8",
+      content: testCMake,
+    },
+    {
+      path: "test/README.md",
+      language: "md",
+      type: "text/markdown;charset=utf-8",
+      content: testReadme,
+    },
+    {
+      path: "README.md",
+      language: "md",
+      type: "text/markdown;charset=utf-8",
+      content: readme,
+    },
+    {
+      path: ".gitignore",
+      language: "gitignore",
+      type: "text/plain;charset=utf-8",
+      content: gitignore,
+    },
+  ];
+};
+
+const generatePicoStarterProjectBundle = (
+  files: GeneratedProjectFile[],
+): string => `# RP2040 / Pico Starter Project
+
+This scaffold is derived from the current implementation mapping and is intended to be copied into a new Pico SDK project as a working starting point.
+
+${files.map((file) => fileBlock(file.path, file.language, file.content)).join("\n\n")}`;
 
 const generateContextDiagram = (
   workspace: FeatureWorkspace,
@@ -1247,38 +1788,44 @@ export const generateWorkspaceOutputs = (
   selectedDataFlowId?: string,
   selectedRuntimeNodeId?: string,
   selectedRuntimeLinkId?: string,
-): WorkspaceOutputs => ({
-  markdown: generateMarkdown(workspace),
-  implementationOutline: generateImplementationOutline(workspace),
-  implementationInterfaceDiagram: generateImplementationInterfaceDiagram(workspace),
-  contextDiagram: generateContextDiagram(workspace, selectedContextEntityId),
-  architectureFlowchart: generateArchitectureFlowchart(workspace),
-  dataFlowDiagram: generateDataFlowDiagram(
-    workspace,
-    selectedDataFlowNodeId,
-    selectedDataFlowId,
-  ),
-  behavioralArchitectureDiagram: generateBehavioralArchitectureDiagram(
-    workspace,
-    selectedComponentId,
-    expandedBehavioralComponentIds,
-  ),
-  componentObjectDiagram: generateComponentObjectDiagram(
-    workspace,
-    selectedComponentId,
-    selectedObjectId,
-  ),
-  componentStateDiagram: generateComponentStateDiagram(
-    workspace,
-    selectedComponentId,
-    selectedObjectId,
-  ),
-  sequenceDiagram: generateSequenceDiagram(workspace, selectedScenarioId),
-  deploymentRuntimeDiagram: generateDeploymentRuntimeDiagram(
-    workspace,
-    selectedRuntimeNodeId,
-    selectedRuntimeLinkId,
-  ),
-  taskTable: generateTaskTable(workspace),
-  riskReview: generateRiskReview(workspace),
-});
+): WorkspaceOutputs => {
+  const picoStarterProjectFiles = generatePicoStarterProjectFiles(workspace);
+
+  return {
+    markdown: generateMarkdown(workspace),
+    implementationOutline: generateImplementationOutline(workspace),
+    implementationInterfaceDiagram: generateImplementationInterfaceDiagram(workspace),
+    picoStarterProjectFiles,
+    picoStarterProjectBundle: generatePicoStarterProjectBundle(picoStarterProjectFiles),
+    contextDiagram: generateContextDiagram(workspace, selectedContextEntityId),
+    architectureFlowchart: generateArchitectureFlowchart(workspace),
+    dataFlowDiagram: generateDataFlowDiagram(
+      workspace,
+      selectedDataFlowNodeId,
+      selectedDataFlowId,
+    ),
+    behavioralArchitectureDiagram: generateBehavioralArchitectureDiagram(
+      workspace,
+      selectedComponentId,
+      expandedBehavioralComponentIds,
+    ),
+    componentObjectDiagram: generateComponentObjectDiagram(
+      workspace,
+      selectedComponentId,
+      selectedObjectId,
+    ),
+    componentStateDiagram: generateComponentStateDiagram(
+      workspace,
+      selectedComponentId,
+      selectedObjectId,
+    ),
+    sequenceDiagram: generateSequenceDiagram(workspace, selectedScenarioId),
+    deploymentRuntimeDiagram: generateDeploymentRuntimeDiagram(
+      workspace,
+      selectedRuntimeNodeId,
+      selectedRuntimeLinkId,
+    ),
+    taskTable: generateTaskTable(workspace),
+    riskReview: generateRiskReview(workspace),
+  };
+};

@@ -77,6 +77,7 @@ import {
 import {
   generateWorkspaceOutputs,
   getBehavioralComponentNodeId,
+  type GeneratedProjectFile,
 } from "../../features/workspaces/generators";
 import { applyImportedMarkdownToWorkspace } from "../../features/workspaces/import/markdown";
 import { isWorkspaceSectionStarted } from "../../features/workspaces/state/progress";
@@ -344,6 +345,10 @@ type FeatureWorkspacePageProps = {
   onChange: (updater: (current: FeatureWorkspace) => FeatureWorkspace) => void;
   onExport: (markdown: string, fileName: string) => void;
   onExportWorkspaceJson: (workspace: FeatureWorkspace) => void;
+  onExportPicoStarterProject: (
+    workspace: FeatureWorkspace,
+    files: GeneratedProjectFile[],
+  ) => Promise<void>;
   onInspectLlmSync: (
     workspace: FeatureWorkspace,
     markdown: string,
@@ -388,6 +393,7 @@ export const FeatureWorkspacePage = ({
   onChange: onWorkspaceChange,
   onExport,
   onExportWorkspaceJson,
+  onExportPicoStarterProject,
   onInspectLlmSync,
   onSyncLlmFiles,
   onPullLlmFiles,
@@ -2335,6 +2341,38 @@ export const FeatureWorkspacePage = ({
             <PreviewCard title="Implementation Mapping Outline">
               <pre className="max-h-[520px] overflow-auto rounded-2xl bg-ink p-4 text-xs text-white">
                 {outputs.implementationOutline}
+              </pre>
+            </PreviewCard>
+            <PreviewCard
+              title="RP2040 / Pico Starter Project"
+              action={
+                <Button
+                  onClick={async () => {
+                    try {
+                      await onExportPicoStarterProject(
+                        workspace,
+                        outputs.picoStarterProjectFiles,
+                      );
+                    } catch (error) {
+                      window.alert(
+                        error instanceof Error
+                          ? error.message
+                          : "Could not export the Pico starter project.",
+                      );
+                    }
+                  }}
+                  tone="secondary"
+                >
+                  Export Ready Project
+                </Button>
+              }
+            >
+              <p className="mb-3 text-sm text-slate">
+                Write a ready-to-build RP2040 / Pico SDK scaffold into a folder on your
+                machine, based on the current implementation mapping.
+              </p>
+              <pre className="max-h-[720px] overflow-auto rounded-2xl bg-ink p-4 text-xs text-white">
+                {outputs.picoStarterProjectBundle}
               </pre>
             </PreviewCard>
           </div>

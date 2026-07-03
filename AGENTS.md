@@ -47,6 +47,7 @@ These are project roles and responsibility boundaries. They are architectural ow
   - Mermaid architecture flowchart
   - Component state diagrams
   - Sequence and runtime views
+  - Starter project scaffolds derived from implementation mapping
 - Must be pure and deterministic from workspace input.
 
 ### 6. Persistence and Export Agent

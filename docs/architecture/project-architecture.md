@@ -214,6 +214,7 @@ type FeatureComponent = {
 - Generate feature-level architecture flow
 - Generate component-level state diagrams
 - Generate implementation mapping summaries
+- Generate starter project scaffolds from implementation mapping
 - Generate markdown design draft
 - Generate risk review
 
