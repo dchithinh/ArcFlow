@@ -229,7 +229,7 @@ Example:
 {
   "fromComponentId": "component-a-id",
   "toComponentId": "component-b-id",
-  "mechanism": "event",
+  "mechanism": "direct_call",
   "data": "parsed command",
   "notes": "Forward validated command for dispatch"
 }
@@ -239,6 +239,7 @@ Important:
 
 - Use component IDs, not component names.
 - Keep \`mechanism\` as a short machine-friendly string.
+- Prefer known values such as \`queue\`, \`event\`, \`notification\`, \`callback\`, \`shared_memory\`, \`direct_call\`, or \`other\`.
 
 ## Component Detail Pattern
 
@@ -257,13 +258,49 @@ Example:
   "summary": "Parse raw terminal input into structured command data",
   "inputs": ["raw command text"],
   "outputs": ["parsed command"],
-  "incomingEvents": [],
-  "internalSignals": [],
-  "outgoingSignals": [],
+  "incomingEvents": [
+    {
+      "name": "packet_ready",
+      "source": "Command Ingress",
+      "trigger": "Packet queued for parse",
+      "frequency": "Burst",
+      "latencySensitive": true
+    }
+  ],
+  "internalSignals": [
+    {
+      "name": "packet_valid",
+      "source": "Command Parser",
+      "trigger": "Frame and schema validation passed",
+      "frequency": "Burst",
+      "latencySensitive": true
+    }
+  ],
+  "outgoingSignals": [
+    {
+      "name": "apply_request",
+      "source": "Command Parser",
+      "trigger": "Validated command ready for config coordinator",
+      "frequency": "Burst",
+      "latencySensitive": true
+    }
+  ],
   "objects": [],
   "objectInteractions": [],
-  "ownership": [],
-  "failureModes": [],
+  "ownership": [
+    {
+      "resource": "Parser scratch buffer",
+      "owner": "Command Parser",
+      "accessRules": "Only parser logic mutates validation workspace"
+    }
+  ],
+  "failureModes": [
+    {
+      "scenario": "Malformed payload",
+      "impact": "Rejected command",
+      "recovery": "Emit deterministic NACK and reset parser state"
+    }
+  ],
   "debugging": {
     "logs": [],
     "traces": [],
@@ -463,6 +500,12 @@ Context flow example:
 }
 \`\`\`
 
+Only valid context flow \`direction\` values:
+
+- \`inbound\`
+- \`outbound\`
+- \`bidirectional\`
+
 ## Data Flow Pattern
 
 Use:
@@ -482,6 +525,13 @@ Data flow node example:
   "description": "Routes commands to handlers"
 }
 \`\`\`
+
+Prefer known data-flow node \`kind\` values:
+
+- \`external_entity\`
+- \`process\`
+- \`data_store\`
+- \`other\`
 
 Data flow example:
 
@@ -650,6 +700,19 @@ Runtime link example:
 }
 \`\`\`
 
+Prefer known runtime link \`kind\` values:
+
+- \`interrupt\`
+- \`queue\`
+- \`notification\`
+- \`call\`
+- \`shared_memory\`
+- \`driver\`
+- \`timer\`
+- \`mutex\`
+- \`data\`
+- \`other\`
+
 ## Candidate Task Pattern
 
 Use:
@@ -813,6 +876,11 @@ Implementation-rule example:
 
 - Do not replace IDs with labels.
 - Do not invent new enum values when an existing one already exists.
+- Do not use string lists where the schema expects structured objects.
+- \`incomingEvents\`, \`internalSignals\`, and \`outgoingSignals\` must contain event objects, not plain strings.
+- \`ownership\` must contain objects with \`resource\`, \`owner\`, and \`accessRules\`.
+- \`failureModes\` must contain objects with \`scenario\`, \`impact\`, and \`recovery\`.
+- Use \`data_store\`, not \`data-store\`.
 - Do not write sequence steps without \`id\`.
 - Do not use \`request\`, \`response\`, or \`message\` as sequence step types.
 - Do not move component architecture edits into markdown only.
@@ -934,6 +1002,11 @@ When editing \`${baseName}.workspace.json\`, follow these rules strictly:
 - Do not collapse nested workspace data into summary text.
 - Do not remove empty arrays or empty strings just to "clean up" the file.
 - Only change values that are relevant to the requested design update.
+- Do not replace structured component-detail arrays with plain strings.
+- \`incomingEvents\`, \`internalSignals\`, and \`outgoingSignals\` must stay arrays of event objects.
+- \`ownership\` must stay an array of objects with \`resource\`, \`owner\`, and \`accessRules\`.
+- \`failureModes\` must stay an array of objects with \`scenario\`, \`impact\`, and \`recovery\`.
+- Use schema field values exactly where known, for example \`data_store\` instead of \`data-store\`.
 
 ## Strict Markdown Editing Contract
 
@@ -1042,6 +1115,15 @@ Use this section for:
 - what interaction mechanism is used
 
 Do not replace component IDs with names in this section.
+Prefer known interaction mechanisms when possible:
+
+- \`queue\`
+- \`event\`
+- \`notification\`
+- \`callback\`
+- \`shared_memory\`
+- \`direct_call\`
+- \`other\`
 
 ### 4. Component details
 
@@ -1064,6 +1146,24 @@ Each component should keep:
 - \`ownership\`
 - \`failureModes\`
 - \`debugging\`
+
+Important shape rules:
+
+- \`incomingEvents\`, \`internalSignals\`, and \`outgoingSignals\` are arrays of event objects, not string lists.
+- Each event object should keep:
+  - \`name\`
+  - \`source\`
+  - \`trigger\`
+  - optional \`frequency\`
+  - optional \`latencySensitive\`
+- \`ownership\` is an array of objects with:
+  - \`resource\`
+  - \`owner\`
+  - \`accessRules\`
+- \`failureModes\` is an array of objects with:
+  - \`scenario\`
+  - \`impact\`
+  - \`recovery\`
 
 Use this section for:
 
@@ -1173,6 +1273,12 @@ Use this section for:
 - external users, devices, systems, or services
 - boundary flows into and out of the feature
 
+Use valid context flow directions:
+
+- \`inbound\`
+- \`outbound\`
+- \`bidirectional\`
+
 ### 9. Sequence scenarios
 
 Primary JSON field:
@@ -1235,6 +1341,13 @@ Use this section for:
 - data stores
 - data movement between them
 
+Prefer known data-flow node kinds:
+
+- \`external_entity\`
+- \`process\`
+- \`data_store\`
+- \`other\`
+
 ### 11. Runtime / deployment
 
 Primary JSON fields:
@@ -1267,6 +1380,19 @@ Good runtime nodes:
 - LED Task
 - DateTime Task
 - STM32F4 MCU
+
+Prefer known runtime link kinds:
+
+- \`interrupt\`
+- \`queue\`
+- \`notification\`
+- \`call\`
+- \`shared_memory\`
+- \`driver\`
+- \`timer\`
+- \`mutex\`
+- \`data\`
+- \`other\`
 
 Do not blindly copy component names into runtime nodes unless that component is also a real execution node or runtime resource.
 
