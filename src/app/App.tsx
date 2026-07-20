@@ -116,12 +116,14 @@ export const App = () => {
     const workspaceJson = JSON.stringify(workspace, null, 2);
     const agents = buildLlmGuideContent(workspace, markdown);
     const editTemplate = buildEditTemplateContent(workspace);
+    const validatorScript = buildWorkspaceValidatorScript(baseName);
 
     return {
       agents,
       baseName,
       editTemplate,
       markdown,
+      validatorScript,
       workspaceJson,
     };
   };
@@ -133,6 +135,350 @@ export const App = () => {
     }
     return (hash >>> 0).toString(16);
   };
+
+  const buildWorkspaceValidatorScript = (baseName: string): string => `#!/usr/bin/env node
+import { readFileSync } from "node:fs";
+
+const defaultFile = "${baseName}.workspace.json";
+const targetFile = process.argv[2] || defaultFile;
+
+const isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+const isString = (value) => typeof value === "string";
+const isBoolean = (value) => typeof value === "boolean";
+const isStringArray = (value) => Array.isArray(value) && value.every((item) => typeof item === "string");
+
+const issues = [];
+const pushIssue = (path, message) => issues.push({ path, message });
+const validateIdFields = (value, path, fields) => {
+  if (!isRecord(value)) {
+    pushIssue(path, "must be an object");
+    return false;
+  }
+  fields.forEach((field) => {
+    if (!isString(value[field])) {
+      pushIssue(\`\${path}.\${field}\`, "must be a string");
+    }
+  });
+  return true;
+};
+
+const validateEvent = (value, path) => {
+  if (!isRecord(value)) {
+    pushIssue(path, "must be an object");
+    return;
+  }
+  ["name", "source", "trigger"].forEach((field) => {
+    if (!isString(value[field])) {
+      pushIssue(\`\${path}.\${field}\`, "must be a string");
+    }
+  });
+  if (value.frequency !== undefined && !isString(value.frequency)) {
+    pushIssue(\`\${path}.frequency\`, "must be a string when provided");
+  }
+  if (value.latencySensitive !== undefined && !isBoolean(value.latencySensitive)) {
+    pushIssue(\`\${path}.latencySensitive\`, "must be a boolean when provided");
+  }
+};
+
+const validateObject = (value, path) => {
+  if (!isRecord(value)) {
+    pushIssue(path, "must be an object");
+    return;
+  }
+  ["id", "name", "responsibility"].forEach((field) => {
+    if (!isString(value[field])) {
+      pushIssue(\`\${path}.\${field}\`, "must be a string");
+    }
+  });
+  if (value.objectType !== "active" && value.objectType !== "passive") {
+    pushIssue(\`\${path}.objectType\`, "must be 'active' or 'passive'");
+  }
+  if (!isBoolean(value.needsState)) {
+    pushIssue(\`\${path}.needsState\`, "must be a boolean");
+  }
+  if (!Array.isArray(value.states)) {
+    pushIssue(\`\${path}.states\`, "must be an array");
+    return;
+  }
+  value.states.forEach((state, stateIndex) => {
+    const statePath = \`\${path}.states[\${stateIndex}]\`;
+    if (!isRecord(state)) {
+      pushIssue(statePath, "must be an object");
+      return;
+    }
+    if (!isString(state.name)) {
+      pushIssue(\`\${statePath}.name\`, "must be a string");
+    }
+    if (!isString(state.description)) {
+      pushIssue(\`\${statePath}.description\`, "must be a string");
+    }
+    if (!Array.isArray(state.transitions)) {
+      pushIssue(\`\${statePath}.transitions\`, "must be an array");
+      return;
+    }
+    state.transitions.forEach((transition, transitionIndex) => {
+      const transitionPath = \`\${statePath}.transitions[\${transitionIndex}]\`;
+      if (!isRecord(transition)) {
+        pushIssue(transitionPath, "must be an object");
+        return;
+      }
+      if (!isString(transition.event)) {
+        pushIssue(\`\${transitionPath}.event\`, "must be a string");
+      }
+      if (transition.triggerKind !== undefined && transition.triggerKind !== "incoming" && transition.triggerKind !== "internal") {
+        pushIssue(\`\${transitionPath}.triggerKind\`, "must be 'incoming' or 'internal' when provided");
+      }
+      if (!isString(transition.targetState)) {
+        pushIssue(\`\${transitionPath}.targetState\`, "must be a string");
+      }
+      if (transition.action !== undefined && !isString(transition.action)) {
+        pushIssue(\`\${transitionPath}.action\`, "must be a string when provided");
+      }
+    });
+  });
+};
+
+const validateWorkspace = (workspace) => {
+  if (!isRecord(workspace)) {
+    pushIssue("$", "workspace must be a JSON object");
+    return;
+  }
+
+  ["id", "title", "requirement", "createdAt", "updatedAt"].forEach((field) => {
+    if (!isString(workspace[field])) {
+      pushIssue(field, "must be a string");
+    }
+  });
+
+  const featureSummary = workspace.featureSummary;
+  if (!isRecord(featureSummary)) {
+    pushIssue("featureSummary", "must be an object");
+  } else {
+    if (!isString(featureSummary.summary)) pushIssue("featureSummary.summary", "must be a string");
+    if (!isString(featureSummary.problem)) pushIssue("featureSummary.problem", "must be a string");
+    ["goals", "constraints", "assumptions", "openQuestions"].forEach((field) => {
+      if (!isStringArray(featureSummary[field])) {
+        pushIssue(\`featureSummary.\${field}\`, "must be an array of strings");
+      }
+    });
+  }
+
+  const discovery = workspace.discovery;
+  if (!isRecord(discovery)) {
+    pushIssue("discovery", "must be an object");
+  } else {
+    const arrayFields = [
+      "contextEntities",
+      "contextFlows",
+      "candidateComponents",
+      "interactions",
+      "dataFlowNodes",
+      "dataFlows",
+      "sequenceScenarios",
+      "runtimeNodes",
+      "runtimeLinks",
+      "candidateTasks",
+    ];
+    arrayFields.forEach((field) => {
+      if (!Array.isArray(discovery[field])) {
+        pushIssue(\`discovery.\${field}\`, "must be an array");
+      }
+    });
+    if (!isStringArray(discovery.responsibilities)) {
+      pushIssue("discovery.responsibilities", "must be an array of strings");
+    }
+    if (!isStringArray(discovery.systemRisks)) {
+      pushIssue("discovery.systemRisks", "must be an array of strings");
+    }
+    if (!isRecord(discovery.customOptions)) {
+      pushIssue("discovery.customOptions", "must be an object");
+    } else {
+      ["interactionMechanisms", "dataFlowNodeKinds", "runtimeNodeKinds", "runtimeLinkKinds", "contextEntityKinds"].forEach((field) => {
+        if (!isStringArray(discovery.customOptions[field])) {
+          pushIssue(\`discovery.customOptions.\${field}\`, "must be an array of strings");
+        }
+      });
+    }
+
+    (discovery.contextEntities || []).forEach((item, index) =>
+      validateIdFields(item, \`discovery.contextEntities[\${index}]\`, ["id", "name", "kind"]),
+    );
+    (discovery.contextFlows || []).forEach((item, index) =>
+      validateIdFields(item, \`discovery.contextFlows[\${index}]\`, ["id", "entityId", "direction", "label"]),
+    );
+    (discovery.candidateComponents || []).forEach((item, index) => {
+      const path = \`discovery.candidateComponents[\${index}]\`;
+      if (validateIdFields(item, path, ["id", "name", "responsibility"]) && isRecord(item)) {
+        if (item.rationale !== undefined && !isString(item.rationale)) pushIssue(\`\${path}.rationale\`, "must be a string when provided");
+        if (item.layer !== undefined && !isString(item.layer)) pushIssue(\`\${path}.layer\`, "must be a string when provided");
+      }
+    });
+    (discovery.interactions || []).forEach((item, index) =>
+      validateIdFields(item, \`discovery.interactions[\${index}]\`, ["fromComponentId", "toComponentId", "mechanism", "data"]),
+    );
+    (discovery.dataFlowNodes || []).forEach((item, index) =>
+      validateIdFields(item, \`discovery.dataFlowNodes[\${index}]\`, ["id", "name", "kind"]),
+    );
+    (discovery.dataFlows || []).forEach((item, index) =>
+      validateIdFields(item, \`discovery.dataFlows[\${index}]\`, ["id", "fromNodeId", "toNodeId", "label"]),
+    );
+    (discovery.runtimeNodes || []).forEach((item, index) =>
+      validateIdFields(item, \`discovery.runtimeNodes[\${index}]\`, ["id", "name", "kind", "responsibility"]),
+    );
+    (discovery.runtimeLinks || []).forEach((item, index) =>
+      validateIdFields(item, \`discovery.runtimeLinks[\${index}]\`, ["id", "fromNodeId", "toNodeId", "kind", "label"]),
+    );
+    (discovery.candidateTasks || []).forEach((item, index) => {
+      const path = \`discovery.candidateTasks[\${index}]\`;
+      if (validateIdFields(item, path, ["id", "name", "responsibility", "priority", "type", "trigger"]) && isRecord(item) && !isBoolean(item.mayBlock)) {
+        pushIssue(\`\${path}.mayBlock\`, "must be a boolean");
+      }
+    });
+    (discovery.sequenceScenarios || []).forEach((scenario, index) => {
+      const path = \`discovery.sequenceScenarios[\${index}]\`;
+      if (!validateIdFields(scenario, path, ["id", "name", "goal", "trigger", "outcome"]) || !isRecord(scenario)) return;
+      if (scenario.failurePath !== undefined && !isString(scenario.failurePath)) pushIssue(\`\${path}.failurePath\`, "must be a string when provided");
+      if (!Array.isArray(scenario.participants)) pushIssue(\`\${path}.participants\`, "must be an array");
+      if (!Array.isArray(scenario.steps)) pushIssue(\`\${path}.steps\`, "must be an array");
+      (scenario.participants || []).forEach((participant, participantIndex) =>
+        validateIdFields(participant, \`\${path}.participants[\${participantIndex}]\`, ["id", "name", "kind"]),
+      );
+      (scenario.steps || []).forEach((step, stepIndex) => {
+        const stepPath = \`\${path}.steps[\${stepIndex}]\`;
+        if (!validateIdFields(step, stepPath, ["id", "fromParticipantId", "toParticipantId", "message", "type"]) || !isRecord(step)) return;
+        if (!["call", "async", "return", "event"].includes(step.type)) {
+          pushIssue(\`\${stepPath}.type\`, "must be one of call, async, return, event");
+        }
+      });
+    });
+  }
+
+  if (!Array.isArray(workspace.components)) {
+    pushIssue("components", "must be an array");
+  } else {
+    workspace.components.forEach((component, componentIndex) => {
+      const path = \`components[\${componentIndex}]\`;
+      if (!validateIdFields(component, path, ["id", "name", "summary"]) || !isRecord(component)) return;
+      ["inputs", "outputs"].forEach((field) => {
+        if (!isStringArray(component[field])) pushIssue(\`\${path}.\${field}\`, "must be an array of strings");
+      });
+      ["incomingEvents", "internalSignals", "outgoingSignals"].forEach((field) => {
+        if (!Array.isArray(component[field])) {
+          pushIssue(\`\${path}.\${field}\`, "must be an array");
+        } else {
+          component[field].forEach((event, eventIndex) => validateEvent(event, \`\${path}.\${field}[\${eventIndex}]\`));
+        }
+      });
+      if (!Array.isArray(component.objects)) pushIssue(\`\${path}.objects\`, "must be an array");
+      else component.objects.forEach((object, objectIndex) => validateObject(object, \`\${path}.objects[\${objectIndex}]\`));
+      if (!Array.isArray(component.objectInteractions)) pushIssue(\`\${path}.objectInteractions\`, "must be an array");
+      if (!Array.isArray(component.ownership)) pushIssue(\`\${path}.ownership\`, "must be an array");
+      if (!Array.isArray(component.failureModes)) pushIssue(\`\${path}.failureModes\`, "must be an array");
+      if (!isRecord(component.debugging)) pushIssue(\`\${path}.debugging\`, "must be an object");
+      else {
+        ["logs", "traces", "observability"].forEach((field) => {
+          if (!isStringArray(component.debugging[field])) pushIssue(\`\${path}.debugging.\${field}\`, "must be an array of strings");
+        });
+      }
+    });
+  }
+
+  if (!isRecord(workspace.implementation)) {
+    pushIssue("implementation", "must be an object");
+  } else {
+    if (!Array.isArray(workspace.implementation.units)) pushIssue("implementation.units", "must be an array");
+    if (!Array.isArray(workspace.implementation.steps)) pushIssue("implementation.steps", "must be an array");
+    if (!isStringArray(workspace.implementation.rules)) pushIssue("implementation.rules", "must be an array of strings");
+  }
+
+  if (issues.length > 0) return;
+
+  const candidateIds = new Set((workspace.discovery?.candidateComponents || []).map((item) => item.id));
+  const contextEntityIds = new Set((workspace.discovery?.contextEntities || []).map((item) => item.id));
+  const dataFlowNodeIds = new Set((workspace.discovery?.dataFlowNodes || []).map((item) => item.id));
+  const runtimeNodeIds = new Set((workspace.discovery?.runtimeNodes || []).map((item) => item.id));
+  const componentIds = new Set((workspace.components || []).map((item) => item.id));
+  const candidateTaskIds = new Set((workspace.discovery?.candidateTasks || []).map((item) => item.id));
+  const implementationUnitIds = new Set((workspace.implementation?.units || []).map((item) => item.id));
+
+  (workspace.discovery?.contextFlows || []).forEach((flow, index) => {
+    if (!contextEntityIds.has(flow.entityId)) pushIssue(\`discovery.contextFlows[\${index}].entityId\`, \`references missing context entity '\${flow.entityId}'\`);
+  });
+  (workspace.discovery?.interactions || []).forEach((interaction, index) => {
+    if (!candidateIds.has(interaction.fromComponentId)) pushIssue(\`discovery.interactions[\${index}].fromComponentId\`, \`references missing candidate component '\${interaction.fromComponentId}'\`);
+    if (!candidateIds.has(interaction.toComponentId)) pushIssue(\`discovery.interactions[\${index}].toComponentId\`, \`references missing candidate component '\${interaction.toComponentId}'\`);
+  });
+  (workspace.discovery?.dataFlows || []).forEach((flow, index) => {
+    if (!dataFlowNodeIds.has(flow.fromNodeId)) pushIssue(\`discovery.dataFlows[\${index}].fromNodeId\`, \`references missing data flow node '\${flow.fromNodeId}'\`);
+    if (!dataFlowNodeIds.has(flow.toNodeId)) pushIssue(\`discovery.dataFlows[\${index}].toNodeId\`, \`references missing data flow node '\${flow.toNodeId}'\`);
+  });
+  (workspace.discovery?.runtimeNodes || []).forEach((node, index) => {
+    if (node.hostNodeId && !runtimeNodeIds.has(node.hostNodeId)) pushIssue(\`discovery.runtimeNodes[\${index}].hostNodeId\`, \`references missing runtime node '\${node.hostNodeId}'\`);
+  });
+  (workspace.discovery?.runtimeLinks || []).forEach((link, index) => {
+    if (!runtimeNodeIds.has(link.fromNodeId)) pushIssue(\`discovery.runtimeLinks[\${index}].fromNodeId\`, \`references missing runtime node '\${link.fromNodeId}'\`);
+    if (!runtimeNodeIds.has(link.toNodeId)) pushIssue(\`discovery.runtimeLinks[\${index}].toNodeId\`, \`references missing runtime node '\${link.toNodeId}'\`);
+  });
+  (workspace.components || []).forEach((component, componentIndex) => {
+    const objectIds = new Set((component.objects || []).map((object) => object.id));
+    (component.objectInteractions || []).forEach((interaction, interactionIndex) => {
+      if (!objectIds.has(interaction.fromObjectId)) pushIssue(\`components[\${componentIndex}].objectInteractions[\${interactionIndex}].fromObjectId\`, \`references missing object '\${interaction.fromObjectId}' in component '\${component.id}'\`);
+      if (!objectIds.has(interaction.toObjectId)) pushIssue(\`components[\${componentIndex}].objectInteractions[\${interactionIndex}].toObjectId\`, \`references missing object '\${interaction.toObjectId}' in component '\${component.id}'\`);
+    });
+    (component.objects || []).forEach((object, objectIndex) => {
+      const stateNames = new Set((object.states || []).map((state) => state.name));
+      (object.states || []).forEach((state, stateIndex) => {
+        (state.transitions || []).forEach((transition, transitionIndex) => {
+          if (!stateNames.has(transition.targetState)) pushIssue(\`components[\${componentIndex}].objects[\${objectIndex}].states[\${stateIndex}].transitions[\${transitionIndex}].targetState\`, \`references missing state '\${transition.targetState}' in object '\${object.id}'\`);
+        });
+      });
+    });
+  });
+  (workspace.discovery?.sequenceScenarios || []).forEach((scenario, scenarioIndex) => {
+    const participantIds = new Set((scenario.participants || []).map((participant) => participant.id));
+    (scenario.steps || []).forEach((step, stepIndex) => {
+      if (!participantIds.has(step.fromParticipantId)) pushIssue(\`discovery.sequenceScenarios[\${scenarioIndex}].steps[\${stepIndex}].fromParticipantId\`, \`references missing participant '\${step.fromParticipantId}'\`);
+      if (!participantIds.has(step.toParticipantId)) pushIssue(\`discovery.sequenceScenarios[\${scenarioIndex}].steps[\${stepIndex}].toParticipantId\`, \`references missing participant '\${step.toParticipantId}'\`);
+    });
+  });
+  (workspace.implementation?.units || []).forEach((unit, unitIndex) => {
+    (unit.componentIds || []).forEach((componentId, refIndex) => {
+      if (!componentIds.has(componentId)) pushIssue(\`implementation.units[\${unitIndex}].componentIds[\${refIndex}]\`, \`references missing component '\${componentId}'\`);
+    });
+    (unit.runtimeNodeIds || []).forEach((runtimeNodeId, refIndex) => {
+      if (!runtimeNodeIds.has(runtimeNodeId)) pushIssue(\`implementation.units[\${unitIndex}].runtimeNodeIds[\${refIndex}]\`, \`references missing runtime node '\${runtimeNodeId}'\`);
+    });
+    (unit.candidateTaskIds || []).forEach((candidateTaskId, refIndex) => {
+      if (!candidateTaskIds.has(candidateTaskId)) pushIssue(\`implementation.units[\${unitIndex}].candidateTaskIds[\${refIndex}]\`, \`references missing candidate task '\${candidateTaskId}'\`);
+    });
+  });
+  (workspace.implementation?.steps || []).forEach((step, stepIndex) => {
+    (step.moduleIds || []).forEach((moduleId, refIndex) => {
+      if (!implementationUnitIds.has(moduleId)) pushIssue(\`implementation.steps[\${stepIndex}].moduleIds[\${refIndex}]\`, \`references missing implementation unit '\${moduleId}'\`);
+    });
+  });
+};
+
+try {
+  const raw = readFileSync(targetFile, "utf8");
+  const workspace = JSON.parse(raw);
+  validateWorkspace(workspace);
+  if (issues.length > 0) {
+    console.error("Workspace JSON does not fit ArcFlow expectations:");
+    issues.slice(0, 20).forEach((issue) => {
+      console.error(\`- \${issue.path}: \${issue.message}\`);
+    });
+    if (issues.length > 20) {
+      console.error(\`...and \${issues.length - 20} more issue(s).\`);
+    }
+    process.exit(1);
+  }
+  console.log(\`PASS: \${targetFile} fits ArcFlow expectations.\`);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(1);
+}
+`;
 
   const buildEditTemplateContent = (workspace: FeatureWorkspace): string => {
     const featureTitle = workspace.title || "Feature Name";
@@ -924,6 +1270,11 @@ Use these files together:
 - Use this when you need an exact reference for valid JSON shapes and allowed values.
 - Follow this template when editing the synced workspace files.
 
+### \`${baseName}.validate.mjs\`
+- Standalone workspace validator for Node.js.
+- Run this before pull/import if the JSON was edited externally.
+- Usage: \`node ${baseName}.validate.mjs ${baseName}.workspace.json\`
+
 ## File Ownership Rules
 
 - Treat \`${baseName}.workspace.json\` as the only full-fidelity editable source.
@@ -975,6 +1326,7 @@ Use runtime / deployment design when the question is:
 - Read this file first.
 - Read \`${baseName}.md\` next for fast understanding.
 - Read \`${baseName}.workspace.json\` after that for exact structure and field-level truth.
+- Run \`${baseName}.validate.mjs\` against \`${baseName}.workspace.json\` after external edits and before pull/import when possible.
 - Read \`ARCHFLOW_EDIT_TEMPLATE.md\` before making JSON edits.
 - If markdown and JSON differ, trust the JSON.
 - Keep suggestions incremental and practical.
@@ -1641,15 +1993,30 @@ ${markdown}
   };
 
   const exportWorkspaceJson = (workspace: FeatureWorkspace) => {
-    const blob = new Blob([JSON.stringify(workspace, null, 2)], {
-      type: "application/json;charset=utf-8",
+    const baseName =
+      workspace.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "feature-workspace";
+    const downloads = [
+      {
+        content: JSON.stringify(workspace, null, 2),
+        fileName: `${baseName}.workspace.json`,
+        type: "application/json;charset=utf-8",
+      },
+      {
+        content: buildWorkspaceValidatorScript(baseName),
+        fileName: `${baseName}.validate.mjs`,
+        type: "text/javascript;charset=utf-8",
+      },
+    ];
+
+    downloads.forEach((file) => {
+      const blob = new Blob([file.content], { type: file.type });
+      const url = window.URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = file.fileName;
+      anchor.click();
+      window.URL.revokeObjectURL(url);
     });
-    const url = window.URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${workspace.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "feature-workspace"}.workspace.json`;
-    anchor.click();
-    window.URL.revokeObjectURL(url);
   };
 
   const exportPicoStarterProject = async (
@@ -1726,6 +2093,11 @@ ${markdown}
           name: `ARCHFLOW_EDIT_TEMPLATE.md`,
           content: currentFiles.editTemplate,
           type: "text/markdown;charset=utf-8",
+        },
+        {
+          name: `${currentFiles.baseName}.validate.mjs`,
+          content: currentFiles.validatorScript,
+          type: "text/javascript;charset=utf-8",
         },
       ],
     });
