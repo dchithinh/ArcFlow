@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import type { FeatureWorkspace } from "../../features/workspaces/schema/workspace";
 import { Button } from "../../components/form/FormControls";
 
@@ -20,6 +20,8 @@ export const DashboardPage = ({
   onImportWorkspaceJson,
 }: DashboardPageProps) => {
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const [importStatus, setImportStatus] = useState<"idle" | "success" | "error">("idle");
+  const [importMessage, setImportMessage] = useState("");
 
   const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -29,6 +31,13 @@ export const DashboardPage = ({
 
     try {
       await onImportWorkspaceJson(file);
+      setImportStatus("success");
+      setImportMessage(`Imported ${file.name} successfully.`);
+    } catch (error) {
+      setImportStatus("error");
+      setImportMessage(
+        error instanceof Error ? error.message : `Could not import ${file.name}.`,
+      );
     } finally {
       event.target.value = "";
     }
@@ -60,6 +69,17 @@ export const DashboardPage = ({
           Import Workspace JSON
         </Button>
       </div>
+      {importStatus !== "idle" ? (
+        <div
+          className={`mt-4 rounded-2xl border px-4 py-3 text-sm whitespace-pre-wrap ${
+            importStatus === "success"
+              ? "border-emerald-300/60 bg-emerald-50/10 text-emerald-100"
+              : "border-rose-300/60 bg-rose-50/10 text-rose-100"
+          }`}
+        >
+          {importMessage}
+        </div>
+      ) : null}
     </section>
 
     <section className="rounded-[28px] border border-white/70 bg-white/75 p-6 shadow-panel">

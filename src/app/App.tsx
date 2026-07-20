@@ -5,6 +5,7 @@ import { FeatureWorkspacePage } from "../pages/workspace/FeatureWorkspacePage";
 import { createEmptyWorkspace, createSampleWorkspace } from "../features/workspaces/schema/defaults";
 import { applyImportedMarkdownToWorkspace } from "../features/workspaces/import/markdown";
 import type { FeatureWorkspace } from "../features/workspaces/schema/workspace";
+import { parseWorkspaceForArcFlow } from "../features/workspaces/schema/validation";
 import type { GeneratedProjectFile } from "../features/workspaces/generators";
 import {
   loadWorkspaces,
@@ -1755,7 +1756,7 @@ ${markdown}
 
     let nextWorkspace = workspace;
     if (pulled.workspaceJson) {
-      const parsed = JSON.parse(pulled.workspaceJson.content) as FeatureWorkspace;
+      const parsed = parseWorkspaceForArcFlow(JSON.parse(pulled.workspaceJson.content) as unknown);
       const normalized = normalizeImportedWorkspace(parsed);
       nextWorkspace = {
         ...normalized,
@@ -1787,7 +1788,7 @@ ${markdown}
 
   const importWorkspaceJson = async (file: File) => {
     const content = await file.text();
-    const parsed = JSON.parse(content) as FeatureWorkspace;
+    const parsed = parseWorkspaceForArcFlow(JSON.parse(content) as unknown);
     const normalized = normalizeImportedWorkspace(parsed);
     const importedWorkspace: FeatureWorkspace = {
       ...normalized,
