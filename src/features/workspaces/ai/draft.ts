@@ -210,18 +210,22 @@ const buildCandidateComponents = (
   const existingIdsByName = new Map(
     workspace.discovery.candidateComponents.map((candidate) => [
       normalize(candidate.name),
-      candidate.id,
+      { id: candidate.id, layer: candidate.layer },
     ]),
   );
 
   return draftCandidates
     .filter((candidate) => candidate.name.trim())
-    .map((candidate) => ({
-      id: existingIdsByName.get(normalize(candidate.name)) ?? createLocalId("component"),
-      name: candidate.name.trim(),
-      responsibility: candidate.responsibility.trim(),
-      rationale: candidate.rationale.trim(),
-    }));
+    .map((candidate) => {
+      const existing = existingIdsByName.get(normalize(candidate.name));
+      return {
+        id: existing?.id ?? createLocalId("component"),
+        name: candidate.name.trim(),
+        responsibility: candidate.responsibility.trim(),
+        rationale: candidate.rationale.trim(),
+        layer: existing?.layer ?? "other",
+      };
+    });
 };
 
 const syncComponentsFromCandidates = (

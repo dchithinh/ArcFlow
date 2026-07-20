@@ -976,16 +976,107 @@ const generateArchitectureFlowchart = (workspace: FeatureWorkspace): string => {
     Discovery --> ${wrapFlowchartNode("Detail", "Component refinement", "rounded")}`;
   }
 
+  const layerOrder = ["interface", "application", "service", "driver", "platform", "other"];
+  const layerTitles = new Map<string, string>([
+    ["interface", "User Interface Layer"],
+    ["application", "Application Layer"],
+    ["service", "Service Layer"],
+    ["driver", "Driver Layer"],
+    ["platform", "Platform Layer"],
+    ["other", "Other Layer"],
+  ]);
+  const candidateById = new Map(
+    workspace.discovery.candidateComponents.map((candidate) => [candidate.id, candidate]),
+  );
+  const hasLayeredCandidates = workspace.discovery.candidateComponents.some(
+    (candidate) => typeof candidate.layer === "string" && candidate.layer.trim().length > 0,
+  );
+
+  if (hasLayeredCandidates) {
+    const layeredCandidates = workspace.discovery.candidateComponents.filter((candidate) =>
+      Boolean(candidate.name.trim()),
+    );
+    const nodeIdByComponentId = new Map(
+      layeredCandidates.map((candidate, index) => [
+        candidate.id,
+        `arch_${cleanNode(candidate.id || candidate.name || `component_${index}`)}_${index}`,
+      ]),
+    );
+    const groupedCandidates = new Map<string, typeof layeredCandidates>();
+    for (const candidate of layeredCandidates) {
+      const layer = (candidate.layer?.trim() || "other").toLowerCase();
+      const existing = groupedCandidates.get(layer);
+      if (existing) {
+        existing.push(candidate);
+      } else {
+        groupedCandidates.set(layer, [candidate]);
+      }
+    }
+
+    const orderedLayers = Array.from(groupedCandidates.keys()).sort((left, right) => {
+      const leftIndex = layerOrder.indexOf(left);
+      const rightIndex = layerOrder.indexOf(right);
+      const normalizedLeft = leftIndex === -1 ? layerOrder.length : leftIndex;
+      const normalizedRight = rightIndex === -1 ? layerOrder.length : rightIndex;
+      if (normalizedLeft !== normalizedRight) {
+        return normalizedLeft - normalizedRight;
+      }
+      return left.localeCompare(right);
+    });
+
+    const layerLines = orderedLayers.flatMap((layer) => {
+      const candidates = groupedCandidates.get(layer) ?? [];
+      const layerId = `layer_${cleanNode(layer)}`;
+      const title = layerTitles.get(layer) ?? `${layer.charAt(0).toUpperCase()}${layer.slice(1)} Layer`;
+      return [
+        `    subgraph ${layerId}["${escapeLabel(title)}"]`,
+        `      direction LR`,
+        ...candidates.map((candidate) => {
+          const nodeId = nodeIdByComponentId.get(candidate.id) ?? cleanNode(candidate.name);
+          return `      ${wrapFlowchartNode(nodeId, candidate.name, "subroutine")}`;
+        }),
+        `    end`,
+      ];
+    });
+
+    const nodeClassLines = layeredCandidates.map((candidate) => {
+      const nodeId = nodeIdByComponentId.get(candidate.id) ?? cleanNode(candidate.name);
+      return `    class ${nodeId} architectureNode`;
+    });
+    const layerStyleLines = orderedLayers.map((layer) => {
+      const layerId = `layer_${cleanNode(layer)}`;
+      return `    style ${layerId} fill:#f8fbfc,stroke:#365166,stroke-width:3px,color:#123a35`;
+    });
+
+    const lines = workspace.discovery.interactions.map((interaction, index) => {
+      const fromCandidate = candidateById.get(interaction.fromComponentId);
+      const toCandidate = candidateById.get(interaction.toComponentId);
+      const fromName = fromCandidate?.name || "Unknown";
+      const toName = toCandidate?.name || "Unknown";
+      const fromId =
+        nodeIdByComponentId.get(interaction.fromComponentId) ??
+        `arch_${cleanNode(interaction.fromComponentId || fromName || `from_${index}`)}_${index}`;
+      const toId =
+        nodeIdByComponentId.get(interaction.toComponentId) ??
+        `arch_${cleanNode(interaction.toComponentId || toName || `to_${index}`)}_${index}`;
+
+      return `    ${fromId} -->|"${escapeLabel(
+        interactionLabel(interaction.mechanism, interaction.data),
+      )}"| ${toId}`;
+    });
+
+    return `flowchart TB
+    classDef architectureNode fill:#eef4f7,stroke:#365166,stroke-width:2px,color:#081521;
+${layerLines.join("\n")}
+${nodeClassLines.join("\n")}
+${layerStyleLines.join("\n")}
+${lines.join("\n")}`;
+  }
+
   const nodes = new Map<string, string>();
   const lines = workspace.discovery.interactions.map((interaction) => {
-    const fromName =
-      workspace.discovery.candidateComponents.find(
-        (item) => item.id === interaction.fromComponentId,
-      )?.name || "Unknown";
-    const toName =
-      workspace.discovery.candidateComponents.find(
-        (item) => item.id === interaction.toComponentId,
-      )?.name || "Unknown";
+    const fromName = candidateById.get(interaction.fromComponentId)?.name || "Unknown";
+    const toName = candidateById.get(interaction.toComponentId)?.name || "Unknown";
 
     if (!nodes.has(fromName)) {
       nodes.set(fromName, cleanNode(fromName));

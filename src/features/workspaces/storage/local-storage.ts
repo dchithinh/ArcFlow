@@ -159,6 +159,7 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
       name: item.module?.trim() || `Component ${index + 1}`,
       responsibility: item.responsibility?.trim() || "",
       rationale: item.notes?.trim() || "",
+      layer: "other",
     })) ?? [];
 
   const componentMap = new Map<string, FeatureComponent>();
@@ -193,6 +194,7 @@ const migrateLegacyDesign = (legacy: LegacyFirmwareDesign): FeatureWorkspace => 
       name: legacy.title || "Legacy Component",
       responsibility: legacy.featureSummary?.summary || "Migrated from legacy design",
       rationale: "Auto-created during workspace migration",
+      layer: "other",
     });
     componentMap.set(
       fallbackId,

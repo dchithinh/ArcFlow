@@ -64,6 +64,14 @@ type KnownRuntimeLinkKind =
   | "data"
   | "other";
 export type RuntimeLinkKind = FlexibleString<KnownRuntimeLinkKind>;
+type KnownArchitectureComponentLayer =
+  | "interface"
+  | "application"
+  | "service"
+  | "driver"
+  | "platform"
+  | "other";
+export type ArchitectureComponentLayer = FlexibleString<KnownArchitectureComponentLayer>;
 
 export type WorkspaceSectionId =
   | "featureDefinition"
@@ -201,6 +209,7 @@ export type ComponentCandidate = {
   name: string;
   responsibility: string;
   rationale?: string;
+  layer?: ArchitectureComponentLayer;
 };
 
 export type ComponentInteraction = {

@@ -58,6 +58,7 @@ export const createEmptyCandidateComponent = (): ComponentCandidate => ({
   name: "",
   responsibility: "",
   rationale: "",
+  layer: "other",
 });
 
 export const createEmptyCandidateTask = (): CandidateTask => ({
@@ -227,24 +228,28 @@ export const createSampleWorkspace = (): FeatureWorkspace => {
     name: "Command Ingress",
     responsibility: "Acquire UART bytes, frame packets, and hand valid packets into the feature pipeline.",
     rationale: "Separates transport-facing concerns from parsing and business logic.",
+    layer: "driver",
   };
   const commandParser: ComponentCandidate = {
     id: createId("component"),
     name: "Command Parser",
     responsibility: "Validate packet structure, decode commands, and reject malformed input deterministically.",
     rationale: "Keeps protocol validation focused and independently testable.",
+    layer: "service",
   };
   const configCoordinator: ComponentCandidate = {
     id: createId("component"),
     name: "Config Coordinator",
     responsibility: "Apply validated configuration updates and own runtime configuration consistency.",
     rationale: "Centralizes configuration ownership to avoid partial or conflicting writes.",
+    layer: "application",
   };
   const responseReporter: ComponentCandidate = {
     id: createId("component"),
     name: "Response Reporter",
     responsibility: "Generate acknowledgements, errors, and diagnostic health reporting.",
     rationale: "Keeps user-facing responses and logs separate from control-path logic.",
+    layer: "interface",
   };
   const operatorTerminalEntity: ContextEntity = {
     id: createId("context-entity"),
