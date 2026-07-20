@@ -106,7 +106,7 @@ export const DashboardPage = ({
                 <div>
                   <h3 className="text-lg font-semibold">{design.title}</h3>
                   <p className="mt-2 text-sm text-slate">
-                    {design.requirement || "No requirement entered yet."}
+                    {design.featureSummary.summary || design.requirement || "No summary entered yet."}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">

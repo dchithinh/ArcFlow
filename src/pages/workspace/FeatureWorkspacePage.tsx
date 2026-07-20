@@ -89,6 +89,21 @@ const SectionInputLabel = ({ children }: { children: string }) => (
   </span>
 );
 
+const CollapseChevron = ({ expanded }: { expanded: boolean }) => (
+  <svg
+    viewBox="0 0 16 16"
+    aria-hidden="true"
+    className={`h-4 w-4 transition-transform ${expanded ? "rotate-180" : ""}`}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M3.5 6l4.5 4 4.5-4" />
+  </svg>
+);
+
 const INTERACTION_MECHANISM_OPTIONS = [
   "queue",
   "event",
@@ -2863,19 +2878,36 @@ const PreviewCard = ({
   title,
   action,
   children,
+  defaultExpanded = true,
 }: {
   title: string;
   action?: ReactNode;
   children: ReactNode;
-}) => (
-  <article className="space-y-3 rounded-2xl border border-slate/10 bg-white/75 p-4">
-    <div className="flex items-start justify-between gap-3">
-      <h3 className="text-sm font-semibold uppercase tracking-[0.15em] text-slate">{title}</h3>
-      {action ? <div className="shrink-0">{action}</div> : null}
-    </div>
-    {children}
-  </article>
-);
+  defaultExpanded?: boolean;
+}) => {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  return (
+    <article className="space-y-3 rounded-2xl border border-slate/10 bg-white/75 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.15em] text-slate">{title}</h3>
+        <div className="flex shrink-0 items-center gap-2">
+          {action ? <div>{action}</div> : null}
+          <button
+            type="button"
+            onClick={() => setExpanded((current) => !current)}
+            aria-label={expanded ? "Collapse section" : "Expand section"}
+            title={expanded ? "Collapse" : "Expand"}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate/20 bg-white text-slate shadow-sm transition hover:border-copper/35 hover:bg-mist hover:text-ink"
+          >
+            <CollapseChevron expanded={expanded} />
+          </button>
+        </div>
+      </div>
+      {expanded ? children : null}
+    </article>
+  );
+};
 
 const BehavioralArchitectureCanvas = ({
   workspace,
@@ -3226,19 +3258,36 @@ const ArchitectureViewPanel = ({
   title,
   description,
   children,
+  defaultExpanded = true,
 }: {
   title: ReactNode;
   description: string;
   children: ReactNode;
-}) => (
-  <section className="space-y-4 rounded-[28px] border border-white/70 bg-white/80 p-4 shadow-sm">
-    <div>
-      <h3 className="text-xl font-semibold text-ink">{title}</h3>
-      <p className="mt-1 max-w-3xl text-sm text-slate">{description}</p>
-    </div>
-    {children}
-  </section>
-);
+  defaultExpanded?: boolean;
+}) => {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+
+  return (
+    <section className="space-y-4 rounded-[28px] border border-white/70 bg-white/80 p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-semibold text-ink">{title}</h3>
+          <p className="mt-1 max-w-3xl text-sm text-slate">{description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+          aria-label={expanded ? "Collapse section" : "Expand section"}
+          title={expanded ? "Collapse" : "Expand"}
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate/20 bg-white text-slate shadow-sm transition hover:border-copper/35 hover:bg-mist hover:text-ink"
+        >
+          <CollapseChevron expanded={expanded} />
+        </button>
+      </div>
+      {expanded ? children : null}
+    </section>
+  );
+};
 
 const designSelectionCardClass = (selected: boolean): string =>
   `rounded-2xl border px-4 py-3 shadow-sm transition ${

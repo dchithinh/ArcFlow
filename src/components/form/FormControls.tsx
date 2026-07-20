@@ -272,7 +272,7 @@ export const Button = ({
 }: ButtonProps) => {
   const toneClass =
     tone === "primary"
-      ? "border border-ink bg-ink text-white shadow-sm hover:border-pine hover:bg-pine"
+      ? "border border-white/20 bg-ink text-white shadow-sm hover:border-pine hover:bg-pine"
       : tone === "danger"
         ? "border border-rose-200 bg-rose-50 text-rose-700 shadow-sm hover:bg-rose-100"
       : tone === "ghost"
