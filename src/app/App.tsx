@@ -1474,7 +1474,55 @@ Important:
 - if the design is incomplete, prefer partial mapping plus explicit notes instead of invented certainty
 - \`implementation.rules\` must remain a string list, not a list of objects
 
-### 14. Custom options
+### 14. Implementation drift checklist and sync-back rule
+
+Use this checklist before implementation starts, when implementation changes direction, and before implementation is considered complete.
+
+If any answer below is yes, the implementation is changing the design contract.
+In that case, do not continue coding as if it were only an internal code refactor.
+Update \`${baseName}.workspace.json\` first, or propose the required JSON design update first, then continue implementation only after the design change is accepted.
+
+Drift checklist:
+
+1. Does this change add, remove, rename, split, or merge a component?
+   If yes, update \`discovery.candidateComponents[]\` and likely \`components[]\` first.
+2. Does this change alter who talks to whom?
+   If yes, update \`discovery.interactions[]\` first.
+3. Does this change alter the request, response, command, event, or data flow between components or interfaces?
+   If yes, update \`discovery.interactions[]\` and \`discovery.sequenceScenarios[]\` first.
+4. Does this change introduce a new internal worker, manager, controller, handler, adapter, or other stateful object inside a component?
+   If yes, update \`components[].objects[]\` and \`components[].objectInteractions[]\` first.
+5. Does this change alter state behavior, transitions, retry logic, polling, waiting, scheduling, timeout handling, or recovery behavior?
+   If yes, update \`components[].objects[].states[]\` first.
+6. Does this change add or alter a task, thread, timer, queue, ISR, callback owner, or runtime execution owner?
+   If yes, update \`discovery.runtimeNodes[]\` and \`discovery.candidateTasks[]\` first.
+7. Does this change move responsibility from one component to another?
+   If yes, update component \`summary\`, \`ownership\`, and related interactions first.
+8. Does this change public or shared interfaces used by CLI, LCD, sensors, RTC, settings, or other external-facing or cross-component paths?
+   If yes, update the workspace interaction and scenario model first.
+9. Can every new file, module, service, task, or adapter be traced to an existing component, object, runtime node, or implementation unit?
+   If no, the code is drifting from the workspace.
+10. Can every new API, event, queue, state machine, or cross-component call path be traced back to the workspace?
+    If no, the code is drifting from the workspace.
+
+Decision rule:
+
+- If all answers are no, implementation can proceed without a design update.
+- If any answer is yes, update or propose the workspace JSON change first.
+
+Practical boundary:
+
+- Changes to how code is written can proceed directly.
+- Changes to who owns behavior, who talks to whom, where behavior runs, or how behavior flows must be reflected in \`${baseName}.workspace.json\` first.
+
+Required implementation behavior for Codex:
+
+- Do not silently change implementation flow when that flow contradicts the current workspace.
+- If implementation reveals a better or necessary design change, pause implementation and explain the design drift clearly.
+- Suggest the required \`${baseName}.workspace.json\` update first.
+- Resume coding only after the design change is accepted or explicitly requested.
+
+### 15. Custom options
 
 Primary JSON field:
 
