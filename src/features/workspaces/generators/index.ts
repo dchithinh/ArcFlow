@@ -117,6 +117,35 @@ const wrapMultilineText = (value: string, maxCharsPerLine: number): string => {
     })
     .join("<br/>");
 };
+const architectureLayerOrder = [
+  "interface",
+  "application",
+  "service",
+  "driver",
+  "platform",
+  "other",
+];
+const architectureLayerTitles = new Map<string, string>([
+  ["interface", "User Interface Layer"],
+  ["application", "Application Layer"],
+  ["service", "Service Layer"],
+  ["driver", "Driver Layer"],
+  ["platform", "Platform Layer"],
+  ["other", "Other Layer"],
+]);
+const architectureLayerTitle = (layer: string): string =>
+  architectureLayerTitles.get(layer) ??
+  `${layer.charAt(0).toUpperCase()}${layer.slice(1)} Layer`;
+const compareArchitectureLayers = (left: string, right: string): number => {
+  const leftIndex = architectureLayerOrder.indexOf(left);
+  const rightIndex = architectureLayerOrder.indexOf(right);
+  const normalizedLeft = leftIndex === -1 ? architectureLayerOrder.length : leftIndex;
+  const normalizedRight = rightIndex === -1 ? architectureLayerOrder.length : rightIndex;
+  if (normalizedLeft !== normalizedRight) {
+    return normalizedLeft - normalizedRight;
+  }
+  return left.localeCompare(right);
+};
 const formatBehavioralComponentHeader = (title: string): string =>
   `<div style="font-weight:700;text-align:center;line-height:1.25;">${escapeLabel(title)}</div>`;
 const formatBehavioralComponentRole = (summary: string): string =>
@@ -976,15 +1005,6 @@ const generateArchitectureFlowchart = (workspace: FeatureWorkspace): string => {
     Discovery --> ${wrapFlowchartNode("Detail", "Component refinement", "rounded")}`;
   }
 
-  const layerOrder = ["interface", "application", "service", "driver", "platform", "other"];
-  const layerTitles = new Map<string, string>([
-    ["interface", "User Interface Layer"],
-    ["application", "Application Layer"],
-    ["service", "Service Layer"],
-    ["driver", "Driver Layer"],
-    ["platform", "Platform Layer"],
-    ["other", "Other Layer"],
-  ]);
   const candidateById = new Map(
     workspace.discovery.candidateComponents.map((candidate) => [candidate.id, candidate]),
   );
@@ -1014,20 +1034,13 @@ const generateArchitectureFlowchart = (workspace: FeatureWorkspace): string => {
     }
 
     const orderedLayers = Array.from(groupedCandidates.keys()).sort((left, right) => {
-      const leftIndex = layerOrder.indexOf(left);
-      const rightIndex = layerOrder.indexOf(right);
-      const normalizedLeft = leftIndex === -1 ? layerOrder.length : leftIndex;
-      const normalizedRight = rightIndex === -1 ? layerOrder.length : rightIndex;
-      if (normalizedLeft !== normalizedRight) {
-        return normalizedLeft - normalizedRight;
-      }
-      return left.localeCompare(right);
+      return compareArchitectureLayers(left, right);
     });
 
     const layerLines = orderedLayers.flatMap((layer) => {
       const candidates = groupedCandidates.get(layer) ?? [];
       const layerId = `layer_${cleanNode(layer)}`;
-      const title = layerTitles.get(layer) ?? `${layer.charAt(0).toUpperCase()}${layer.slice(1)} Layer`;
+      const title = architectureLayerTitle(layer);
       return [
         `    subgraph ${layerId}["${escapeLabel(title)}"]`,
         `      direction LR`,
@@ -1221,6 +1234,9 @@ const generateBehavioralArchitectureDiagram = (
           },
         }));
   const expandedIds = new Set(expandedComponentIds);
+  const candidateById = new Map(
+    workspace.discovery.candidateComponents.map((candidate) => [candidate.id, candidate]),
+  );
 
   if (components.length === 0) {
     return `flowchart LR
@@ -1324,6 +1340,40 @@ const generateBehavioralArchitectureDiagram = (
         : [`    style ${componentId} fill:#f5ecd8,stroke:#123a35,stroke-width:2px,color:#081521,font-weight:bold`]),
     ];
   });
+  const hasLayeredCandidates = workspace.discovery.candidateComponents.some(
+    (candidate) => typeof candidate.layer === "string" && candidate.layer.trim().length > 0,
+  );
+  const componentByLayer = new Map<string, string[]>();
+  if (hasLayeredCandidates) {
+    components.forEach((component, index) => {
+      const candidate = candidateById.get(component.id);
+      const layer = (candidate?.layer?.trim() || "other").toLowerCase();
+      const componentId = componentAnchorId(component.id || component.name || "component", index);
+      const componentGroupId = `${componentId}_group`;
+      const existing = componentByLayer.get(layer);
+      if (existing) {
+        existing.push(componentGroupId);
+      } else {
+        componentByLayer.set(layer, [componentGroupId]);
+      }
+    });
+  }
+  const layerLines =
+    hasLayeredCandidates && componentByLayer.size > 0
+      ? Array.from(componentByLayer.keys())
+          .sort((left, right) => compareArchitectureLayers(left, right))
+          .flatMap((layer) => {
+            const layerId = `behavior_layer_${cleanNode(layer)}`;
+            const componentGroupIds = componentByLayer.get(layer) ?? [];
+            return [
+              `    subgraph ${layerId}["${escapeLabel(architectureLayerTitle(layer))}"]`,
+              `      direction LR`,
+              ...componentGroupIds.map((componentGroupId) => `      ${componentGroupId}`),
+              `    end`,
+              `    style ${layerId} fill:#f8fbfc,stroke:#365166,stroke-width:3px,color:#123a35`,
+            ];
+          })
+      : [];
 
   const componentIds = new Set(components.map((component) => component.id));
   const edges =
@@ -1384,7 +1434,7 @@ const generateBehavioralArchitectureDiagram = (
       ];
     });
 
-  return `flowchart LR
+  return `flowchart ${layerLines.length > 0 ? "TB" : "LR"}
     classDef componentHeader fill:#f5ecd8,stroke:#123a35,stroke-width:2px,color:#081521,font-weight:bold;
     classDef componentRole fill:transparent,stroke:transparent,color:#365166;
     classDef behaviorObjectActive fill:#fffdf8,stroke:#365166,stroke-width:2px,color:#081521;
@@ -1392,6 +1442,7 @@ const generateBehavioralArchitectureDiagram = (
     classDef behaviorObjectGhost fill:#f8f1e4,stroke:#8a9aa8,stroke-dasharray: 4 4,color:#4b6477;
     classDef actorNode fill:#eef4f7,stroke:#365166,stroke-width:2px,color:#081521;
 ${componentNodes.join("\n")}
+${layerLines.join("\n")}
 ${actorEdges.join("\n")}
 ${edges.join("\n")}`;
 };
