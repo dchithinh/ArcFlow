@@ -6,7 +6,6 @@ import { createEmptyWorkspace, createSampleWorkspace } from "../features/workspa
 import { applyImportedMarkdownToWorkspace } from "../features/workspaces/import/markdown";
 import type { FeatureWorkspace } from "../features/workspaces/schema/workspace";
 import { parseWorkspaceForArcFlow } from "../features/workspaces/schema/validation";
-import type { GeneratedProjectFile } from "../features/workspaces/generators";
 import {
   loadWorkspaces,
   normalizeImportedWorkspace,
@@ -23,11 +22,6 @@ type AppState = {
   workspaces: FeatureWorkspace[];
   activeWorkspaceId: string | null;
 };
-
-type WindowWithDirectoryPicker = Window &
-  typeof globalThis & {
-    showDirectoryPicker?: (options?: { mode?: "read" | "readwrite" }) => Promise<FileSystemDirectoryHandle>;
-  };
 
 type AppAction =
   | { type: "hydrate"; workspaces: FeatureWorkspace[] }
@@ -2019,47 +2013,6 @@ ${markdown}
     });
   };
 
-  const exportPicoStarterProject = async (
-    workspace: FeatureWorkspace,
-    files: GeneratedProjectFile[],
-  ) => {
-    const pickerWindow = window as WindowWithDirectoryPicker;
-
-    if (!canSyncWorkspaceFiles() || !pickerWindow.showDirectoryPicker) {
-      throw new Error(
-        "Starter project export needs a browser with File System Access API support.",
-      );
-    }
-
-    const rootDirectoryHandle = await pickerWindow.showDirectoryPicker({ mode: "readwrite" });
-    const projectDirectoryName =
-      workspace.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "rp2040-feature-app";
-    const projectDirectoryHandle = await rootDirectoryHandle.getDirectoryHandle(
-      projectDirectoryName,
-      { create: true },
-    );
-
-    for (const file of files) {
-      const segments = file.path.split("/").filter(Boolean);
-      const fileName = segments.pop();
-      if (!fileName) {
-        continue;
-      }
-
-      let currentDirectory = projectDirectoryHandle;
-      for (const segment of segments) {
-        currentDirectory = await currentDirectory.getDirectoryHandle(segment, {
-          create: true,
-        });
-      }
-
-      const fileHandle = await currentDirectory.getFileHandle(fileName, { create: true });
-      const writable = await fileHandle.createWritable();
-      await writable.write(new Blob([file.content], { type: file.type }));
-      await writable.close();
-    }
-  };
-
   const syncLlmFiles = async (workspace: FeatureWorkspace, markdown: string) => {
     if (!canSyncWorkspaceFiles()) {
       throw new Error("File sync is only supported in browsers with the File System Access API.");
@@ -2197,7 +2150,6 @@ ${markdown}
           }}
           onExport={exportMarkdown}
           onExportWorkspaceJson={exportWorkspaceJson}
-          onExportPicoStarterProject={exportPicoStarterProject}
           onSyncLlmFiles={syncLlmFiles}
           onInspectLlmSync={inspectLlmSync}
           onPullLlmFiles={pullSyncedLlmFiles}
